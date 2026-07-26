@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "source_id": "BOK_FX_REPORTING_GUIDE",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "외환거래별 신고 - 지급 및 지급등의 방법",
+    "issuer": "한국은행",
+    "official_url": "https://www.bok.or.kr/portal/main/contents.do?menuNo=200399"
+  },
+  "claims": [
+    {
+      "claim_id": "BOK_NETTING_EXCEPTION_5000",
+      "locator": "질문 2. 상계에 의한 지급등의 방법 / 신고예외 사항",
+      "topic": "netting_payment_method",
+      "normalized_summary": "일방의 금액이 미화 5천달러 이하인 채권 또는 채무의 상계는 안내상 신고예외다.",
+      "threshold": {
+        "field": "payment.netting.smaller_claim_usd",
+        "operator": "lte",
+        "value": 5000,
+        "currency": "USD"
+      }
+    },
+    {
+      "claim_id": "BOK_BILATERAL_NETTING_REPORT",
+      "locator": "질문 2. 상계에 의한 지급등의 방법 / 외국환은행 보고사항",
+      "topic": "netting_payment_method",
+      "normalized_summary": "다국적기업 상계센터 경유 및 다자간 상계를 제외한 양자간 상계는 외국환은행 보고 대상이다.",
+      "authority": "foreign_exchange_bank",
+      "action": "report"
+    },
+    {
+      "claim_id": "BOK_MULTILATERAL_NETTING_FILING",
+      "locator": "질문 2. 상계에 의한 지급등의 방법",
+      "topic": "netting_payment_method",
+      "normalized_summary": "다국적기업 상계센터 경유 또는 다자간 상계는 한국은행 신고 대상이다.",
+      "authority": "bank_of_korea",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_EXPORT_ADVANCE_RECEIPT",
+      "locator": "질문 4. 일정기간을 초과하는 지급등의 방법",
+      "topic": "extended_payment_period",
+      "normalized_summary": "계약 건당 미화 10만달러 초과 수출거래에서 선적 전 1년을 초과해 수출대금을 받으면 원칙적으로 한국은행 신고 대상이다.",
+      "thresholds": {
+        "contract_amount_usd": {
+          "operator": "gt",
+          "value": 100000
+        },
+        "days_before_shipment": {
+          "operator": "gt",
+          "value": 365
+        }
+      },
+      "exceptions": [
+        "선박",
+        "철도차량",
+        "항공기",
+        "대외무역법에 따른 산업설비"
+      ],
+      "authority": "bank_of_korea",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_IMPORT_ADVANCE_PAYMENT",
+      "locator": "질문 4. 일정기간을 초과하는 지급등의 방법",
+      "topic": "extended_payment_period",
+      "normalized_summary": "계약 건당 미화 10만달러 초과 수입거래에서 선적서류 또는 물품 수령 전 1년을 초과해 송금하면 원칙적으로 한국은행 신고 대상이다.",
+      "thresholds": {
+        "contract_amount_usd": {
+          "operator": "gt",
+          "value": 100000
+        },
+        "days_before_receipt": {
+          "operator": "gt",
+          "value": 365
+        }
+      },
+      "exceptions": [
+        "선박",
+        "철도차량",
+        "항공기",
+        "대외무역법에 따른 산업설비"
+      ],
+      "authority": "bank_of_korea",
+      "action": "file"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "한국은행 공식 외환거래별 신고 안내 확인",
+    "limitations": [
+      "안내 페이지는 법령 원문을 대체하지 않는다.",
+      "신고예외 해당 여부와 거래 구조는 외국환은행 또는 한국은행 확인이 필요하다."
+    ]
+  }
+}

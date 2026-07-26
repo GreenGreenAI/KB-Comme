@@ -116,6 +116,8 @@ class KnowledgeRepository:
                         for result in conditional
                         if status is DecisionStatus.CONDITIONALLY_ELIGIBLE
                     ),
+                    source_claim_ids=rule.source_claim_ids,
+                    candidate_outcome=rule.candidate_outcome,
                 )
             )
         return tuple(decisions)
@@ -130,6 +132,8 @@ class KnowledgeRepository:
             "required_documents": list(rule.required_documents),
             "steps": list(rule.procedure_steps),
             "source_ids": list(rule.source_ids),
+            "source_claim_ids": list(rule.source_claim_ids),
+            "candidate_outcome": dict(rule.candidate_outcome),
         }
 
 
@@ -184,6 +188,8 @@ def _parse_rule(item: dict[str, Any]) -> KnowledgeRule:
         required_documents=tuple(item.get("required_documents", [])),
         procedure_steps=tuple(item.get("procedure_steps", [])),
         production_ready=bool(item.get("production_ready", False)),
+        source_claim_ids=tuple(item.get("source_claim_ids", [])),
+        candidate_outcome=dict(item.get("candidate_outcome", {})),
     )
 
 

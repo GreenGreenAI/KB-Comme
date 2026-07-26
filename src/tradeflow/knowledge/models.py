@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
@@ -79,6 +79,8 @@ class KnowledgeRule:
     required_documents: tuple[str, ...] = ()
     procedure_steps: tuple[str, ...] = ()
     production_ready: bool = False
+    source_claim_ids: tuple[str, ...] = ()
+    candidate_outcome: dict[str, Any] = field(default_factory=dict)
 
     def effective_on(self, target_date: date) -> bool:
         return not (

@@ -17,9 +17,28 @@
 - `freshness_required`: 자동 판정에 스냅샷 신선성이 필요한지 여부
 - `usage_policy_url`: 이용·저작권 정책
 - `attribution`: 결과 또는 재배포 시 표시할 출처
+- `source_kind`, `authority_level`: 법령·공식안내·API 등 출처 유형과 권위
+- `extract_path`: 사람이 검증한 구조화 추출본
+- `refresh_interval_days`: 다음 원문 변경 확인 기한
 
 한국은행 ECOS 정보 이용 시 한국은행을 출처로 표시해야 한다. 세부 이용 조건은
 registry의 `usage_policy_url`을 기준으로 확인한다.
+
+## Curated extracts
+
+`extracts/`는 공식 원문에서 자동 판정에 필요한 주장만 정규화한 검증본이다. 원문
+전체의 복사본이 아니며 각 claim은 원문 위치, 정규화 요약, 임계값·허용값과 자동화
+한계를 가진다. 레지스트리의 `content_hash`는 추출 JSON 전체를 canonical JSON으로
+직렬화한 SHA-256 값이다.
+
+출처 변경 시 기존 파일을 조용히 덮어쓰지 않는다. 새 기준일 또는 문서 버전의 extract를
+추가하고, 이전 source의 `effective_to`와 새 source의 `effective_from`을 연결한다.
+
+## Fact catalog
+
+`fact_catalog.json`은 규칙이 참조할 수 있는 입력 필드의 이름, 형식, 단위와 필요한
+근거 역할을 정의한다. 규칙팩에 catalog 밖의 필드를 추가하면 검증 테스트가 실패한다.
+`UNKNOWN`이나 누락값을 임의로 유리한 값으로 치환하지 않는다.
 
 ## Rulepacks
 
@@ -39,3 +58,15 @@ registry의 `usage_policy_url`을 기준으로 확인한다.
 사실이 누락된 경우에는 `failure_effect`와 관계없이
 `INSUFFICIENT_INFORMATION`이 반환된다. 규칙은 공식 출처 확인, 정답 사례와 상대
 담당자 리뷰를 마친 뒤에만 `production_ready`로 전환한다.
+
+## 승격 절차
+
+1. 역할 A가 공식 원문과 구조화 extract를 교차 확인한다.
+2. 규칙의 모든 field를 fact catalog에 등록하고 증거 생성 경로를 정한다.
+3. 경계값 바로 아래·동일·바로 위 정답 사례를 추가한다.
+4. 역할 B가 파서, 실행 경계, 최신성 및 실패 동작을 검토한다.
+5. 도메인 전문가가 신고·상품 후보 결과를 확인한다.
+6. 위 검토가 끝난 규칙만 `production_ready=true`로 변경한다.
+
+현재 `ksure_mvp_candidates.json`과 `fx_compliance_mvp.json`은 공식 공개정보를
+구조화한 초안이며 자동 확정 판정에 사용하지 않는다.

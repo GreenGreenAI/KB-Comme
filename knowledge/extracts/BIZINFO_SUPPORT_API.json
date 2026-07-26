@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "source_id": "BIZINFO_SUPPORT_API",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "기업마당 지원사업정보 API",
+    "issuer": "중소벤처기업부 기업마당",
+    "official_url": "https://www.bizinfo.go.kr/apiDetail.do?id=bizinfoApi",
+    "endpoint": "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do"
+  },
+  "claims": [
+    {
+      "claim_id": "BIZINFO_API_CAPABILITY",
+      "locator": "지원사업정보 API",
+      "topic": "support_program_discovery",
+      "normalized_summary": "기관별·분야별 최신 지원사업 공고를 JSON 또는 XML로 제공한다.",
+      "authentication": "issued_api_key",
+      "update_strategy": "daily_snapshot"
+    },
+    {
+      "claim_id": "BIZINFO_API_FILTERS",
+      "locator": "요청메시지",
+      "topic": "support_program_discovery",
+      "normalized_summary": "분야, 해시태그, 조회건수와 페이지 기준으로 공고를 조회할 수 있다.",
+      "parameters": [
+        "crtfcKey",
+        "dataType",
+        "searchCnt",
+        "searchLclasId",
+        "hashtags",
+        "pageUnit",
+        "pageIndex"
+      ]
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "기업마당 공식 정책정보 개방 및 API 상세 페이지 확인",
+    "limitations": [
+      "API 공고는 후보 탐색 자료이며 개별 공고문과 첨부파일을 최종 근거로 재검증해야 한다.",
+      "호출에는 기업마당이 발급한 인증키가 필요하다."
+    ]
+  }
+}

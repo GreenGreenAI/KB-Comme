@@ -2,7 +2,7 @@
 status: accepted
 owner: shared
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-07-27
 ---
 
 # 명세 문서
@@ -10,6 +10,7 @@ last-reviewed: 2026-07-26
 - [MVP 아키텍처 설계](mvp-architecture.md)
 - [API 명세 원칙](api.md)
 - [공유 계약 변경 규칙](contracts.md)
+- [지식 데이터 수집·구조화 계획](knowledge-data-plan.md)
 
 [MVP 아키텍처 설계](mvp-architecture.md)는 프로토타입 기간에 실제로 만들 범위와,
 에이전트 계층·결정론 도구의 수학 모델을 정의한다. 코드 주석과 ADR이 참조하는 §번호는

@@ -199,6 +199,8 @@ class RuleDecision:
     missing_fields: tuple[str, ...] = ()
     source_ids: tuple[str, ...] = ()
     requirements: tuple[DecisionRequirement, ...] = ()
+    source_claim_ids: tuple[str, ...] = ()
+    candidate_outcome: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

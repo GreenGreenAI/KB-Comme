@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "source_id": "FX_TRANSACTION_REGULATION_2026_88",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "외국환거래규정",
+    "issuer": "재정경제부",
+    "instrument": "재정경제부고시 제2026-88호",
+    "effective_from": "2026-07-06",
+    "official_url": "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000281984&chrClsCd=010201"
+  },
+  "claims": [
+    {
+      "claim_id": "FXR_ARTICLE_5_4",
+      "locator": "제5-4조",
+      "topic": "netting_payment_method",
+      "normalized_summary": "상계에 의한 지급 등의 신고·보고 및 예외 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_8",
+      "locator": "제5-8조",
+      "topic": "extended_payment_period",
+      "normalized_summary": "일정 기간을 초과하는 수출입대금 지급·수령의 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "국가법령정보센터 현행 행정규칙의 시행일과 발령번호를 현행행정규칙 검색 결과와 교차 확인",
+    "limitations": [
+      "실제 신고 판단에는 예외 조항과 거래 사실관계 확인이 필요하다.",
+      "자동 확정 판정이 아니라 신고 검토 후보 생성에만 사용한다."
+    ]
+  }
+}

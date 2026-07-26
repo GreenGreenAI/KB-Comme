@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0",
+  "facts": [
+    {
+      "field": "company.is_sme",
+      "type": "boolean",
+      "description": "기존 프로그램 수준 규칙과 호환되는 중소기업 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.is_domestic",
+      "type": "boolean",
+      "description": "기업이 대한민국에 주소를 둔 국내 기업인지 여부",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "company.size",
+      "type": "enum",
+      "allowed_values": ["small", "mid_sized", "large"],
+      "description": "공식 확인 자료에 따른 기업규모",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.credit_issue_free",
+      "type": "boolean",
+      "description": "K-SURE가 열거한 신용상 제한 사유가 없음을 공식 자료로 확인했는지 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.ksure_exporter_grade",
+      "type": "enum",
+      "allowed_values": ["A", "B", "C", "D", "E", "F", "G", "R", "UNKNOWN"],
+      "description": "K-SURE 수출자 신용등급",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "counterparty.ksure_importer_grade",
+      "type": "enum",
+      "allowed_values": ["A", "B", "C", "D", "E", "F", "G", "R", "UNKNOWN"],
+      "description": "K-SURE 수입자 신용등급",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "counterparty.country_restricted",
+      "type": "boolean",
+      "description": "현재 K-SURE 국별인수방침상 인수제한국 소재 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "trade.direction",
+      "type": "enum",
+      "allowed_values": ["export", "import"],
+      "description": "개별 거래의 수출입 방향",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.currency",
+      "type": "string",
+      "description": "개별 거래 결제통화 ISO 4217 코드",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.contract_amount_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "신고 기준 적용을 위해 공식 기준환율로 환산한 계약 건별 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.payment_term_days",
+      "type": "integer",
+      "unit": "day",
+      "description": "선적 또는 일람 후 결제까지의 일수",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.days_before_shipment",
+      "type": "integer",
+      "unit": "day",
+      "description": "수출대금 수령일부터 예정 선적일까지의 일수",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.days_before_receipt",
+      "type": "integer",
+      "unit": "day",
+      "description": "수입대금 지급일부터 선적서류 또는 물품 수령일까지의 일수",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.extended_payment_exception",
+      "type": "boolean",
+      "description": "선박·철도차량·항공기·대외무역법상 산업설비 예외 해당 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "financing.purpose",
+      "type": "enum",
+      "allowed_values": [
+        "trade_finance",
+        "recognized_export_finance",
+        "trade_bill_acceptance",
+        "export_material_import_lc",
+        "recognized_export_promotion_fund",
+        "other"
+      ],
+      "description": "선적전 수출신용보증을 검토하는 금융 목적",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "financing.has_bank_consultation",
+      "type": "boolean",
+      "description": "취급 금융기관과 보증부 대출 가능성을 상담했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.is_netting",
+      "type": "boolean",
+      "description": "거주자와 비거주자 간 채권·채무를 상계해 차액만 결제하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.party_count",
+      "type": "integer",
+      "description": "상계에 참여하는 당사자 수",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.uses_center",
+      "type": "boolean",
+      "description": "다국적기업의 상계센터를 경유하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.smaller_claim_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "상계하는 채권과 채무 중 작은 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.netting.exception_applies",
+      "type": "boolean",
+      "description": "외국환거래규정상 상계 신고예외에 해당함을 확인했는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "program.has_export",
+      "type": "boolean",
+      "description": "프로그램에 수출 거래가 하나 이상 존재하는지 여부",
+      "evidence_role": "user_trade"
+    }
+  ]
+}

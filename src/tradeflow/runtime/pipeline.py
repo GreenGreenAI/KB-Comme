@@ -48,9 +48,15 @@ class TradeFlowPipeline:
                     EvidenceDescriptor(
                         evidence_id=f"decision:{decision.rule_id}",
                         role=EvidenceRole.SUPPORT_ELIGIBILITY,
-                        identifiers=(decision.rule_id,),
+                        identifiers=(
+                            decision.rule_id,
+                            *decision.source_claim_ids,
+                        ),
                         source_ids=decision.source_ids,
-                        payload={"status": decision.status.value},
+                        payload={
+                            "status": decision.status.value,
+                            "candidate_outcome": decision.candidate_outcome,
+                        },
                     )
                 )
 

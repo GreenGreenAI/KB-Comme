@@ -28,7 +28,7 @@ last-reviewed: 2026-07-27
 | `packet_id`, `schema_version`, `as_of` | 추적성과 계약 버전 | 아니요 |
 | `inputs` | 정규화된 사실 | 아니요 |
 | `exposures` | 도구가 계산한 수치 | 아니요 |
-| `decisions` | 규칙 엔진의 판정과 조건 | 아니요 |
+| `decisions` | 규칙 판정, source/claim ID와 구조화된 후보 결과 | 아니요 |
 | `evidence` | 판정과 계산의 근거 | 아니요 |
 | `review_required`, `review_reasons` | 사람 검토 게이트 | 아니요 |
 

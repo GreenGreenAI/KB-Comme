@@ -52,6 +52,8 @@ class PacketDecision:
     missing_fields: tuple[str, ...]
     source_ids: tuple[str, ...]
     requirements: tuple[PacketRequirement, ...]
+    source_claim_ids: tuple[str, ...]
+    candidate_outcome: tuple[tuple[str, Any], ...]
 
 
 @dataclass(frozen=True)
@@ -217,6 +219,8 @@ def _freeze_decision(decision: RuleDecision) -> PacketDecision:
             )
             for item in decision.requirements
         ),
+        source_claim_ids=decision.source_claim_ids,
+        candidate_outcome=_freeze(decision.candidate_outcome),
     )
 
 
