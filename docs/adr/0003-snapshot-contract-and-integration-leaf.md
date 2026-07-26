@@ -1,3 +1,10 @@
+---
+status: proposed
+owner: platform-runtime
+reviewers: knowledge-domain, platform-runtime
+last-reviewed: 2026-07-26
+---
+
 # ADR-0003: 스냅샷 계약의 위치와 integration 리프
 
 - 상태: 제안 (역할 A 승인 대기)
@@ -15,6 +22,14 @@
 그런데 ADR-0001의 의존 방향은 이를 공유할 자리를 주지 않는다. 특히
 `tests/architecture/test_module_boundaries.py`는 `tools`가 `contracts`조차 import하지
 못하게 막고 있다. **`tools`가 참조 가능한 계층은 `domain` 하나뿐이다.**
+
+## 고려한 선택지
+
+| 선택지 | 장점 | 비용 |
+|---|---|---|
+| ADR-0001의 `tools → contracts` 금지를 완화 | 스냅샷을 `contracts`에 둘 수 있음 | 계층 경계를 첫 마찰에서 무르게 함. 다음 공유 타입마다 반복됨 |
+| 스냅샷 전용 최하위 계층 신설 | 책임이 명확 | 5계층이 6계층이 됨. 두 사람이 외울 규칙이 늘어남 |
+| **값객체는 `domain`, 수집은 리프 + 파일 공유** (채택) | 의존 그래프 무변경. 재현성과 오프라인 테스트가 부수적으로 따라옴 | 수집과 소비가 파일로 느슨하게 연결되어 포맷 계약을 문서로 지켜야 함 |
 
 ## 결정
 
@@ -70,3 +85,13 @@ ECOS만 자동 수집한다. 백테스트 커버리지(§5.2)에 과거 시계�
 - 미결: `SourceRecord.status_on`(출처 시행일)과 `FreshnessPolicy`(수집 최신성)는 서로
   다른 축이다. 둘을 어떻게 합성해 최종 `STALE`을 결정할지는 역할 A의 §6.3 근거 레코드
   보강 시점에 정한다.
+
+## 검증
+
+- `tests/architecture/test_module_boundaries.py`가 양방향을 검사한다. `integration`이
+  `knowledge`·`tools`·`runtime`을 참조하지 못하고, 어떤 모듈도 `integration`을 import하지
+  못한다. 규칙이 공허하지 않음은 `runtime`에 위반 import를 임시로 넣어 두 규칙이 모두
+  실패하는 것으로 확인했다.
+- `tests/platform/test_snapshot.py`가 SLA 경계, 버전 누락 거부, naive 타임스탬프 처리,
+  미래 수집 시각의 `STALE` 처리를 검사한다.
+- 테스트 전체가 네트워크 없이 실행된다. 이것이 파일 기반 공유가 성립한다는 증거다.

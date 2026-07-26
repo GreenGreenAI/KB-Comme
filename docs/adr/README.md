@@ -12,6 +12,9 @@ last-reviewed: 2026-07-26
 | ADR | 상태 | 설명 |
 |---|---|---|
 | [ADR-0001](0001-module-ownership-and-dependencies.md) | accepted | 모듈 소유권과 의존 방향 |
+| [ADR-0002](0002-response-contract-vocabulary.md) | proposed | 응답 계약 어휘와 노출 부호 |
+| [ADR-0003](0003-snapshot-contract-and-integration-leaf.md) | proposed | 스냅샷 계약의 위치와 integration 리프 |
+| [ADR-0004](0004-hedge-instrument-availability-seam.md) | proposed | 헤지 수단 가용성 이음새 |
 
 ## 운영 규칙
 

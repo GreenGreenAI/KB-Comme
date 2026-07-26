@@ -18,13 +18,27 @@ domain
   └── tools
          ▲
 runtime ─┴── contracts + knowledge
+
+integration ─→ data/snapshots/*.json ─→ tools, knowledge
+   (리프)              (파일)
 ```
 
-- `domain`: 다른 TradeFlow 계층에 의존하지 않는 핵심 모델
+- `domain`: 다른 TradeFlow 계층에 의존하지 않는 핵심 모델과 계층 공통 값객체
 - `contracts`: 계층 간 공유되는 좁은 인터페이스
 - `knowledge`: 출처, 조건과 근거 기반 판정
 - `tools`: 결정론적 계산과 분석
 - `runtime`: 각 계층을 조립하는 최상위 파이프라인
+- `integration`: 외부 출처 수집. 어떤 모듈도 import하지 않는 리프
+
+`tools`가 참조할 수 있는 계층은 `domain` 하나뿐이므로, 계산 도구가 다뤄야 하는
+공유 타입은 `contracts`가 아니라 `domain`에 둔다. `contracts`에는 행위 계약(Protocol)과
+Runtime 전용 값객체만 남는다.
+
+`integration`은 의존 그래프에 들어가지 않는다. 수집기는 실행되어 스냅샷 파일을 남기고,
+계산과 지식 계층은 그 파일만 읽는다. 런타임 의존이 아니라 데이터 의존이므로 과거
+스냅샷으로 과거 결과를 재현할 수 있고, 테스트가 외부 API 없이 실행된다.
 
 의존 방향의 결정 근거는
-[ADR-0001](../adr/0001-module-ownership-and-dependencies.md)을 따른다.
+[ADR-0001](../adr/0001-module-ownership-and-dependencies.md),
+공유 타입의 위치와 리프 규칙은
+[ADR-0003](../adr/0003-snapshot-contract-and-integration-leaf.md)을 따른다.
