@@ -91,11 +91,22 @@ class CashflowPoint:
 
 @dataclass(frozen=True)
 class CurrencyExposure:
+    """Currency-level exposure.
+
+    `economic_offset` is the whole-horizon offset between receipts and payments.
+    `maturity_matched_amount` is the part of it that is actually settled by an
+    earlier receipt, so the two together show how much of the offset is real at
+    the time the payment falls due. `trade_net_exposure` keeps its sign: a
+    negative value means payments exceed receipts, and the hedge payoff formula
+    depends on that direction.
+    """
+
     currency: str
     opening_balance: Decimal
     total_inflow: Decimal
     total_outflow: Decimal
     economic_offset: Decimal
+    maturity_matched_amount: Decimal
     trade_net_exposure: Decimal
     ending_balance: Decimal
     peak_funding_gap: Decimal

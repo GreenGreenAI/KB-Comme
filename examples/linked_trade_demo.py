@@ -42,6 +42,7 @@ result = TradeFlowPipeline(knowledge).analyze(program)
 usd = result.exposures[0]
 print(f"currency={usd.currency}")
 print(f"economic_offset={usd.economic_offset}")
+print(f"maturity_matched_amount={usd.maturity_matched_amount}")
 print(f"peak_funding_gap={usd.peak_funding_gap}")
 print(f"ending_balance={usd.ending_balance}")
 print(f"review_required={result.review_required}")
