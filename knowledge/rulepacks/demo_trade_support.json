@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "notice": "구조 검증용 예시입니다. 실제 지원 자격 또는 규제 판단에 사용하지 마십시오.",
+  "rules": [
+    {
+      "rule_id": "DEMO_SME_EXPORT_SUPPORT",
+      "title": "중소 수출기업 지원 후보 예시",
+      "topic": "trade_support",
+      "rule_type": "eligibility",
+      "conditions": [
+        {
+          "field": "company.is_sme",
+          "operator": "eq",
+          "value": true,
+          "description": "중소기업 여부"
+        },
+        {
+          "field": "program.has_export",
+          "operator": "eq",
+          "value": true,
+          "description": "수출 거래 보유 여부"
+        }
+      ],
+      "source_ids": ["TRADEFLOW_DEMO_SOURCE"],
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "required_documents": ["기업 기본정보", "수출계약 증빙"],
+      "procedure_steps": ["공식 공고 최신본 확인", "대상 요건 재검증", "취급기관 상담"],
+      "production_ready": false
+    }
+  ]
+}
+

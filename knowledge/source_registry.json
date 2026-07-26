@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "source_id": "TRADEFLOW_DEMO_SOURCE",
+      "title": "TradeFlow 구조 검증용 내부 출처",
+      "organization": "TradeFlow",
+      "url": "https://example.invalid/tradeflow/demo-source",
+      "official": false,
+      "retrieved_at": "2026-07-26T00:00:00",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "content_hash": "demo-only",
+      "verified": false
+    }
+  ]
+}
+
