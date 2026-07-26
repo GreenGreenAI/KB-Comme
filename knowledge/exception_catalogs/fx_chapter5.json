@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "catalog_id": "FX_CHAPTER5_EXCEPTIONS_2026_07_06",
+  "as_of": "2026-07-27",
+  "status": "draft",
+  "source_id": "FX_TRANSACTION_REGULATION_2026_88",
+  "llm_role": "explanation_only",
+  "notice": "조문상 예외를 식별하기 위한 목록이다. 예외 해당 여부는 명시된 증빙과 역할 A·도메인 전문가 검토 없이 확정하지 않는다.",
+  "sections": [
+    {
+      "article": "5-4",
+      "topic": "netting_payment_method",
+      "default_outcome": "exception_from_netting_filing",
+      "exceptions": [
+        {"code": "article_5_4_1", "label": "일방 금액 합산 미화 5천달러 이하", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_4_2", "label": "신고한 상호계산계정을 통한 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_3", "label": "국내외 신용카드발행업자 간 정산", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_4_4", "label": "보험사업자의 외국 보험사업자와의 재보험 정산", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_4_5", "label": "파생상품 반대거래 또는 동일 장내상품 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_6", "label": "연계무역·위탁가공무역·수탁가공무역 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_7", "label": "수출입대금과 직접 수반되는 중개·대리점 수수료 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_8", "label": "국내 항공·선박회사의 외국항로 운임과 경상운항경비 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_9", "label": "국내 선박회사의 공동운항 선복·장비 상호사용 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_10", "label": "국내외 교통수단 이용권 판매대금과 직접 수수료 상계", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_4_11", "label": "거주자 간 외화표시 채권·채무 상계", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_4_12", "label": "국내외 통신사업자 간 통신망 사용대가 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_13", "label": "원천징수 후 잔액 지급·수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_14", "label": "국내 소송·중재 지급과 관련 소송비용 상계", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_4_15", "label": "해운대리점의 선박임과 경상운항경비 상계", "automation_level": "expert_confirmation_required"}
+      ],
+      "required_evidence": ["상계 합의서", "채권·채무 원인계약", "당사자 지위 증빙", "상계금액 산출표", "예외 유형별 증빙"]
+    },
+    {
+      "article": "5-8",
+      "topic": "extended_payment_period",
+      "default_outcome": "exception_from_extended_payment_filing",
+      "exceptions": [
+        {"code": "article_5_8_vessel", "label": "선박 수출입", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_8_rail_vehicle", "label": "철도차량 수출입", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_8_aircraft", "label": "항공기 수출입", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_8_industrial_facility", "label": "대외무역법상 산업설비 수출입", "automation_level": "expert_confirmation_required"}
+      ],
+      "required_evidence": ["수출입계약서", "품목분류 자료", "대외무역법상 산업설비 해당 자료"]
+    },
+    {
+      "article": "5-10",
+      "topic": "third_party_payment",
+      "default_outcome": "exception_from_third_party_filing",
+      "exceptions": [
+        {"code": "article_5_10_1", "label": "분할분 합산 미화 5천달러 이하", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_10_2", "label": "거래당사자인 거주자가 당사자 아닌 비거주자로부터 수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_3", "label": "당사자 아닌 거주자의 비거주자 수령 및 당사자 거주자 전달", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_4", "label": "외국환은행의 해외점포 여신원리금 회수 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_5", "label": "예탁결제원의 주식예탁증서 권리·의무 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_6", "label": "회원가입 국제결제기구와 지급·수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_7", "label": "인정된 거래의 채권 매매·양도 또는 채무 인수", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_8", "label": "해외부동산 취득대금을 현지 중개·대리인에게 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_9", "label": "외화증권 발행자의 원리금 상환 등을 위한 수탁자 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_10", "label": "외화증권 취득자금의 예탁결제원 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_11", "label": "외국인투자기업·외국기업 지사의 임직원 본사주식 취득대금 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_12", "label": "해외직접투자 자금의 확인된 대리인 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_13", "label": "재외공관의 신속 해외송금 긴급경비 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_14", "label": "단순수입대행 위탁자의 수출자 직접 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_15", "label": "거주자의 인터넷 구매대행 수입대금 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_16", "label": "비거주자 간 인터넷 구매의 거주자 구매대행 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_17", "label": "원유·가스 수입대금의 수출국 중앙은행 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_18", "label": "해운대리점·선박관리업자의 외항선 운항경비 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_19", "label": "거주자 간 거래에서 당사자 아닌 거주자와 지급·수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_20", "label": "국내외 통신사업자 간 통신망 대가 제3자 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_21", "label": "등록 통신과금서비스제공자의 대가 정산", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_22", "label": "금융기관 에스크로 계좌를 통한 비거주자 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_23", "label": "해외광고·선박관리 대리대행계약상 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_24", "label": "국제개발협력 관련 제3자 자금 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_25", "label": "신고한 다국적기업 상계센터 잔액 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_26", "label": "관광객 세금 환급 대행업체를 통한 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_27", "label": "외국 과세당국 납세를 위한 납세대리인 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_28", "label": "선주상호보험조합의 사업 관련 제3자 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_29", "label": "비거주자의 국내 세무대리인을 통한 환급금 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_30", "label": "비거주자의 국내 소송대리인을 통한 배상·소송비용 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_31", "label": "국내부동산 거래에서 비거주자 대리인을 통한 대금 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_10_32", "label": "보험중개사의 재보험계약 관련 지급·수령", "automation_level": "expert_confirmation_required"}
+      ],
+      "required_evidence": ["원인거래 계약서", "제3자 지급 합의서", "당사자 실체·관계 자료", "채권·채무 확인자료", "예외 사유 입증자료"]
+    },
+    {
+      "article": "5-11",
+      "topic": "payment_outside_fx_bank",
+      "default_outcome": "exception_from_nonbank_payment_filing",
+      "exceptions": [
+        {"code": "article_5_11_receipt", "label": "거주자의 외국환은행을 통하지 않은 지급수단 수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_1", "label": "외항 항공기·선박 안 물품대금 직접 지급·수령", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_2", "label": "해외여행·이주·재외동포 경비의 외국 직접 지급(1만달러 초과 휴대수출은 확인·세관 요건 적용)", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_3", "label": "송금수표·우편환·유네스코쿠폰 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_4", "label": "외국에서 적법하게 보유한 지급수단의 인정거래 직접 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_5", "label": "국내 내국통화표시 거래의 내국지급수단 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_6", "label": "외국환은행 확인을 거친 열거 목적의 휴대·직접 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_7", "label": "인정된 외화자금의 직접 예치·처분 또는 발행수단 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_8", "label": "건당 1만달러 이하 경상거래 직접 지급(경제자유구역은 10만달러 이하)", "automation_level": "deterministic_with_evidence"},
+        {"code": "article_5_11_9", "label": "본인명의 신용카드 등에 의한 열거 목적 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_10", "label": "관광객 세금 환급창구운영사업자의 직접 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_11", "label": "법인 해외여행경비의 법인명의 환전 후 휴대 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_12", "label": "열거된 자본거래의 건당 1만달러 이하 직접 지급", "automation_level": "expert_confirmation_required"},
+        {"code": "article_5_11_13", "label": "원양어업자의 어획물 판매대금 직접 상환·지급", "automation_level": "expert_confirmation_required"}
+      ],
+      "required_evidence": ["원인거래 증빙", "지급수단 취득·보유 증빙", "금액 환산 근거", "외국환은행 확인 또는 세관 신고필증", "예외 목적별 증빙"]
+    }
+  ]
+}

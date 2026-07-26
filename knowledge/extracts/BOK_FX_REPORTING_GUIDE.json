@@ -25,16 +25,7 @@
       "locator": "질문 2. 상계에 의한 지급등의 방법 / 신고예외 사항",
       "topic": "netting_payment_method",
       "normalized_summary": "공식 안내는 소액 외에도 카드·재보험, 파생 반대거래, 연계·위수탁가공무역, 항공·선박 운항, 교통수단 이용권 관련 상계를 예외 유형으로 열거한다.",
-      "allowed_values": [
-        "low_amount",
-        "card_or_reinsurance",
-        "derivative_offset",
-        "linked_or_processing_trade",
-        "transport_operator",
-        "ticket_commission",
-        "none",
-        "unknown"
-      ],
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
       "automation_level": "requires_transaction_evidence"
     },
     {
@@ -114,6 +105,14 @@
       }
     },
     {
+      "claim_id": "BOK_THIRD_PARTY_EXCEPTION_CATEGORIES",
+      "locator": "질문 3. 제3자 지급등의 방법 / 신고예외 사항",
+      "topic": "third_party_payment",
+      "normalized_summary": "공식 안내는 금액 외에도 당사자 구조, 채권양도·채무인수, 해외부동산, 증권, 구매·수입대행 등 다양한 신고예외를 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
       "claim_id": "BOK_THIRD_PARTY_BANK_FILING",
       "locator": "질문 3. 제3자 지급등의 방법 / 신고사항",
       "topic": "third_party_payment",
@@ -139,6 +138,22 @@
         "value": 10000,
         "currency": "USD"
       },
+      "authority": "bank_of_korea",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_NONBANK_PAYMENT_EXCEPTIONS",
+      "locator": "질문 5. 외국환은행을 통하지 않는 지급등의 방법 / 신고예외 사항",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "공식 안내는 외항운송, 해외여행·이주, 적법한 지급수단, 소액 경상거래, 신용카드 등 비은행 지급 신고예외를 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "BOK_NONBANK_PAYMENT_BOK_FILING",
+      "locator": "질문 5. 외국환은행을 통하지 않는 지급등의 방법",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "거주자가 신고예외·외국환은행 확인·세관 신고 사항 외의 방법으로 외국환은행을 통하지 않고 지급하려는 경우 한국은행 신고 검토 대상이다.",
       "authority": "bank_of_korea",
       "action": "file"
     }

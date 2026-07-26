@@ -23,10 +23,11 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
         self.sources = {
             item["source_id"]: item for item in self.registry["sources"]
         }
-        self.fact_fields = {
-            item["field"]
+        self.fact_specs = {
+            item["field"]: item
             for item in _json(KNOWLEDGE_ROOT / "fact_catalog.json")["facts"]
         }
+        self.fact_fields = set(self.fact_specs)
         self.rule_paths = sorted((KNOWLEDGE_ROOT / "rulepacks").glob("*.json"))
         self.claim_ids: set[str] = set()
         for path in (KNOWLEDGE_ROOT / "extracts").glob("*.json"):
@@ -101,6 +102,55 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
             self.assertTrue(
                 all(not rule["production_ready"] for rule in rulepack["rules"])
             )
+
+    def test_chapter5_exception_catalog_is_complete_and_matches_fact_enums(
+        self,
+    ) -> None:
+        catalog = _json(
+            KNOWLEDGE_ROOT / "exception_catalogs" / "fx_chapter5.json"
+        )
+        sections = {item["article"]: item for item in catalog["sections"]}
+        self.assertEqual(
+            {"5-4", "5-8", "5-10", "5-11"},
+            set(sections),
+        )
+        self.assertEqual(
+            {"5-4": 15, "5-8": 4, "5-10": 32, "5-11": 14},
+            {
+                article: len(section["exceptions"])
+                for article, section in sections.items()
+            },
+        )
+        self.assertEqual("explanation_only", catalog["llm_role"])
+
+        field_by_article = {
+            "5-4": "payment.netting.exception_category",
+            "5-8": "trade.extended_payment_exception_category",
+            "5-10": "payment.third_party.exception_category",
+            "5-11": "payment.nonbank.exception_category",
+        }
+        all_codes: set[str] = set()
+        for article, field in field_by_article.items():
+            with self.subTest(article=article):
+                exceptions = sections[article]["exceptions"]
+                codes = {item["code"] for item in exceptions}
+                self.assertEqual(len(exceptions), len(codes))
+                self.assertFalse(all_codes & codes)
+                all_codes |= codes
+                self.assertEqual(
+                    codes | {"none", "unknown"},
+                    set(self.fact_specs[field]["allowed_values"]),
+                )
+                self.assertTrue(
+                    all(
+                        item["automation_level"]
+                        in {
+                            "deterministic_with_evidence",
+                            "expert_confirmation_required",
+                        }
+                        for item in exceptions
+                    )
+                )
 
     def test_all_rulepacks_can_be_loaded_by_the_repository(self) -> None:
         for path in self.rule_paths:
@@ -192,10 +242,28 @@ class CuratedRuleSafetyTests(unittest.TestCase):
                 "payment.netting.party_count": 2,
                 "payment.netting.uses_center": False,
                 "payment.netting.smaller_claim_usd": 6000,
-                "payment.netting.exception_category": "derivative_offset",
+                "payment.netting.exception_category": "article_5_4_5",
             }
         )
         bilateral = decisions["FX_BILATERAL_NETTING_BANK_REPORT_CANDIDATE"]
+        self.assertEqual(DecisionStatus.NOT_ELIGIBLE, bilateral.status)
+
+    def test_two_party_netting_through_center_routes_to_bok(self) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.is_netting": True,
+                "payment.netting.party_count": 2,
+                "payment.netting.uses_center": True,
+                "payment.netting.smaller_claim_usd": 6000,
+                "payment.netting.exception_category": "none",
+            }
+        )
+        center = decisions["FX_NETTING_CENTER_BOK_FILING_CANDIDATE"]
+        bilateral = decisions["FX_BILATERAL_NETTING_BANK_REPORT_CANDIDATE"]
+        self.assertEqual(
+            DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            center.status,
+        )
         self.assertEqual(DecisionStatus.NOT_ELIGIBLE, bilateral.status)
 
     def test_third_party_payment_amount_boundaries_route_to_right_authority(
@@ -225,7 +293,9 @@ class CuratedRuleSafetyTests(unittest.TestCase):
                     {
                         "payment.is_third_party": True,
                         "payment.third_party.amount_usd": amount,
-                        "payment.third_party.exception_applies": False,
+                        "payment.third_party.exception_category": (
+                            "article_5_10_1" if amount <= 5000 else "none"
+                        ),
                     }
                 )
                 self.assertEqual(statuses[0], decisions[bank_rule].status)
@@ -236,11 +306,82 @@ class CuratedRuleSafetyTests(unittest.TestCase):
             {
                 "payment.is_third_party": True,
                 "payment.third_party.amount_usd": 15000,
-                "payment.third_party.exception_applies": True,
+                "payment.third_party.exception_category": "article_5_10_22",
             }
         )
         bok = decisions["FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE"]
         self.assertEqual(DecisionStatus.NOT_ELIGIBLE, bok.status)
+
+    def test_missing_third_party_exception_classification_is_not_guessed(
+        self,
+    ) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.is_third_party": True,
+                "payment.third_party.amount_usd": 15000,
+            }
+        )
+        bok = decisions["FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE"]
+        self.assertEqual(DecisionStatus.INSUFFICIENT_INFORMATION, bok.status)
+        self.assertIn(
+            "payment.third_party.exception_category",
+            bok.missing_fields,
+        )
+
+    def test_nonbank_payment_without_exception_requires_draft_review(self) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.uses_foreign_exchange_bank": False,
+                "payment.direction": "pay",
+                "payment.nonbank.exception_category": "none",
+            }
+        )
+        nonbank = decisions["FX_NONBANK_PAYMENT_BOK_FILING_CANDIDATE"]
+        self.assertEqual(
+            DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            nonbank.status,
+        )
+        self.assertEqual(
+            "bank_of_korea",
+            nonbank.candidate_outcome["authority"],
+        )
+
+    def test_nonbank_receipt_or_documented_exception_is_not_filing_candidate(
+        self,
+    ) -> None:
+        cases = (
+            {
+                "payment.uses_foreign_exchange_bank": False,
+                "payment.direction": "receive",
+                "payment.nonbank.exception_category": "article_5_11_receipt",
+            },
+            {
+                "payment.uses_foreign_exchange_bank": False,
+                "payment.direction": "pay",
+                "payment.nonbank.exception_category": "article_5_11_8",
+            },
+        )
+        for facts in cases:
+            with self.subTest(facts=facts):
+                decisions = self._fx_decisions(facts)
+                nonbank = decisions["FX_NONBANK_PAYMENT_BOK_FILING_CANDIDATE"]
+                self.assertEqual(DecisionStatus.NOT_ELIGIBLE, nonbank.status)
+
+    def test_documented_extended_payment_exception_is_not_filing_candidate(
+        self,
+    ) -> None:
+        decisions = self._fx_decisions(
+            {
+                "trade.direction": "export",
+                "trade.contract_amount_usd": 100000.01,
+                "trade.days_before_shipment": 366,
+                "trade.extended_payment_exception_category": (
+                    "article_5_8_aircraft"
+                ),
+            }
+        )
+        export = decisions["FX_EXPORT_ADVANCE_RECEIPT_BOK_FILING_CANDIDATE"]
+        self.assertEqual(DecisionStatus.NOT_ELIGIBLE, export.status)
 
     def test_missing_ksure_grade_is_not_guessed(self) -> None:
         repository = self._repository("ksure_mvp_candidates.json")

@@ -18,6 +18,15 @@
       "automation_level": "candidate_only"
     },
     {
+      "claim_id": "FXR_ARTICLE_5_4_EXCEPTION_SET",
+      "locator": "제5-4조제1항제1호부터 제15호",
+      "topic": "netting_payment_method",
+      "normalized_summary": "현행 조문은 상계 신고예외 15개 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 15,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
       "claim_id": "FXR_ARTICLE_5_8",
       "locator": "제5-8조",
       "topic": "extended_payment_period",
@@ -25,11 +34,45 @@
       "automation_level": "candidate_only"
     },
     {
+      "claim_id": "FXR_ARTICLE_5_8_EXCEPTION_SET",
+      "locator": "제5-8조제1항 단서",
+      "topic": "extended_payment_period",
+      "normalized_summary": "선박·철도차량·항공기·대외무역법상 산업설비의 수출입은 기간초과 지급 신고예외다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 4,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
       "claim_id": "FXR_ARTICLE_5_10",
       "locator": "제5-10조",
       "topic": "third_party_payment",
       "normalized_summary": "제3자 지급·수령의 신고예외와 신고 기준을 규율한다.",
       "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_10_EXCEPTION_SET",
+      "locator": "제5-10조제1항제1호부터 제32호",
+      "topic": "third_party_payment",
+      "normalized_summary": "현행 조문은 제3자 지급 신고예외 32개 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 32,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_11",
+      "locator": "제5-11조",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "외국환은행을 통하지 않는 지급·수령의 신고예외와 한국은행 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_11_EXCEPTION_SET",
+      "locator": "제5-11조제1항 본문 및 제1호부터 제13호",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "현행 조문은 비은행 수령과 외국환은행을 통하지 않는 지급의 예외 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 14,
+      "automation_level": "requires_transaction_evidence"
     }
   ],
   "verification": {

@@ -57,6 +57,15 @@ python scripts/check_sources.py
 근거 역할을 정의한다. 규칙팩에 catalog 밖의 필드를 추가하면 검증 테스트가 실패한다.
 `UNKNOWN`이나 누락값을 임의로 유리한 값으로 치환하지 않는다.
 
+## Exception catalogs
+
+`exception_catalogs/`는 한 조문에 다수의 예외가 있는 경우 전체 목록과 필요한
+증빙, 자동화 수준을 관리한다. 규칙 입력은 `exception_applies=true/false` 같은
+포괄 boolean을 사용하지 않고 `article_5_10_22`처럼 조문과 연결되는 enum을
+사용한다. `none`은 모든 예외를 검토해 해당하지 않음을 증빙한 경우에만 입력하며,
+미분류 상태는 누락 또는 `unknown`으로 유지한다. LLM은 예외 코드를 확정하지 않고
+결정론적 규칙 결과를 설명하는 역할만 맡는다.
+
 ## Rulepacks
 
 규칙의 기본 실패 효과는 `reject`다. 충족 가능한 조건을 조건부 후보로 표현하려면

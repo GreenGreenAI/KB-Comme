@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "pack_id": "FX_COMPLIANCE_MVP",
   "as_of": "2026-07-27",
   "status": "draft",
@@ -52,6 +52,7 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
         "BOK_NETTING_EXCEPTION_5000",
         "BOK_NETTING_EXCEPTION_CATEGORIES",
         "BOK_BILATERAL_NETTING_REPORT"
@@ -117,6 +118,7 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
         "BOK_NETTING_EXCEPTION_5000",
         "BOK_NETTING_EXCEPTION_CATEGORIES",
         "BOK_MULTILATERAL_NETTING_FILING"
@@ -138,6 +140,73 @@
       "procedure_steps": [
         "한국은행 외환심사 담당부서에 사전 확인",
         "신고서와 관계서류 제출"
+      ],
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_NETTING_CENTER_BOK_FILING_CANDIDATE",
+      "title": "상계센터 경유 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_netting",
+          "operator": "eq",
+          "value": true,
+          "description": "거주자와 비거주자 간 채권·채무 상계"
+        },
+        {
+          "field": "payment.netting.uses_center",
+          "operator": "eq",
+          "value": true,
+          "description": "다국적기업 상계센터 경유"
+        },
+        {
+          "field": "payment.netting.smaller_claim_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "일방 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.netting.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
+        "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
+        "BOK_MULTILATERAL_NETTING_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "상계센터 계약서",
+        "참여 당사자 명세",
+        "당사자별 채권·채무 명세",
+        "상계금액 산출표",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "한국은행 외환심사 담당부서에 상계센터 구조 확인",
+        "지급 전 신고서와 관계서류 제출"
       ],
       "production_ready": false
     },
@@ -166,9 +235,9 @@
           "description": "선적 전 1년 초과 수령"
         },
         {
-          "field": "trade.extended_payment_exception",
+          "field": "trade.extended_payment_exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "선박·철도차량·항공기·산업설비 예외가 아님"
         }
       ],
@@ -182,6 +251,7 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_8",
+        "FXR_ARTICLE_5_8_EXCEPTION_SET",
         "BOK_EXPORT_ADVANCE_RECEIPT"
       ],
       "candidate_outcome": {
@@ -229,9 +299,9 @@
           "description": "선적서류 또는 물품 수령 전 1년 초과 지급"
         },
         {
-          "field": "trade.extended_payment_exception",
+          "field": "trade.extended_payment_exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "선박·철도차량·항공기·산업설비 예외가 아님"
         }
       ],
@@ -245,6 +315,7 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_8",
+        "FXR_ARTICLE_5_8_EXCEPTION_SET",
         "BOK_IMPORT_ADVANCE_PAYMENT"
       ],
       "candidate_outcome": {
@@ -292,9 +363,9 @@
           "description": "제3자 지급 금액 미화 1만달러 이하"
         },
         {
-          "field": "payment.third_party.exception_applies",
+          "field": "payment.third_party.exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "그 밖의 신고예외가 확인되지 않음"
         }
       ],
@@ -308,7 +379,9 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_10",
+        "FXR_ARTICLE_5_10_EXCEPTION_SET",
         "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_EXCEPTION_CATEGORIES",
         "BOK_THIRD_PARTY_BANK_FILING"
       ],
       "candidate_outcome": {
@@ -350,9 +423,9 @@
           "description": "제3자 지급 금액 미화 1만달러 초과"
         },
         {
-          "field": "payment.third_party.exception_applies",
+          "field": "payment.third_party.exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "신고예외가 확인되지 않음"
         }
       ],
@@ -366,7 +439,9 @@
         "FXA_ARTICLE_16",
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_10",
+        "FXR_ARTICLE_5_10_EXCEPTION_SET",
         "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_EXCEPTION_CATEGORIES",
         "BOK_THIRD_PARTY_BOK_FILING"
       ],
       "candidate_outcome": {
@@ -386,6 +461,66 @@
       "procedure_steps": [
         "한국은행에 신고예외 및 신고 대상 확인",
         "필요 시 지급 전 신고"
+      ],
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_NONBANK_PAYMENT_BOK_FILING_CANDIDATE",
+      "title": "외국환은행을 통하지 않는 지급 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.uses_foreign_exchange_bank",
+          "operator": "eq",
+          "value": false,
+          "description": "외국환은행을 통하지 않는 결제"
+        },
+        {
+          "field": "payment.direction",
+          "operator": "eq",
+          "value": "pay",
+          "description": "거주자가 지급하려는 거래"
+        },
+        {
+          "field": "payment.nonbank.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "제5-11조 신고예외·확인·세관신고 사항이 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_11",
+        "FXR_ARTICLE_5_11_EXCEPTION_SET",
+        "BOK_NONBANK_PAYMENT_EXCEPTIONS",
+        "BOK_NONBANK_PAYMENT_BOK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급수단 취득·보유 증빙",
+        "결제경로 자료",
+        "외국환은행 확인 또는 세관 신고필증",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "제5-11조 신고예외와 다른 기관 확인·신고 사항 대조",
+        "해당하지 않으면 지급 전 한국은행 신고 검토"
       ],
       "production_ready": false
     }
