@@ -1,3 +1,10 @@
+---
+status: accepted
+owner: shared
+reviewers: knowledge-domain, platform-runtime
+last-reviewed: 2026-07-26
+---
+
 # ADR-0001: 모듈 소유권과 의존 방향
 
 - 상태: 승인
@@ -31,4 +38,3 @@ runtime ─┴── contracts + knowledge
 ## 검증
 
 `tests/architecture/test_module_boundaries.py`가 금지된 역방향 import를 검사한다.
-

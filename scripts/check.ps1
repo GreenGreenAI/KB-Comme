@@ -10,9 +10,11 @@ try {
     python -m compileall -q src tests examples
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed." }
 
+    python scripts/check_docs.py
+    if ($LASTEXITCODE -ne 0) { throw "Documentation checks failed." }
+
     Write-Host "TradeFlow checks passed."
 }
 finally {
     Pop-Location
 }
-

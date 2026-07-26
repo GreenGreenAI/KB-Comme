@@ -1,3 +1,10 @@
+---
+status: accepted
+owner: shared
+reviewers: knowledge-domain, platform-runtime
+last-reviewed: 2026-07-26
+---
+
 # TradeFlow 통합 수출입 금융 플랫폼 기획서
 
 > 작성 기준일: 2026-07-26  

@@ -1,0 +1,11 @@
+# Bootstrap owner. Replace or extend these entries with the two role owners when
+# their GitHub accounts or organization teams are finalized.
+* @kyne0127
+
+# Shared decisions require cross-role review according to OWNERS.md.
+/docs/product/ @kyne0127
+/docs/specifications/ @kyne0127
+/docs/collaboration/ @kyne0127
+/docs/adr/ @kyne0127
+/src/tradeflow/contracts/ @kyne0127
+/tests/architecture/ @kyne0127

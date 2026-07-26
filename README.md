@@ -44,7 +44,7 @@ python examples/linked_trade_demo.py
 - `src/tradeflow/runtime`: 전체 분석 파이프라인과 검토 게이트
 - `knowledge`: 출처 및 규칙 팩의 예시 데이터
 - `tests`: 핵심 계산·판정·근거 누락 회귀 테스트
-- `docs`: 전체 시스템 아키텍처 및 제품 기획
+- [`docs`](docs/README.md): 제품, 아키텍처, 명세, 운영과 협업 문서 포털
 
 2인 협업 시 역할과 폴더 소유권은 [OWNERS.md](OWNERS.md), 작업·리뷰 절차는
 [CONTRIBUTING.md](CONTRIBUTING.md)를 기준으로 합니다.

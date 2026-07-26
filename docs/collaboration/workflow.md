@@ -1,3 +1,10 @@
+---
+status: accepted
+owner: shared
+reviewers: knowledge-domain, platform-runtime
+last-reviewed: 2026-07-26
+---
+
 # 2인 협업 가이드
 
 ## 역할 A: 지식·도메인 담당
@@ -60,4 +67,3 @@
 
 초기 대표 케이스는 USD T/T 연결 거래 하나로 유지합니다. 범위를 늘릴 때는 통화,
 결제방식, 상품을 동시에 늘리지 않고 한 축씩 확장합니다.
-
