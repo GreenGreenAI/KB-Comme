@@ -4,13 +4,15 @@ import unittest
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
-from tradeflow.integration.snapshot_store import (
-    SnapshotConflictError,
+from tradeflow.domain.snapshot_file import (
     SnapshotIntegrityError,
-    build_envelope,
     content_hash,
     read_snapshot,
     snapshot_path,
+)
+from tradeflow.integration.snapshot_store import (
+    SnapshotConflictError,
+    build_envelope,
     write_snapshot,
 )
 

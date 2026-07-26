@@ -1,64 +1,31 @@
-"""Reading and writing snapshot files.
+"""Creating snapshot files.
 
 A snapshot is the record that a calculation was performed against a particular
 view of the world, so this module treats the stored bytes as evidence rather
-than as a cache: the payload is kept exactly as the source returned it, the
-hash is verified on the way back in, and a second collection that disagrees
-with an existing file is refused instead of overwriting it.
+than as a cache: the payload is kept exactly as the source returned it, and a
+second collection that disagrees with an existing file is refused instead of
+overwriting it.
 
-Collectors live alongside this module; nothing outside `integration` imports
-either (ADR-0003).
+Reading is not here. Every layer that consumes a snapshot needs it and none of
+them may import `integration`, so locating, reading and verifying live in
+`domain.snapshot_file` (ADR-0005). Collectors live alongside this module;
+nothing outside `integration` imports either (ADR-0003).
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from tradeflow.domain.snapshot import SnapshotRef
-
-# Both values become path segments, so keep them to characters that cannot
-# escape the snapshot root.
-_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+from tradeflow.domain.snapshot_file import content_hash, safe_segment, snapshot_path
 
 
 class SnapshotConflictError(RuntimeError):
     """Raised when a version is re-collected with different content."""
-
-
-class SnapshotIntegrityError(RuntimeError):
-    """Raised when a stored payload no longer matches its recorded hash."""
-
-
-def canonical_json(payload: Any) -> str:
-    """Serialize a payload so that equal payloads always hash equally."""
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def content_hash(payload: Any) -> str:
-    digest = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
-
-
-def _safe_segment(value: str, field: str) -> str:
-    if not _SAFE_SEGMENT.match(value):
-        raise ValueError(
-            f"{field} must be a plain path segment, got {value!r}"
-        )
-    return value
-
-
-def snapshot_path(root: Path | str, source_id: str, version: str) -> Path:
-    return (
-        Path(root)
-        / _safe_segment(source_id, "source_id")
-        / f"{_safe_segment(version, 'version')}.json"
-    )
 
 
 def build_envelope(
@@ -81,8 +48,8 @@ def build_envelope(
         retrieved_at=retrieved_at,
         content_hash=content_hash(payload),
     )
-    _safe_segment(ref.source_id, "source_id")
-    _safe_segment(ref.version, "version")
+    safe_segment(ref.source_id, "source_id")
+    safe_segment(ref.version, "version")
     return {
         "source_id": ref.source_id,
         "version": ref.version,
@@ -121,26 +88,3 @@ def write_snapshot(root: Path | str, envelope: dict[str, Any]) -> Path:
     )
     os.replace(temporary, path)
     return path
-
-
-def read_snapshot(path: Path | str) -> tuple[SnapshotRef, Any]:
-    """Load an envelope, verifying it is the snapshot it claims to be."""
-    envelope = json.loads(Path(path).read_text(encoding="utf-8"))
-    payload = envelope["payload"]
-
-    recorded = envelope["content_hash"]
-    actual = content_hash(payload)
-    if recorded != actual:
-        raise SnapshotIntegrityError(
-            f"{path}: payload does not match recorded hash "
-            f"({recorded} != {actual})"
-        )
-
-    ref = SnapshotRef(
-        source_id=envelope["source_id"],
-        version=envelope["version"],
-        observed_at=datetime.fromisoformat(envelope["observed_at"]),
-        retrieved_at=datetime.fromisoformat(envelope["retrieved_at"]),
-        content_hash=recorded,
-    )
-    return ref, payload
