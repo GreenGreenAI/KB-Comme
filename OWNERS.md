@@ -9,6 +9,7 @@
 | 출처·규칙·근거 | 지식·도메인 담당 | `src/tradeflow/knowledge/`, `knowledge/` | production 전환 시 필수 |
 | 계산 도구 | 아키텍처·런타임 담당 | `src/tradeflow/tools/` | 계산식 변경 시 필수 |
 | 실행 파이프라인 | 아키텍처·런타임 담당 | `src/tradeflow/runtime/` | 외부 계약 변경 시 필수 |
+| 외부 출처 수집 | 아키텍처·런타임 담당 | `src/tradeflow/integration/`, `data/snapshots/` | 출처 추가 시 필수 |
 | 지식 테스트 | 지식·도메인 담당 | `tests/knowledge/` | 선택 |
 | 플랫폼 테스트 | 아키텍처·런타임 담당 | `tests/platform/` | 선택 |
 | 경계·통합 테스트 | 공동 | `tests/architecture/` | 필수 |

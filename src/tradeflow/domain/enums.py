@@ -46,3 +46,44 @@ class SourceStatus(StrEnum):
     FUTURE = "future"
     UNVERIFIED = "unverified"
 
+
+class Freshness(StrEnum):
+    FRESH = "fresh"
+    STALE = "stale"
+
+
+class HedgeMeasureCategory(StrEnum):
+    """A contracted product and a way of restructuring trade behave differently.
+
+    A financial instrument has a counterparty, a contracted rate and a cost. A
+    strategy has none of these, so the payoff formula does not apply to it.
+    """
+
+    FINANCIAL_INSTRUMENT = "financial_instrument"
+    STRATEGY = "strategy"
+
+
+class FinancialInstrumentKind(StrEnum):
+    FORWARD = "forward"
+    KSURE_FX_INSURANCE = "ksure_fx"
+
+
+class HedgeStrategyKind(StrEnum):
+    NATURAL = "natural"
+    TERMS_ADJUSTMENT = "terms"
+
+
+class AvailabilityStatus(StrEnum):
+    """Whether a company may use a hedging measure.
+
+    Mirrors `DecisionStatus`: not knowing whether a measure is usable is a
+    distinct answer from knowing it is not, and collapsing the two into a
+    boolean would let missing information read as a settled refusal.
+    """
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    CONDITIONAL = "conditional"
+    INSUFFICIENT_INFORMATION = "insufficient_information"
+    EXPERT_CONFIRMATION_REQUIRED = "expert_confirmation_required"
+

@@ -5,7 +5,15 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from tradeflow.domain.enums import DecisionStatus, PaymentMethod, TradeDirection
+from tradeflow.domain.enums import (
+    AvailabilityStatus,
+    DecisionStatus,
+    FinancialInstrumentKind,
+    HedgeMeasureCategory,
+    HedgeStrategyKind,
+    PaymentMethod,
+    TradeDirection,
+)
 
 
 def money(value: Decimal | str | int | float) -> Decimal:
@@ -91,15 +99,84 @@ class CashflowPoint:
 
 @dataclass(frozen=True)
 class CurrencyExposure:
+    """Currency-level exposure.
+
+    `economic_offset` is the whole-horizon offset between receipts and payments.
+    `maturity_matched_amount` is the part of it that is actually settled by an
+    earlier receipt, so the two together show how much of the offset is real at
+    the time the payment falls due. `trade_net_exposure` keeps its sign: a
+    negative value means payments exceed receipts, and the hedge payoff formula
+    depends on that direction.
+    """
+
     currency: str
     opening_balance: Decimal
     total_inflow: Decimal
     total_outflow: Decimal
     economic_offset: Decimal
+    maturity_matched_amount: Decimal
     trade_net_exposure: Decimal
     ending_balance: Decimal
     peak_funding_gap: Decimal
     timeline: tuple[CashflowPoint, ...]
+
+
+@dataclass(frozen=True)
+class HedgeMeasure:
+    """A way of reducing exposure, with whether this company may use it.
+
+    Availability is decided by the knowledge layer from collateral and credit
+    facts, never by the optimizer. A measure the company cannot access must
+    still be returned, carrying the reason, so the answer says why something is
+    unavailable instead of quietly dropping it.
+
+    Rates and costs belong to financial instruments only. A strategy such as
+    natural hedging has no counterparty to contract with, so pricing fields on
+    it would be meaningless.
+    """
+
+    measure_id: str
+    category: HedgeMeasureCategory
+    kind: FinancialInstrumentKind | HedgeStrategyKind
+    status: AvailabilityStatus
+    status_reasons: tuple[str, ...] = ()
+    contract_rate: Decimal | None = None
+    cost_rate: Decimal | None = None
+    source_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        expected = (
+            FinancialInstrumentKind
+            if self.category is HedgeMeasureCategory.FINANCIAL_INSTRUMENT
+            else HedgeStrategyKind
+        )
+        if not isinstance(self.kind, expected):
+            raise ValueError(
+                f"{self.measure_id}: {self.category.value} requires a "
+                f"{expected.__name__}, got {type(self.kind).__name__}"
+            )
+
+        if self.status is AvailabilityStatus.AVAILABLE:
+            if self.status_reasons:
+                raise ValueError(
+                    f"{self.measure_id}: an available measure must not carry "
+                    "status reasons"
+                )
+        elif not self.status_reasons:
+            raise ValueError(
+                f"{self.measure_id}: status {self.status.value} must carry at "
+                "least one reason"
+            )
+
+        if self.category is HedgeMeasureCategory.STRATEGY and (
+            self.contract_rate is not None or self.cost_rate is not None
+        ):
+            raise ValueError(
+                f"{self.measure_id}: a strategy has no counterparty and must "
+                "not carry a contract rate or cost"
+            )
+        if self.cost_rate is not None and self.cost_rate < 0:
+            raise ValueError(f"{self.measure_id}: cost_rate must not be negative")
 
 
 @dataclass(frozen=True)
