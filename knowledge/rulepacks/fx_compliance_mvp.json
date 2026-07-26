@@ -36,9 +36,9 @@
           "description": "일방 금액 미화 5천달러 초과"
         },
         {
-          "field": "payment.netting.exception_applies",
+          "field": "payment.netting.exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "그 밖의 신고예외가 확인되지 않음"
         }
       ],
@@ -53,6 +53,7 @@
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_4",
         "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
         "BOK_BILATERAL_NETTING_REPORT"
       ],
       "candidate_outcome": {
@@ -100,9 +101,9 @@
           "description": "일방 금액 미화 5천달러 초과"
         },
         {
-          "field": "payment.netting.exception_applies",
+          "field": "payment.netting.exception_category",
           "operator": "eq",
-          "value": false,
+          "value": "none",
           "description": "신고예외가 확인되지 않음"
         }
       ],
@@ -117,6 +118,7 @@
         "FXD_ARTICLE_30",
         "FXR_ARTICLE_5_4",
         "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
         "BOK_MULTILATERAL_NETTING_FILING"
       ],
       "candidate_outcome": {
@@ -262,6 +264,128 @@
       "procedure_steps": [
         "한국은행 신고예외 및 사후신고 가능 사유 확인",
         "필요 시 한국은행 신고"
+      ],
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_THIRD_PARTY_PAYMENT_BANK_FILING_CANDIDATE",
+      "title": "제3자 지급 외국환은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_third_party",
+          "operator": "eq",
+          "value": true,
+          "description": "원인거래 당사자가 아닌 자와 지급 또는 수령"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "제3자 지급 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "lte",
+          "value": 10000,
+          "description": "제3자 지급 금액 미화 1만달러 이하"
+        },
+        {
+          "field": "payment.third_party.exception_applies",
+          "operator": "eq",
+          "value": false,
+          "description": "그 밖의 신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_10",
+        "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_BANK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "foreign_exchange_bank",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급·수령 당사자 관계 자료",
+        "금액 산출 근거",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "외국환은행에 신고예외 및 신고 대상 확인",
+        "필요 시 지급 전 신고"
+      ],
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE",
+      "title": "제3자 지급 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_third_party",
+          "operator": "eq",
+          "value": true,
+          "description": "원인거래 당사자가 아닌 자와 지급 또는 수령"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "gt",
+          "value": 10000,
+          "description": "제3자 지급 금액 미화 1만달러 초과"
+        },
+        {
+          "field": "payment.third_party.exception_applies",
+          "operator": "eq",
+          "value": false,
+          "description": "신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_10",
+        "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_BOK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급·수령 당사자 관계 자료",
+        "금액 산출 근거",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "한국은행에 신고예외 및 신고 대상 확인",
+        "필요 시 지급 전 신고"
       ],
       "production_ready": false
     }

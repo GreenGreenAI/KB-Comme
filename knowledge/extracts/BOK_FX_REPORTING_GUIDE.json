@@ -21,6 +21,23 @@
       }
     },
     {
+      "claim_id": "BOK_NETTING_EXCEPTION_CATEGORIES",
+      "locator": "질문 2. 상계에 의한 지급등의 방법 / 신고예외 사항",
+      "topic": "netting_payment_method",
+      "normalized_summary": "공식 안내는 소액 외에도 카드·재보험, 파생 반대거래, 연계·위수탁가공무역, 항공·선박 운항, 교통수단 이용권 관련 상계를 예외 유형으로 열거한다.",
+      "allowed_values": [
+        "low_amount",
+        "card_or_reinsurance",
+        "derivative_offset",
+        "linked_or_processing_trade",
+        "transport_operator",
+        "ticket_commission",
+        "none",
+        "unknown"
+      ],
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
       "claim_id": "BOK_BILATERAL_NETTING_REPORT",
       "locator": "질문 2. 상계에 의한 지급등의 방법 / 외국환은행 보고사항",
       "topic": "netting_payment_method",
@@ -81,6 +98,47 @@
         "항공기",
         "대외무역법에 따른 산업설비"
       ],
+      "authority": "bank_of_korea",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_THIRD_PARTY_EXCEPTION_5000",
+      "locator": "질문 3. 제3자 지급등의 방법 / 신고예외 사항",
+      "topic": "third_party_payment",
+      "normalized_summary": "미화 5천달러 이하 금액의 제3자 지급·수령은 안내상 신고예외다.",
+      "threshold": {
+        "field": "payment.third_party.amount_usd",
+        "operator": "lte",
+        "value": 5000,
+        "currency": "USD"
+      }
+    },
+    {
+      "claim_id": "BOK_THIRD_PARTY_BANK_FILING",
+      "locator": "질문 3. 제3자 지급등의 방법 / 신고사항",
+      "topic": "third_party_payment",
+      "normalized_summary": "미화 5천달러 초과 1만달러 이하 제3자 지급·수령은 외국환은행 신고 대상으로 안내한다.",
+      "thresholds": {
+        "amount_usd": {
+          "operator": "gt_lte",
+          "lower": 5000,
+          "upper": 10000
+        }
+      },
+      "authority": "foreign_exchange_bank",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_THIRD_PARTY_BOK_FILING",
+      "locator": "질문 3. 제3자 지급등의 방법 / 신고사항",
+      "topic": "third_party_payment",
+      "normalized_summary": "미화 1만달러 초과 제3자 지급·수령은 한국은행 신고 대상으로 안내한다.",
+      "threshold": {
+        "field": "payment.third_party.amount_usd",
+        "operator": "gt",
+        "value": 10000,
+        "currency": "USD"
+      },
       "authority": "bank_of_korea",
       "action": "file"
     }

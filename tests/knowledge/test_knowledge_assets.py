@@ -123,6 +123,21 @@ class CuratedRuleSafetyTests(unittest.TestCase):
             KNOWLEDGE_ROOT / "rulepacks" / name,
         )
 
+    def _fx_decisions(self, facts: dict) -> dict:
+        repository = self._repository("fx_compliance_mvp.json")
+        freshness = {
+            source_id: Freshness.FRESH for source_id in repository.sources
+        }
+        return {
+            decision.rule_id: decision
+            for decision in repository.evaluate(
+                topic="fx_compliance",
+                facts=facts,
+                as_of=date(2026, 7, 27),
+                source_freshness=freshness,
+            )
+        }
+
     def test_complete_netting_candidate_still_requires_draft_review(self) -> None:
         repository = self._repository("fx_compliance_mvp.json")
         freshness = {
@@ -135,7 +150,7 @@ class CuratedRuleSafetyTests(unittest.TestCase):
                 "payment.netting.party_count": 2,
                 "payment.netting.uses_center": False,
                 "payment.netting.smaller_claim_usd": 6000,
-                "payment.netting.exception_applies": False,
+                "payment.netting.exception_category": "none",
             },
             as_of=date(2026, 7, 27),
             source_freshness=freshness,
@@ -169,6 +184,63 @@ class CuratedRuleSafetyTests(unittest.TestCase):
             "BOK_BILATERAL_NETTING_REPORT",
             procedure["source_claim_ids"],
         )
+
+    def test_named_netting_exception_does_not_trigger_filing_candidate(self) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.is_netting": True,
+                "payment.netting.party_count": 2,
+                "payment.netting.uses_center": False,
+                "payment.netting.smaller_claim_usd": 6000,
+                "payment.netting.exception_category": "derivative_offset",
+            }
+        )
+        bilateral = decisions["FX_BILATERAL_NETTING_BANK_REPORT_CANDIDATE"]
+        self.assertEqual(DecisionStatus.NOT_ELIGIBLE, bilateral.status)
+
+    def test_third_party_payment_amount_boundaries_route_to_right_authority(
+        self,
+    ) -> None:
+        bank_rule = "FX_THIRD_PARTY_PAYMENT_BANK_FILING_CANDIDATE"
+        bok_rule = "FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE"
+        expected = {
+            5000: (DecisionStatus.NOT_ELIGIBLE, DecisionStatus.NOT_ELIGIBLE),
+            5000.01: (
+                DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+                DecisionStatus.NOT_ELIGIBLE,
+            ),
+            10000: (
+                DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+                DecisionStatus.NOT_ELIGIBLE,
+            ),
+            10000.01: (
+                DecisionStatus.NOT_ELIGIBLE,
+                DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            ),
+        }
+
+        for amount, statuses in expected.items():
+            with self.subTest(amount=amount):
+                decisions = self._fx_decisions(
+                    {
+                        "payment.is_third_party": True,
+                        "payment.third_party.amount_usd": amount,
+                        "payment.third_party.exception_applies": False,
+                    }
+                )
+                self.assertEqual(statuses[0], decisions[bank_rule].status)
+                self.assertEqual(statuses[1], decisions[bok_rule].status)
+
+    def test_third_party_exception_does_not_trigger_filing_candidate(self) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.is_third_party": True,
+                "payment.third_party.amount_usd": 15000,
+                "payment.third_party.exception_applies": True,
+            }
+        )
+        bok = decisions["FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE"]
+        self.assertEqual(DecisionStatus.NOT_ELIGIBLE, bok.status)
 
     def test_missing_ksure_grade_is_not_guessed(self) -> None:
         repository = self._repository("ksure_mvp_candidates.json")

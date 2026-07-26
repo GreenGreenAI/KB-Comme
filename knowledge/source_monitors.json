@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "policy": {
+    "raw_content_retention": false,
+    "reason": "원문 재배포 조건을 출처별로 확인하기 전까지 응답 본문은 저장하지 않고 HTTP 지문과 검증 marker만 기록한다.",
+    "on_marker_failure": "source를 STALE 또는 FRESHNESS_UNKNOWN으로 처리하고 관련 규칙을 자동 판정에서 제외한다."
+  },
+  "monitors": [
+    {
+      "source_id": "FX_TRANSACTION_ACT_2026_01_02",
+      "url": "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001525&lsRvsGubun=all",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "외국환거래법",
+        "[시행 2026. 1. 2.]",
+        "제16조(지급 또는 수령의 방법의 신고)"
+      ]
+    },
+    {
+      "source_id": "FX_TRANSACTION_DECREE_2026_04_28",
+      "url": "https://www.law.go.kr/LSW/lsLinkProc.do?datClsCd=010102&gubun=admRul&joNo=003000000&lsId=22029&lsNm=%EC%99%B8%EA%B5%AD%ED%99%98%EA%B1%B0%EB%9E%98%EB%B2%95%EC%8B%9C%ED%96%89%EB%A0%B9&mode=10",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "외국환거래법 시행령",
+        "[시행 2026. 4. 28.]",
+        "제30조(지급 또는 수령 방법의 신고)"
+      ]
+    },
+    {
+      "source_id": "FX_TRANSACTION_REGULATION_2026_88",
+      "url": "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000281984&chrClsCd=010201",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "외국환거래규정",
+        "[시행 2026. 7. 6.]",
+        "재정경제부고시 제2026-88호"
+      ]
+    },
+    {
+      "source_id": "BOK_FX_REPORTING_GUIDE",
+      "url": "https://www.bok.or.kr/portal/main/contents.do?menuNo=200399",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "양자간 상계 일체",
+        "미화5천불 초과 1만불 이내의 금액",
+        "미화 1만불 초과 금액을 제3자와 지급등을 하려는 경우"
+      ]
+    },
+    {
+      "source_id": "KSURE_FX_INSURANCE_ELIGIBILITY",
+      "url": "https://www.ksure.or.kr/rh-fx/cntnts/i-514/web.do",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "신용상 문제점이 없는 국내 중소, 중견기업",
+        "USD, JPY, EUR, CNY",
+        "국세 및 지방세를 체납중인 기업"
+      ]
+    },
+    {
+      "source_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP",
+      "url": "https://www.ksure.or.kr/rh-kr/cntnts/i-118/web.do",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "공사 수출자 신용등급 F급 이상",
+        "공사의 수입자 신용등급 F급 이상",
+        "결제기간 2년 이내 거래"
+      ]
+    },
+    {
+      "source_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT",
+      "url": "https://www.ksure.or.kr/rh-kr/cntnts/i-166/web.do",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "중소·중견기업이 수출물품을 제조, 가공하거나 조달",
+        "수출용원자재 수입신용장 개설",
+        "기타 수출 진흥을 위한 자금대출"
+      ]
+    },
+    {
+      "source_id": "BIZINFO_SUPPORT_API",
+      "url": "https://www.bizinfo.go.kr/apiDetail.do?id=bizinfoApi",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "지원사업정보 API",
+        "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do",
+        "crtfcKey"
+      ]
+    }
+  ]
+}

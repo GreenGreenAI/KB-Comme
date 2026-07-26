@@ -23,6 +23,13 @@
       "topic": "extended_payment_period",
       "normalized_summary": "일정 기간을 초과하는 수출입대금 지급·수령의 신고 기준을 규율한다.",
       "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_10",
+      "locator": "제5-10조",
+      "topic": "third_party_payment",
+      "normalized_summary": "제3자 지급·수령의 신고예외와 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
     }
   ],
   "verification": {

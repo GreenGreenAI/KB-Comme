@@ -34,6 +34,23 @@ registry의 `usage_policy_url`을 기준으로 확인한다.
 출처 변경 시 기존 파일을 조용히 덮어쓰지 않는다. 새 기준일 또는 문서 버전의 extract를
 추가하고, 이전 source의 `effective_to`와 새 source의 `effective_from`을 연결한다.
 
+## Source monitoring
+
+`source_monitors.json`은 각 extract의 공식 URL과 문서 신원을 확인할 필수 표지를
+정의한다. 다음 명령은 HTTP 상태, 최종 URL, 응답 SHA-256과 표지 누락 여부를
+점검한다.
+
+```powershell
+$env:PYTHONPATH="src"
+python scripts/check_sources.py
+```
+
+응답 본문은 저장하지 않는다. 출처별 이용·재배포 조건을 확인하기 전까지는
+`metadata_and_fingerprint_only` 정책을 유지한다. 표지가 하나라도 사라지면 해당
+출처를 최신으로 간주하지 않고, 연결된 규칙의 자동 판정을 중단한 뒤 역할 A가
+원문 변경 여부를 확인한다. 응답 SHA-256은 실행 시점의 감사 정보이며 동적 HTML의
+고정 버전 식별자로 사용하지 않는다.
+
 ## Fact catalog
 
 `fact_catalog.json`은 규칙이 참조할 수 있는 입력 필드의 이름, 형식, 단위와 필요한

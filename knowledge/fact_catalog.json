@@ -139,9 +139,38 @@
       "evidence_role": "calculation"
     },
     {
-      "field": "payment.netting.exception_applies",
+      "field": "payment.netting.exception_category",
+      "type": "enum",
+      "allowed_values": [
+        "low_amount",
+        "card_or_reinsurance",
+        "derivative_offset",
+        "linked_or_processing_trade",
+        "transport_operator",
+        "ticket_commission",
+        "none",
+        "unknown"
+      ],
+      "description": "증빙으로 확인한 외국환거래규정상 상계 신고예외 유형",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.is_third_party",
       "type": "boolean",
-      "description": "외국환거래규정상 상계 신고예외에 해당함을 확인했는지 여부",
+      "description": "원인거래의 당사자가 아닌 자와 지급 또는 수령하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.third_party.amount_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "제3자와 지급 또는 수령하려는 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.third_party.exception_applies",
+      "type": "boolean",
+      "description": "제5-10조의 구체적인 제3자 지급 신고예외를 증빙으로 확인했는지 여부",
       "evidence_role": "compliance"
     },
     {
