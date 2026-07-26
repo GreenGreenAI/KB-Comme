@@ -46,3 +46,8 @@ class SourceStatus(StrEnum):
     FUTURE = "future"
     UNVERIFIED = "unverified"
 
+
+class Freshness(StrEnum):
+    FRESH = "fresh"
+    STALE = "stale"
+
