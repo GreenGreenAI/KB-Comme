@@ -37,12 +37,14 @@ python examples/linked_trade_demo.py
 
 ## 주요 디렉터리
 
-- `src/tradeflow/domain`: 거래, 회사, 현금흐름, 판정 모델
+- `src/tradeflow/domain`: 거래, 회사, 현금흐름, 판정 모델과 계층 공통 값객체
 - `src/tradeflow/contracts`: 두 담당자가 공동 승인하는 안정 인터페이스
 - `src/tradeflow/tools`: 결정론적 환노출·자금 공백 계산
 - `src/tradeflow/knowledge`: 출처 레지스트리, 규칙 저장소, 조건 평가, 근거 계약
 - `src/tradeflow/runtime`: 전체 분석 파이프라인과 검토 게이트
+- `src/tradeflow/integration`: 외부 출처 수집기. 다른 모듈이 import하지 않는 리프
 - `knowledge`: 출처 및 규칙 팩의 예시 데이터
+- `data/snapshots`: 수집된 원본 스냅샷. 재현성을 위해 커밋합니다
 - `tests`: 핵심 계산·판정·근거 누락 회귀 테스트
 - [`docs`](docs/README.md): 제품, 아키텍처, 명세, 운영과 협업 문서 포털
 

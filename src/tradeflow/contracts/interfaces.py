@@ -1,7 +1,12 @@
 from datetime import date
 from typing import Any, Protocol
 
-from tradeflow.domain.models import CurrencyExposure, RuleDecision, TradeProgram
+from tradeflow.domain.models import (
+    CurrencyExposure,
+    HedgeInstrument,
+    RuleDecision,
+    TradeProgram,
+)
 
 
 class ExposureService(Protocol):
@@ -22,4 +27,20 @@ class KnowledgeService(Protocol):
     ) -> tuple[RuleDecision, ...]: ...
 
     def procedure_for(self, rule_id: str) -> dict[str, Any] | None: ...
+
+
+class InstrumentAvailabilityService(Protocol):
+    """Contract owned jointly; implemented by the knowledge owner.
+
+    Decides which hedging instruments a company may actually use, from its
+    collateral and credit facts. Returns every candidate, including the ones it
+    rules out, so the caller can report exclusion reasons.
+    """
+
+    def available_instruments(
+        self,
+        *,
+        program: TradeProgram,
+        as_of: date,
+    ) -> tuple[HedgeInstrument, ...]: ...
 

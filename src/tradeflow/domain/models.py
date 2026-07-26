@@ -5,7 +5,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from tradeflow.domain.enums import DecisionStatus, PaymentMethod, TradeDirection
+from tradeflow.domain.enums import (
+    DecisionStatus,
+    InstrumentKind,
+    PaymentMethod,
+    TradeDirection,
+)
 
 
 def money(value: Decimal | str | int | float) -> Decimal:
@@ -111,6 +116,39 @@ class CurrencyExposure:
     ending_balance: Decimal
     peak_funding_gap: Decimal
     timeline: tuple[CashflowPoint, ...]
+
+
+@dataclass(frozen=True)
+class HedgeInstrument:
+    """A hedging instrument together with whether this company may use it.
+
+    Availability is decided by the knowledge layer from collateral and credit
+    facts, never by the optimizer. An instrument the company cannot access must
+    still be returned, carrying the reason it was excluded, so the answer says
+    why something is unavailable instead of quietly dropping it.
+    """
+
+    instrument_id: str
+    kind: InstrumentKind
+    available: bool
+    exclusion_reasons: tuple[str, ...] = ()
+    contract_rate: Decimal | None = None
+    cost_rate: Decimal = Decimal("0")
+    source_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.available and not self.exclusion_reasons:
+            raise ValueError(
+                f"{self.instrument_id}: an unavailable instrument must carry "
+                "at least one exclusion reason"
+            )
+        if self.available and self.exclusion_reasons:
+            raise ValueError(
+                f"{self.instrument_id}: an available instrument must not carry "
+                "exclusion reasons"
+            )
+        if self.cost_rate < 0:
+            raise ValueError(f"{self.instrument_id}: cost_rate must not be negative")
 
 
 @dataclass(frozen=True)

@@ -51,3 +51,10 @@ class Freshness(StrEnum):
     FRESH = "fresh"
     STALE = "stale"
 
+
+class InstrumentKind(StrEnum):
+    FORWARD = "forward"                  # 신용라인 또는 담보 보유 필요
+    KSURE_FX_INSURANCE = "ksure_fx"      # 담보·증거금 불요
+    NATURAL = "natural"                  # 반대방향 동일통화 현금흐름 존재
+    TERMS_ADJUSTMENT = "terms"           # 계약 협상 여지 존재
+
