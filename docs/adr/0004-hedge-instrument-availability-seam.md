@@ -46,38 +46,69 @@ last-reviewed: 2026-07-26
 
 ### 2. 데이터 타입은 `domain/`에 둔다
 
-`tools`가 참조 가능한 계층은 `domain` 하나뿐이므로(ADR-0003), `HedgeInstrument`와
-`InstrumentKind`는 `domain/`에 둔다. Protocol만 `contracts/`에 남는다.
+`tools`가 참조 가능한 계층은 `domain` 하나뿐이므로(ADR-0003), `HedgeMeasure`와 관련
+열거형은 `domain/`에 둔다. Protocol만 `contracts/`에 남는다.
 
-### 3. 제외된 수단도 사유와 함께 반환한다
+### 3. 가용성은 boolean이 아니라 상태다
 
-`HedgeInstrument`는 불변식을 스스로 강제한다.
+`AvailabilityStatus`는 `AVAILABLE` / `UNAVAILABLE` / `CONDITIONAL` /
+`INSUFFICIENT_INFORMATION` / `EXPERT_CONFIRMATION_REQUIRED`를 갖는다. `DecisionStatus`와
+같은 구조다.
 
-- `available=False`인데 `exclusion_reasons`가 비면 생성 불가
-- `available=True`인데 `exclusion_reasons`가 있으면 생성 불가
+boolean은 **"이용 불가로 판정됨"과 "판정할 정보가 없음"을 같은 값으로 만든다.** 정보
+부족이 확정된 거절로 읽히는 것은 이 제품이 금지하는 추론이다(§4.5, §9.2). 판정되지
+않은 수단은 손익 비교가 아니라 `review_required`로 흐른다.
+
+### 4. 금융상품과 전략을 분리한다
+
+`FinancialInstrumentKind`(선물환, 환변동보험)와 `HedgeStrategyKind`(자연헤지, 결제조건
+조정)를 나누고 `HedgeMeasureCategory`로 구분한다.
+
+전략에는 계약 상대방이 없으므로 보장환율과 비용률이 성립하지 않는다. 불변식으로
+강제해 전략에 가격 필드가 붙는 것을 생성 시점에 막는다.
+
+**담보 관련 사실은 열거형에 적지 않는다.** 이전 판은 "선물환 = 담보 필요", "환변동보험
+= 담보 불요"를 주석으로 고정했으나, 공식 source ID가 연결되지 않은 상태에서 이는 근거
+없는 단정이다. 이 사실들은 역할 A의 룰팩에서 출처와 함께 표현된다.
+
+### 5. 제외된 수단도 사유와 함께 반환한다
+
+`HedgeMeasure`는 불변식을 스스로 강제한다.
+
+- `AVAILABLE`이 아닌데 `status_reasons`가 비면 생성 불가
+- `AVAILABLE`인데 `status_reasons`가 있으면 생성 불가
 
 §5.4의 "제외 사유를 반드시 반환한다"를 헤지 수단에도 동일하게 적용한 것이다. 후보를
 조용히 버리면 사용자는 왜 선물환이 목록에 없는지 알 수 없다.
 
-### 4. 경계 위반은 예외로 중단한다
+### 6. 경계 위반은 예외로 중단한다
 
-`assert_all_available`은 이용 불가 수단이 옵티마이저에 도달하면 예외를 던진다.
-필터링을 호출자의 규율에 맡기지 않고 코드로 닫는다. `tests/platform/test_hedge_guard.py`가
-회귀를 막는다.
+`assert_all_usable`은 `AVAILABLE`이 아닌 수단이 옵티마이저에 도달하면 예외를 던진다.
+필터링을 호출자의 규율에 맡기지 않고 코드로 닫는다.
 
 ## 결과
 
-- `domain/models.HedgeInstrument`, `domain/enums.InstrumentKind` 신설 — 역할 A 승인 필요
-- `contracts/interfaces.InstrumentAvailabilityService` 신설 — 역할 A가 구현
+- `domain/models.HedgeMeasure`, `domain/enums`의 `AvailabilityStatus` ·
+  `HedgeMeasureCategory` · `FinancialInstrumentKind` · `HedgeStrategyKind` 신설 —
+  역할 A 승인 필요
+- `contracts/interfaces.HedgeMeasureAvailabilityService` 신설 — 역할 A가 구현
 - `tools/hedge.py` 신설 (역할 B 소유). §5.3 옵티마이저가 이 위에 올라간다
 - 미결: 은행 선물환은 §2.4에서 상품 데이터가 MVP 제외로 확정됐다. `FORWARD`는 열거형에
   남기되, 실제 후보 생성 여부와 `contract_rate` 확보 방법은 역할 A가 §5.4 작업 시 정한다.
+- 미결: `CONDITIONAL`의 조건 표현 방식(자유 문장 대 구조화 조건)은 역할 A가 §5.4에서
+  정한다. 현재는 `status_reasons` 문자열로만 전달한다.
 
 ## 검증
 
-- `tests/platform/test_hedge_guard.py`가 담보 미보유 기업에게 선물환이 후보로 남지
-  않는지, 제외 사유가 응답용으로 보존되는지 검사한다.
-- 같은 파일이 이용 불가 수단을 옵티마이저 경계에 넣으면 `UnavailableInstrumentError`가
-  발생하는지 검사한다. 정의서 §10의 "도구 레벨에서 강제"가 코드로 닫혔다는 증거다.
-- `HedgeInstrument`의 불변식(사유 없는 제외 불가, 사유 있는 가용 불가, 음수 비용률
-  불가)은 생성 시점에 검사되므로 잘못된 값이 계산에 도달하지 못한다.
+- `tests/platform/test_hedge_guard.py`가 `AVAILABLE`이 아닌 수단이 손익 계산 후보에서
+  빠지는지, 판정되지 않은 수단이 이용 불가와 구분되어 검토로 흐르는지, 사유가 응답용으로
+  보존되는지 검사한다.
+- 같은 파일이 `AVAILABLE`이 아닌 수단을 경계에 넣으면 `UnusableMeasureError`가 발생하는지
+  검사한다.
+- `HedgeMeasure`의 불변식(사유 없는 비가용 불가, 사유 있는 가용 불가, 범주·종류 불일치
+  불가, 전략의 가격 필드 불가, 음수 비용률 불가)은 생성 시점에 검사된다.
+
+**현재 상태는 "강제 장치 준비"이지 "도구 수준 강제 완료"가 아니다.** §5.3 옵티마이저가
+아직 없어 `assert_all_usable`이 실행 경로에 연결되어 있지 않다. 정의서 §10의 요구가
+충족되는 시점은 옵티마이저 진입부에서 이 함수가 호출되고, 그 호출을 검사하는 테스트가
+추가될 때다. 이는 역할 B의 Sprint 2 작업이다.

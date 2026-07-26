@@ -3,7 +3,7 @@ from typing import Any, Protocol
 
 from tradeflow.domain.models import (
     CurrencyExposure,
-    HedgeInstrument,
+    HedgeMeasure,
     RuleDecision,
     TradeProgram,
 )
@@ -29,18 +29,19 @@ class KnowledgeService(Protocol):
     def procedure_for(self, rule_id: str) -> dict[str, Any] | None: ...
 
 
-class InstrumentAvailabilityService(Protocol):
+class HedgeMeasureAvailabilityService(Protocol):
     """Contract owned jointly; implemented by the knowledge owner.
 
-    Decides which hedging instruments a company may actually use, from its
-    collateral and credit facts. Returns every candidate, including the ones it
-    rules out, so the caller can report exclusion reasons.
+    Judges which hedging measures a company may use, from its collateral and
+    credit facts. Returns every candidate with its status, including the ones
+    ruled out and the ones still undetermined, so the caller can report reasons
+    rather than infer them from an absence.
     """
 
-    def available_instruments(
+    def evaluate_measures(
         self,
         *,
         program: TradeProgram,
         as_of: date,
-    ) -> tuple[HedgeInstrument, ...]: ...
+    ) -> tuple[HedgeMeasure, ...]: ...
 

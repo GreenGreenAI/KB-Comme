@@ -26,14 +26,31 @@ data/snapshots/<source_id>/<version>.json
 {
   "source_id": "ECOS_USD_KRW",
   "version": "2026-07-26",
-  "retrieved_at": "2026-07-26T09:00:00+00:00",
+  "observed_at": "2026-07-26T00:00:00+09:00",
+  "retrieved_at": "2026-07-26T09:12:31+09:00",
+  "content_hash": "sha256:...",
   "payload": {}
 }
 ```
 
-`source_id`, `version`, `retrieved_at` 세 필드는 `domain.snapshot.SnapshotRef`와
-1:1로 대응합니다. 최신성 판정은 `FreshnessPolicy`가 수행하며, SLA를 넘긴 스냅샷은
-`STALE`로 처리되어 최종 판단 근거에서 제외됩니다 (정의서 §6.2).
+다섯 필드는 `domain.snapshot.SnapshotRef`와 1:1로 대응합니다.
+
+- **`observed_at`**: 데이터가 서술하는 시점. 출처가 고시한 기준시각을 씁니다.
+- **`retrieved_at`**: 우리가 받아온 시점.
+- **`content_hash`**: `payload`의 해시. 과거 결과가 참조한 스냅샷이 이 파일임을
+  증명하는 데 쓰입니다.
+
+두 시각은 출처가 늦게 고시하거나 캐시된 응답을 줄 때 어긋납니다. **오래된 데이터를
+오늘 받아왔다고 해서 최신이 되지 않으므로**, 최신성 판정은 `observed_at`을 먼저
+봅니다. `FreshnessPolicy`는 두 나이를 모두 검사하며, SLA를 넘긴 스냅샷은 `STALE`로
+처리되어 최종 판단 근거에서 제외됩니다 (정의서 §6.2).
+
+### 시간대
+
+**두 시각 모두 오프셋을 반드시 포함합니다.** 시간대 없는 값은 읽는 쪽이 UTC로
+간주하지 않고 거부합니다. 수집 시각을 임의로 해석하면 그 위에 쌓인 모든 최신성
+판정이 조용히 어긋나기 때문입니다. 수집기는 출처의 고시 시간대를 그대로 기록합니다
+(ECOS는 KST).
 
 ## 주의
 

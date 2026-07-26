@@ -52,9 +52,38 @@ class Freshness(StrEnum):
     STALE = "stale"
 
 
-class InstrumentKind(StrEnum):
-    FORWARD = "forward"                  # 신용라인 또는 담보 보유 필요
-    KSURE_FX_INSURANCE = "ksure_fx"      # 담보·증거금 불요
-    NATURAL = "natural"                  # 반대방향 동일통화 현금흐름 존재
-    TERMS_ADJUSTMENT = "terms"           # 계약 협상 여지 존재
+class HedgeMeasureCategory(StrEnum):
+    """A contracted product and a way of restructuring trade behave differently.
+
+    A financial instrument has a counterparty, a contracted rate and a cost. A
+    strategy has none of these, so the payoff formula does not apply to it.
+    """
+
+    FINANCIAL_INSTRUMENT = "financial_instrument"
+    STRATEGY = "strategy"
+
+
+class FinancialInstrumentKind(StrEnum):
+    FORWARD = "forward"
+    KSURE_FX_INSURANCE = "ksure_fx"
+
+
+class HedgeStrategyKind(StrEnum):
+    NATURAL = "natural"
+    TERMS_ADJUSTMENT = "terms"
+
+
+class AvailabilityStatus(StrEnum):
+    """Whether a company may use a hedging measure.
+
+    Mirrors `DecisionStatus`: not knowing whether a measure is usable is a
+    distinct answer from knowing it is not, and collapsing the two into a
+    boolean would let missing information read as a settled refusal.
+    """
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    CONDITIONAL = "conditional"
+    INSUFFICIENT_INFORMATION = "insufficient_information"
+    EXPERT_CONFIRMATION_REQUIRED = "expert_confirmation_required"
 

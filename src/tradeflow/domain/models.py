@@ -6,8 +6,11 @@ from decimal import Decimal
 from typing import Any
 
 from tradeflow.domain.enums import (
+    AvailabilityStatus,
     DecisionStatus,
-    InstrumentKind,
+    FinancialInstrumentKind,
+    HedgeMeasureCategory,
+    HedgeStrategyKind,
     PaymentMethod,
     TradeDirection,
 )
@@ -119,36 +122,61 @@ class CurrencyExposure:
 
 
 @dataclass(frozen=True)
-class HedgeInstrument:
-    """A hedging instrument together with whether this company may use it.
+class HedgeMeasure:
+    """A way of reducing exposure, with whether this company may use it.
 
     Availability is decided by the knowledge layer from collateral and credit
-    facts, never by the optimizer. An instrument the company cannot access must
-    still be returned, carrying the reason it was excluded, so the answer says
-    why something is unavailable instead of quietly dropping it.
+    facts, never by the optimizer. A measure the company cannot access must
+    still be returned, carrying the reason, so the answer says why something is
+    unavailable instead of quietly dropping it.
+
+    Rates and costs belong to financial instruments only. A strategy such as
+    natural hedging has no counterparty to contract with, so pricing fields on
+    it would be meaningless.
     """
 
-    instrument_id: str
-    kind: InstrumentKind
-    available: bool
-    exclusion_reasons: tuple[str, ...] = ()
+    measure_id: str
+    category: HedgeMeasureCategory
+    kind: FinancialInstrumentKind | HedgeStrategyKind
+    status: AvailabilityStatus
+    status_reasons: tuple[str, ...] = ()
     contract_rate: Decimal | None = None
-    cost_rate: Decimal = Decimal("0")
+    cost_rate: Decimal | None = None
     source_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.available and not self.exclusion_reasons:
+        expected = (
+            FinancialInstrumentKind
+            if self.category is HedgeMeasureCategory.FINANCIAL_INSTRUMENT
+            else HedgeStrategyKind
+        )
+        if not isinstance(self.kind, expected):
             raise ValueError(
-                f"{self.instrument_id}: an unavailable instrument must carry "
-                "at least one exclusion reason"
+                f"{self.measure_id}: {self.category.value} requires a "
+                f"{expected.__name__}, got {type(self.kind).__name__}"
             )
-        if self.available and self.exclusion_reasons:
+
+        if self.status is AvailabilityStatus.AVAILABLE:
+            if self.status_reasons:
+                raise ValueError(
+                    f"{self.measure_id}: an available measure must not carry "
+                    "status reasons"
+                )
+        elif not self.status_reasons:
             raise ValueError(
-                f"{self.instrument_id}: an available instrument must not carry "
-                "exclusion reasons"
+                f"{self.measure_id}: status {self.status.value} must carry at "
+                "least one reason"
             )
-        if self.cost_rate < 0:
-            raise ValueError(f"{self.instrument_id}: cost_rate must not be negative")
+
+        if self.category is HedgeMeasureCategory.STRATEGY and (
+            self.contract_rate is not None or self.cost_rate is not None
+        ):
+            raise ValueError(
+                f"{self.measure_id}: a strategy has no counterparty and must "
+                "not carry a contract rate or cost"
+            )
+        if self.cost_rate is not None and self.cost_rate < 0:
+            raise ValueError(f"{self.measure_id}: cost_rate must not be negative")
 
 
 @dataclass(frozen=True)

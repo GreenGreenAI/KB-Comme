@@ -35,9 +35,23 @@ last-reviewed: 2026-07-26
 
 ### 1. 스냅샷 값객체와 최신성 판정은 `domain/`에 둔다
 
-`domain/snapshot.py`에 `SnapshotRef`(source_id, version, retrieved_at)와
-`FreshnessPolicy`를 둔다. I/O 없이 값과 순수 판정만 담으므로 `domain`이 아무것도
-import하지 않는다는 ADR-0001 제약을 지키며, `tools`와 `knowledge` 양쪽이 쓸 수 있다.
+`domain/snapshot.py`에 `SnapshotRef`와 `FreshnessPolicy`를 둔다. I/O 없이 값과 순수
+판정만 담으므로 `domain`이 아무것도 import하지 않는다는 ADR-0001 제약을 지키며,
+`tools`와 `knowledge` 양쪽이 쓸 수 있다.
+
+`SnapshotRef`는 `source_id`, `version`, `observed_at`, `retrieved_at`, `content_hash`를
+가진다.
+
+**`observed_at`과 `retrieved_at`을 분리하는 이유**는 둘이 어긋나기 때문이다. 출처가
+늦게 고시하거나 캐시된 응답을 주면, 오래된 데이터를 방금 받아오게 된다. `retrieved_at`만
+검사하면 이 경우가 `FRESH`로 판정되어 낡은 환율 위에서 변동성이 산출된다.
+`FreshnessPolicy`는 `observed_at`을 먼저 보고, 필요하면 수집 나이도 함께 검사한다.
+
+`content_hash`는 필수다. 없으면 과거 결과가 참조한 스냅샷이 지금 이 파일이라는 것을
+보일 수 없어 §9.1 재현성이 주장에 그친다.
+
+**시간대 없는 값은 거부한다.** UTC로 간주하는 것은 추정이며, 수집 시각에 대한 추정은
+그 위에 쌓인 모든 최신성 판정을 조용히 이동시킨다. 수집기가 오프셋을 명시한다.
 
 이로부터 계층 공통 규칙을 명문화한다.
 
@@ -92,6 +106,8 @@ ECOS만 자동 수집한다. 백테스트 커버리지(§5.2)에 과거 시계�
   `knowledge`·`tools`·`runtime`을 참조하지 못하고, 어떤 모듈도 `integration`을 import하지
   못한다. 규칙이 공허하지 않음은 `runtime`에 위반 import를 임시로 넣어 두 규칙이 모두
   실패하는 것으로 확인했다.
-- `tests/platform/test_snapshot.py`가 SLA 경계, 버전 누락 거부, naive 타임스탬프 처리,
-  미래 수집 시각의 `STALE` 처리를 검사한다.
+- `tests/platform/test_snapshot.py`가 SLA 경계, 버전·해시 누락 거부, 시간대 없는 값의
+  거부, KST 등 UTC 아닌 오프셋 처리, 미래 시각의 `STALE` 처리를 검사한다.
+- 같은 파일의 `test_old_data_fetched_today_is_stale`이 핵심 회귀다. 7월 1일 데이터를
+  7월 27일에 수집한 스냅샷이 `STALE`로 판정되어야 한다.
 - 테스트 전체가 네트워크 없이 실행된다. 이것이 파일 기반 공유가 성립한다는 증거다.
