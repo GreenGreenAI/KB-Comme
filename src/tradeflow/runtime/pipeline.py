@@ -1,3 +1,4 @@
+from tradeflow.contracts.decision_packet import DecisionPacket
 from tradeflow.contracts.evidence import EvidenceDescriptor, EvidenceRequirement
 from tradeflow.contracts.interfaces import ExposureService, KnowledgeService
 from tradeflow.domain.enums import DecisionStatus, EvidenceRole
@@ -19,11 +20,7 @@ class TradeFlowPipeline:
 
     def analyze(self, program: TradeProgram) -> AnalysisResult:
         exposures = self.exposure.analyze(program)
-        facts = program.company.facts()
-        directions = {case.direction.value for case in program.cases}
-        facts["program.has_export"] = "export" in directions
-        facts["program.has_import"] = "import" in directions
-        facts["program.currencies"] = sorted({case.currency for case in program.cases})
+        facts = self._program_facts(program)
 
         decisions = self.knowledge.evaluate(
             topic="trade_support",
@@ -87,3 +84,20 @@ class TradeFlowPipeline:
             review_required=bool(review_reasons),
             review_reasons=tuple(dict.fromkeys(review_reasons)),
         )
+
+    def analyze_packet(self, program: TradeProgram) -> DecisionPacket:
+        """Run deterministic analysis and seal its output for synthesis."""
+        return DecisionPacket.from_analysis(
+            self.analyze(program),
+            as_of=program.as_of,
+            inputs=self._program_facts(program),
+        )
+
+    @staticmethod
+    def _program_facts(program: TradeProgram) -> dict[str, object]:
+        facts = program.company.facts()
+        directions = {case.direction.value for case in program.cases}
+        facts["program.has_export"] = "export" in directions
+        facts["program.has_import"] = "import" in directions
+        facts["program.currencies"] = sorted({case.currency for case in program.cases})
+        return facts

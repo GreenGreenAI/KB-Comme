@@ -17,6 +17,7 @@ last-reviewed: 2026-07-27
 | [ADR-0004](0004-hedge-instrument-availability-seam.md) | accepted | 헤지 수단 가용성 이음새 |
 | [ADR-0005](0005-snapshot-reader-placement.md) | accepted | 스냅샷을 읽는 계층 |
 | [ADR-0006](0006-source-status-and-conditional-decisions.md) | proposed | 출처 상태 합성과 조건부 판정 계약 |
+| [ADR-0007](0007-llm-execution-boundary-and-decision-packet.md) | proposed | LLM 실행 경계와 DecisionPacket |
 
 ## 운영 규칙
 
