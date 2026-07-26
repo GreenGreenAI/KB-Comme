@@ -1,13 +1,13 @@
 ---
-status: proposed
+status: accepted
 owner: platform-runtime
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-07-27
 ---
 
 # ADR-0004: 헤지 수단 가용성 이음새
 
-- 상태: 제안 (역할 A 승인 대기)
+- 상태: 승인
 - 날짜: 2026-07-26
 - 관련: ADR-0003, MVP 아키텍처 정의서 §4.2[5], §5.3, §5.4, §10
 
@@ -41,7 +41,7 @@ last-reviewed: 2026-07-26
 | payoff 계산 | 역할 B | `tools/` (§5.3 옵티마이저) |
 | 경계 강제 | 역할 B | `tools/hedge.py` |
 
-옵티마이저는 `available=True`인 수단만 손익식에 넣는다. 가용성을 스스로 판단하지
+옵티마이저는 `status=AVAILABLE`인 수단만 손익식에 넣는다. 가용성을 스스로 판단하지
 않으며, 판단하려 해도 담보·신용 fact에 접근할 경로가 없다.
 
 ### 2. 데이터 타입은 `domain/`에 둔다

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "sources": [
     {
       "source_id": "TRADEFLOW_DEMO_SOURCE",
@@ -12,7 +12,22 @@
       "effective_to": "2026-12-31",
       "content_hash": "demo-only",
       "verified": false
+    },
+    {
+      "source_id": "ECOS_USD_KRW",
+      "title": "원/미국달러 매매기준율 (731Y001/0000001)",
+      "organization": "한국은행",
+      "url": "https://ecos.bok.or.kr/",
+      "official": true,
+      "retrieved_at": "2026-07-26T21:27:26.305905+09:00",
+      "published_at": null,
+      "effective_from": null,
+      "effective_to": null,
+      "content_hash": null,
+      "verified": true,
+      "freshness_required": true,
+      "usage_policy_url": "https://www.bok.or.kr/portal/main/contents.do?menuNo=200228",
+      "attribution": "한국은행 경제통계시스템(ECOS)"
     }
   ]
 }
-

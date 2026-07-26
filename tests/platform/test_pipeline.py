@@ -9,7 +9,12 @@ from tradeflow.domain.enums import (
     TradeDirection,
 )
 from tradeflow.domain.models import CompanyProfile, TradeCase, TradeProgram
-from tradeflow.knowledge.models import Condition, KnowledgeRule, SourceRecord
+from tradeflow.knowledge.models import (
+    Condition,
+    ConditionFailureEffect,
+    KnowledgeRule,
+    SourceRecord,
+)
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 
@@ -77,6 +82,51 @@ class PipelineTests(unittest.TestCase):
             result.decisions[0].status,
         )
         self.assertEqual(("company.is_sme",), result.decisions[0].missing_fields)
+        self.assertTrue(result.review_required)
+
+    def test_conditional_candidate_requires_review(self) -> None:
+        source = SourceRecord(
+            "S1", "Source", "Authority", "https://example.test/source", True,
+            datetime(2026, 7, 1), date(2026, 1, 1), date(2026, 12, 31),
+            "sha256:test", True,
+        )
+        rule = KnowledgeRule(
+            "R2", "Document conditional", "trade_support", RuleType.ELIGIBILITY,
+            (
+                Condition(
+                    "company.has_required_document",
+                    "eq",
+                    True,
+                    "필수 서류 제출",
+                    ConditionFailureEffect.CONDITIONAL,
+                ),
+            ),
+            ("S1",),
+            date(2026, 1, 1),
+            date(2026, 12, 31),
+            production_ready=True,
+        )
+
+        result = TradeFlowPipeline(
+            KnowledgeRepository((source,), (rule,))
+        ).analyze(
+            self._program().__class__(
+                self._program().program_id,
+                CompanyProfile(
+                    "C1",
+                    "Test",
+                    is_sme=True,
+                    attributes={"company.has_required_document": False},
+                ),
+                self._program().cases,
+                as_of=self._program().as_of,
+            )
+        )
+
+        self.assertEqual(
+            DecisionStatus.CONDITIONALLY_ELIGIBLE,
+            result.decisions[0].status,
+        )
         self.assertTrue(result.review_required)
 
 

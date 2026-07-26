@@ -69,6 +69,7 @@ class TradeFlowPipeline:
         if not coverage["satisfied"]:
             review_reasons.extend(f"missing evidence: {role}" for role in coverage["missing"])
         review_statuses = {
+            DecisionStatus.CONDITIONALLY_ELIGIBLE,
             DecisionStatus.INSUFFICIENT_INFORMATION,
             DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
             DecisionStatus.SOURCE_EXPIRED,

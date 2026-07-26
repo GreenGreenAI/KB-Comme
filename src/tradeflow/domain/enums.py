@@ -45,6 +45,8 @@ class SourceStatus(StrEnum):
     EXPIRED = "expired"
     FUTURE = "future"
     UNVERIFIED = "unverified"
+    FRESHNESS_UNKNOWN = "freshness_unknown"
+    STALE = "stale"
 
 
 class Freshness(StrEnum):

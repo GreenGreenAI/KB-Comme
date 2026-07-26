@@ -3,12 +3,17 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
-from tradeflow.domain.enums import DecisionStatus, RuleType, SourceStatus
-from tradeflow.domain.models import RuleDecision
+from tradeflow.domain.enums import DecisionStatus, Freshness, RuleType, SourceStatus
+from tradeflow.domain.models import DecisionRequirement, RuleDecision
 from tradeflow.knowledge.conditions import evaluate_condition
-from tradeflow.knowledge.models import Condition, KnowledgeRule, SourceRecord
+from tradeflow.knowledge.models import (
+    Condition,
+    ConditionFailureEffect,
+    KnowledgeRule,
+    SourceRecord,
+)
 
 
 class KnowledgeRepository:
@@ -34,33 +39,56 @@ class KnowledgeRepository:
         topic: str,
         facts: dict[str, Any],
         as_of: date,
+        source_freshness: Mapping[str, Freshness] | None = None,
     ) -> tuple[RuleDecision, ...]:
+        freshness_by_source = source_freshness or {}
         decisions: list[RuleDecision] = []
         for rule in self.rules.values():
             if rule.topic != topic or not rule.effective_on(as_of):
                 continue
 
             missing_sources = [sid for sid in rule.source_ids if sid not in self.sources]
-            source_statuses = [
-                self.sources[sid].status_on(as_of)
+            source_statuses = {
+                sid: self.sources[sid].status_on(
+                    as_of,
+                    freshness=freshness_by_source.get(sid),
+                )
                 for sid in rule.source_ids
                 if sid in self.sources
-            ]
+            }
             results = [evaluate_condition(condition, facts) for condition in rule.conditions]
             failed = [result for result in results if result.status == "failed"]
             uncertain = [result for result in results if result.status == "uncertain"]
+            rejected = [
+                result
+                for result in failed
+                if result.condition.failure_effect is ConditionFailureEffect.REJECT
+            ]
+            conditional = [
+                result
+                for result in failed
+                if result.condition.failure_effect is ConditionFailureEffect.CONDITIONAL
+            ]
             reasons = [result.reason for result in results]
 
-            if missing_sources or SourceStatus.EXPIRED in source_statuses:
-                status = DecisionStatus.SOURCE_EXPIRED
-                reasons.append(f"unavailable sources: {', '.join(missing_sources)}")
-            elif any(status != SourceStatus.ACTIVE for status in source_statuses):
+            if missing_sources:
                 status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
-                reasons.append("source is not verified and active")
-            elif failed:
+                reasons.append(f"unavailable sources: {', '.join(missing_sources)}")
+            elif SourceStatus.EXPIRED in source_statuses.values():
+                status = DecisionStatus.SOURCE_EXPIRED
+                reasons.append(_source_status_reason(source_statuses))
+            elif any(
+                source_status is not SourceStatus.ACTIVE
+                for source_status in source_statuses.values()
+            ):
+                status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
+                reasons.append(_source_status_reason(source_statuses))
+            elif rejected:
                 status = DecisionStatus.NOT_ELIGIBLE
             elif uncertain:
                 status = DecisionStatus.INSUFFICIENT_INFORMATION
+            elif conditional:
+                status = DecisionStatus.CONDITIONALLY_ELIGIBLE
             elif not rule.production_ready:
                 status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
                 reasons.append("draft rule: official confirmation required")
@@ -77,6 +105,17 @@ class KnowledgeRepository:
                         result.condition.field for result in uncertain
                     ),
                     source_ids=rule.source_ids,
+                    requirements=tuple(
+                        DecisionRequirement(
+                            field=result.condition.field,
+                            operator=result.condition.operator,
+                            expected_value=result.condition.value,
+                            description=result.condition.description,
+                            current_value=facts.get(result.condition.field),
+                        )
+                        for result in conditional
+                        if status is DecisionStatus.CONDITIONALLY_ELIGIBLE
+                    ),
                 )
             )
         return tuple(decisions)
@@ -110,6 +149,14 @@ def _parse_source(item: dict[str, Any]) -> SourceRecord:
         effective_to=_parse_date(item.get("effective_to")),
         content_hash=item.get("content_hash"),
         verified=bool(item.get("verified", False)),
+        published_at=(
+            datetime.fromisoformat(item["published_at"])
+            if item.get("published_at")
+            else None
+        ),
+        freshness_required=bool(item.get("freshness_required", False)),
+        usage_policy_url=item.get("usage_policy_url"),
+        attribution=item.get("attribution"),
     )
 
 
@@ -119,7 +166,18 @@ def _parse_rule(item: dict[str, Any]) -> KnowledgeRule:
         title=item["title"],
         topic=item["topic"],
         rule_type=RuleType(item["rule_type"]),
-        conditions=tuple(Condition(**condition) for condition in item.get("conditions", [])),
+        conditions=tuple(
+            Condition(
+                field=condition["field"],
+                operator=condition["operator"],
+                value=condition.get("value"),
+                description=condition.get("description", ""),
+                failure_effect=ConditionFailureEffect(
+                    condition.get("failure_effect", ConditionFailureEffect.REJECT)
+                ),
+            )
+            for condition in item.get("conditions", [])
+        ),
         source_ids=tuple(item.get("source_ids", [])),
         effective_from=_parse_date(item.get("effective_from")),
         effective_to=_parse_date(item.get("effective_to")),
@@ -128,3 +186,11 @@ def _parse_rule(item: dict[str, Any]) -> KnowledgeRule:
         production_ready=bool(item.get("production_ready", False)),
     )
 
+
+def _source_status_reason(statuses: Mapping[str, SourceStatus]) -> str:
+    details = ", ".join(
+        f"{source_id}={status.value}"
+        for source_id, status in statuses.items()
+        if status is not SourceStatus.ACTIVE
+    )
+    return f"source status: {details}"

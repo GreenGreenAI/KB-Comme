@@ -1,13 +1,13 @@
 ---
-status: proposed
+status: accepted
 owner: platform-runtime
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-07-27
 ---
 
 # ADR-0003: 스냅샷 계약의 위치와 integration 리프
 
-- 상태: 제안 (역할 A 승인 대기)
+- 상태: 승인
 - 날짜: 2026-07-26
 - 관련: ADR-0001, MVP 아키텍처 정의서 §6.1, §6.2, §9.1, §10
 

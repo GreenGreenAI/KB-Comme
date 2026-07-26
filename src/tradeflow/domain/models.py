@@ -180,6 +180,17 @@ class HedgeMeasure:
 
 
 @dataclass(frozen=True)
+class DecisionRequirement:
+    """A known unmet condition that can be satisfied before eligibility."""
+
+    field: str
+    operator: str
+    expected_value: Any
+    description: str
+    current_value: Any = None
+
+
+@dataclass(frozen=True)
 class RuleDecision:
     rule_id: str
     title: str
@@ -187,6 +198,7 @@ class RuleDecision:
     reasons: tuple[str, ...]
     missing_fields: tuple[str, ...] = ()
     source_ids: tuple[str, ...] = ()
+    requirements: tuple[DecisionRequirement, ...] = ()
 
 
 @dataclass(frozen=True)

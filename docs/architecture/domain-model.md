@@ -2,7 +2,7 @@
 status: proposed
 owner: knowledge-domain
 reviewers: platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-07-27
 ---
 
 # 도메인 모델
@@ -24,6 +24,11 @@ last-reviewed: 2026-07-26
 구분한다. 두 경우를 하나로 합치면 정보 부족이 확정된 거절로 읽히며, 이는 추정하지
 않는다는 원칙에 어긋난다. 판정되지 않은 항목은 결과에서 빠지지 않고 검토 대상으로
 흐른다.
+
+`CONDITIONALLY_ELIGIBLE`은 이미 알고 있는 보완 가능 조건이 충족되지 않았을 때만
+사용한다. `RuleDecision.requirements`에 field, operator, 기대값, 현재값과 설명을
+구조화해 보존한다. 입력 사실 자체가 없으면 조건부가 아니라
+`INSUFFICIENT_INFORMATION`이다.
 
 ## 헤지 수단: 금융상품과 전략
 
