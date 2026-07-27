@@ -23,6 +23,7 @@ from tradeflow.domain.datasets import (
 from tradeflow.integration.bizinfo import BizinfoSupportAdapter
 from tradeflow.integration.ecos import EcosFxAdapter
 from tradeflow.integration.eligibility_feed import JsonEligibilityEvidenceAdapter
+from tradeflow.integration.koreaexim_fx import KoreaEximFxAdapter
 from tradeflow.integration.ksure_country_policy import KsureCountryPolicyAdapter
 from tradeflow.integration.registry import AdapterRegistry
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
@@ -66,6 +67,7 @@ class DatasetRegistryTests(unittest.TestCase):
                 "KSURE_COUNTRY_POLICY_DAILY",
                 "COMPANY_QUALIFICATION_EVIDENCE_V1",
                 "KSURE_CREDIT_EVIDENCE_V1",
+                "KOREAEXIM_REFERENCE_FX_DAILY",
             },
             set(self.registry.definitions),
         )
@@ -76,6 +78,7 @@ class DatasetRegistryTests(unittest.TestCase):
         company_evidence = self.registry.get(
             "COMPANY_QUALIFICATION_EVIDENCE_V1"
         )
+        koreaexim = self.registry.get("KOREAEXIM_REFERENCE_FX_DAILY")
         self.assertEqual(DatasetKind.FX_SERIES, ecos.kind)
         self.assertEqual(DatasetKind.SUPPORT_PROGRAM_CATALOG, bizinfo.kind)
         self.assertEqual(
@@ -84,10 +87,12 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertEqual(
             DatasetKind.ELIGIBILITY_EVIDENCE, company_evidence.kind
         )
+        self.assertEqual(DatasetKind.REFERENCE_FX_CATALOG, koreaexim.kind)
         self.assertEqual("company_qualification", company_evidence.provider_key)
         self.assertEqual(timedelta(days=1), bizinfo.collection_interval)
         self.assertEqual(timedelta(hours=1), erp.collection_interval)
         self.assertEqual(StorageScope.COMMITTED_PUBLIC, ecos.storage_scope)
+        self.assertEqual(StorageScope.COMMITTED_PUBLIC, koreaexim.storage_scope)
         self.assertEqual(StorageScope.RUNTIME_PRIVATE, erp.storage_scope)
         self.assertEqual(
             StorageScope.RUNTIME_PRIVATE, country_policy.storage_scope
@@ -291,6 +296,7 @@ class AdapterRegistryTests(unittest.TestCase):
         )
         bizinfo = BizinfoSupportAdapter(api_key="secret")
         country_policy = KsureCountryPolicyAdapter()
+        koreaexim = KoreaEximFxAdapter(api_key="secret")
         company_evidence = JsonEligibilityEvidenceAdapter(
             endpoint="https://connector.example/company-evidence",
             source_id="COMPANY_QUALIFICATION_FEED",
@@ -306,6 +312,7 @@ class AdapterRegistryTests(unittest.TestCase):
         self.adapters.register("ERP_TRADE_FEED_V1", erp)
         self.adapters.register("BIZINFO_SUPPORT_PROGRAMS_DAILY", bizinfo)
         self.adapters.register("KSURE_COUNTRY_POLICY_DAILY", country_policy)
+        self.adapters.register("KOREAEXIM_REFERENCE_FX_DAILY", koreaexim)
         self.adapters.register(
             "COMPANY_QUALIFICATION_EVIDENCE_V1", company_evidence
         )
@@ -319,6 +326,10 @@ class AdapterRegistryTests(unittest.TestCase):
         self.assertIs(
             country_policy,
             self.adapters.get("KSURE_COUNTRY_POLICY_DAILY"),
+        )
+        self.assertIs(
+            koreaexim,
+            self.adapters.get("KOREAEXIM_REFERENCE_FX_DAILY"),
         )
         self.assertIs(
             company_evidence,

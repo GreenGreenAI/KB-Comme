@@ -6,6 +6,7 @@ boundary that validates those snapshots and turns them into domain values.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -61,6 +62,42 @@ class FxSeries:
     @property
     def latest(self) -> FxObservation:
         return self.observations[-1]
+
+
+@dataclass(frozen=True)
+class ReferenceFxRate:
+    currency_code: str
+    currency_unit: int
+    raw_currency_unit: str
+    currency_name: str
+    telegraphic_buying_rate: Decimal
+    telegraphic_selling_rate: Decimal
+    deal_base_rate: Decimal
+    book_price: Decimal
+    yearly_exchange_fee_rate: Decimal
+    ten_day_exchange_fee_rate: Decimal
+    kftc_deal_base_rate: Decimal
+    kftc_book_price: Decimal
+
+    @property
+    def krw_per_currency_unit(self) -> Decimal:
+        return self.deal_base_rate / Decimal(self.currency_unit)
+
+
+@dataclass(frozen=True)
+class ReferenceFxCatalog:
+    observed_on: date
+    rates: Mapping[str, ReferenceFxRate]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rates", MappingProxyType(dict(self.rates)))
+
+    def get(self, currency_code: str) -> ReferenceFxRate:
+        code = currency_code.strip().upper()
+        try:
+            return self.rates[code]
+        except KeyError:
+            raise KeyError(f"reference FX rate is unavailable for {code}") from None
 
 
 @dataclass(frozen=True)
@@ -142,6 +179,7 @@ class SnapshotDataset:
     value: (
         TradeFeedData
         | FxSeries
+        | ReferenceFxCatalog
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
@@ -314,6 +352,124 @@ def parse_ecos_usd_krw_payload(payload: Any) -> FxSeries:
         unit="KRW per USD",
         observations=tuple(observations),
     )
+
+
+_KOREAEXIM_UNIT = re.compile(r"^([A-Z]{3})(?:\(([1-9][0-9]*)\))?$")
+_KOREAEXIM_FIELDS = {
+    "result",
+    "cur_unit",
+    "ttb",
+    "tts",
+    "deal_bas_r",
+    "bkpr",
+    "yy_efee_r",
+    "ten_dd_efee_r",
+    "kftc_bkpr",
+    "kftc_deal_bas_r",
+    "cur_nm",
+}
+_KOREAEXIM_ERRORS = {
+    2: "DATA code error",
+    3: "authentication code error",
+    4: "daily request limit exhausted",
+}
+
+
+def parse_koreaexim_reference_fx_payload(payload: Any) -> ReferenceFxCatalog:
+    """Parse the official Korea Eximbank AP01 JSON response wrapper."""
+    if not isinstance(payload, dict):
+        raise DatasetContractError("Korea Eximbank payload must be an object")
+    if set(payload) != {"schema_version", "search_date", "response"}:
+        raise DatasetContractError(
+            "Korea Eximbank payload requires only schema_version, search_date, response"
+        )
+    if payload.get("schema_version") != "1.0":
+        raise DatasetContractError("unsupported Korea Eximbank schema_version")
+    try:
+        observed_on = datetime.strptime(
+            _required_text(payload, "search_date"), "%Y-%m-%d"
+        ).date()
+    except ValueError as exc:
+        raise DatasetContractError(f"invalid Korea Eximbank search_date: {exc}") from None
+    response = payload.get("response")
+    if not isinstance(response, list) or not response:
+        raise DatasetContractError("Korea Eximbank response must be non-empty")
+
+    rates: dict[str, ReferenceFxRate] = {}
+    for index, record in enumerate(response):
+        prefix = f"Korea Eximbank response[{index}]"
+        if not isinstance(record, Mapping):
+            raise DatasetContractError(f"{prefix} must be an object")
+        unknown = set(record) - _KOREAEXIM_FIELDS
+        missing = _KOREAEXIM_FIELDS - set(record)
+        if unknown or missing:
+            details = []
+            if missing:
+                details.append("missing " + ", ".join(sorted(missing)))
+            if unknown:
+                details.append("unknown " + ", ".join(sorted(unknown)))
+            raise DatasetContractError(f"{prefix} fields invalid: {'; '.join(details)}")
+        result = record.get("result")
+        if isinstance(result, bool) or not isinstance(result, int):
+            raise DatasetContractError(f"{prefix}.result must be an integer")
+        if result != 1:
+            reason = _KOREAEXIM_ERRORS.get(result, f"unknown result code {result}")
+            raise DatasetContractError(f"Korea Eximbank API failed: {reason}")
+        raw_unit = _required_text(record, "cur_unit").upper()
+        match = _KOREAEXIM_UNIT.fullmatch(raw_unit)
+        if match is None:
+            raise DatasetContractError(f"{prefix}.cur_unit is invalid: {raw_unit}")
+        currency_code = match.group(1)
+        currency_unit = int(match.group(2) or "1")
+        if currency_code in rates:
+            raise DatasetContractError(
+                f"duplicate Korea Eximbank currency: {currency_code}"
+            )
+        values = {
+            field: _koreaexim_decimal(record.get(field), f"{prefix}.{field}")
+            for field in (
+                "ttb",
+                "tts",
+                "deal_bas_r",
+                "bkpr",
+                "yy_efee_r",
+                "ten_dd_efee_r",
+                "kftc_bkpr",
+                "kftc_deal_bas_r",
+            )
+        }
+        if values["deal_bas_r"] <= 0:
+            raise DatasetContractError(f"{prefix}.deal_bas_r must be positive")
+        if any(value < 0 for value in values.values()):
+            raise DatasetContractError(f"{prefix} rates must not be negative")
+        rates[currency_code] = ReferenceFxRate(
+            currency_code=currency_code,
+            currency_unit=currency_unit,
+            raw_currency_unit=raw_unit,
+            currency_name=_required_text(record, "cur_nm"),
+            telegraphic_buying_rate=values["ttb"],
+            telegraphic_selling_rate=values["tts"],
+            deal_base_rate=values["deal_bas_r"],
+            book_price=values["bkpr"],
+            yearly_exchange_fee_rate=values["yy_efee_r"],
+            ten_day_exchange_fee_rate=values["ten_dd_efee_r"],
+            kftc_deal_base_rate=values["kftc_deal_bas_r"],
+            kftc_book_price=values["kftc_bkpr"],
+        )
+    return ReferenceFxCatalog(observed_on=observed_on, rates=rates)
+
+
+def _koreaexim_decimal(value: Any, field: str) -> Decimal:
+    if not isinstance(value, str) or not value.strip():
+        raise DatasetContractError(f"{field} must be a decimal string")
+    text = value.strip().replace(",", "")
+    try:
+        result = Decimal(text)
+    except InvalidOperation:
+        raise DatasetContractError(f"{field} is not a valid decimal") from None
+    if not result.is_finite():
+        raise DatasetContractError(f"{field} must be finite")
+    return result
 
 
 def parse_bizinfo_support_payload(payload: Any) -> SupportProgramCatalog:

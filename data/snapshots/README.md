@@ -86,6 +86,16 @@ PYTHONPATH=src python -m tradeflow.integration.ecos 20160101 20260724
 전체 기간을 반복 수집하면 겹치는 스냅샷이 쌓입니다(10년치 1건이 약 1.2MB).
 최초 1회만 장기간을 받고, 이후에는 최근 구간만 수집하십시오.
 
+### `KOREAEXIM_REFERENCE_FX`
+
+한국수출입은행 환율 정보 Open API의 AP01 다통화 기준환율입니다. 신규 공식 도메인
+`oapi.koreaexim.go.kr`만 사용하고 인증키는 snapshot에 저장하지 않습니다. 응답은
+요청 `search_date`와 함께 schema 1.0 wrapper에 보존하며, `result`가 성공인 전체 행을
+`ReferenceFxCatalog`로 검증합니다.
+
+이 값은 기준·분석용이며 은행이 기업에 제시한 실행 가능 호가가 아닙니다. `JPY(100)`
+같은 고시단위를 임의로 버리지 않고 raw 단위와 배수를 함께 보존합니다.
+
 ## 소비 규칙
 
 ### `BIZINFO_SUPPORT_API`

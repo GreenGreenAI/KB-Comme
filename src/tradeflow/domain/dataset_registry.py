@@ -15,6 +15,7 @@ from tradeflow.domain.datasets import (
     FxSeries,
     EligibilityEvidenceDataset,
     KsureCountryPolicyCatalog,
+    ReferenceFxCatalog,
     SnapshotDataset,
     StaleDatasetError,
     SupportProgramCatalog,
@@ -23,6 +24,7 @@ from tradeflow.domain.datasets import (
     parse_eligibility_evidence_payload,
     parse_bizinfo_support_payload,
     parse_ksure_country_policy_payload,
+    parse_koreaexim_reference_fx_payload,
     parse_trade_feed_payload,
 )
 from tradeflow.domain.enums import Freshness
@@ -36,6 +38,7 @@ class DatasetKind(StrEnum):
     SUPPORT_PROGRAM_CATALOG = "support_program_catalog"
     COUNTRY_POLICY_CATALOG = "country_policy_catalog"
     ELIGIBILITY_EVIDENCE = "eligibility_evidence"
+    REFERENCE_FX_CATALOG = "reference_fx_catalog"
 
 
 class StorageScope(StrEnum):
@@ -96,6 +99,7 @@ class DatasetParser(Protocol):
     ) -> (
         TradeFeedData
         | FxSeries
+        | ReferenceFxCatalog
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
@@ -132,6 +136,20 @@ class EcosUsdKrwV1Parser:
                 "latest ECOS observation does not match snapshot observed_at"
             )
         return series
+
+
+@dataclass(frozen=True)
+class KoreaEximReferenceFxV1Parser:
+    kind: DatasetKind = DatasetKind.REFERENCE_FX_CATALOG
+    schema_version: str = "1.0"
+
+    def parse(self, payload: Any, ref: SnapshotRef) -> ReferenceFxCatalog:
+        catalog = parse_koreaexim_reference_fx_payload(payload)
+        if catalog.observed_on != ref.observed_at.date():
+            raise DatasetContractError(
+                "Korea Eximbank search_date does not match snapshot observed_at"
+            )
+        return catalog
 
 
 @dataclass(frozen=True)
@@ -195,6 +213,7 @@ class ParserRegistry:
     ) -> (
         TradeFeedData
         | FxSeries
+        | ReferenceFxCatalog
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
@@ -268,6 +287,7 @@ def default_parser_registry() -> ParserRegistry:
         {
             "trade_feed_v1": TradeFeedV1Parser(),
             "ecos_usd_krw_v1": EcosUsdKrwV1Parser(),
+            "koreaexim_reference_fx_v1": KoreaEximReferenceFxV1Parser(),
             "bizinfo_support_v1": BizinfoSupportV1Parser(),
             "ksure_country_policy_v1": KsureCountryPolicyV1Parser(),
             "eligibility_evidence_v1": EligibilityEvidenceV1Parser(),

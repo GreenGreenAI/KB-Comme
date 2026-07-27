@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KOREAEXIM_REFERENCE_FX",
+  "retrieved_at": "2026-07-27T00:00:00+09:00",
+  "document": {
+    "title": "한국수출입은행 환율 정보 Open API 개발 명세",
+    "issuer": "한국수출입은행",
+    "official_url": "https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C&searchselect=&searchword=",
+    "endpoint": "https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON"
+  },
+  "claims": [
+    {
+      "claim_id": "KOREAEXIM_AP01_REQUEST_CONTRACT",
+      "locator": "개발 명세 / 요청변수 (Requester Parameter)",
+      "topic": "reference_fx",
+      "normalized_summary": "환율 조회는 신규 exchangeJSON endpoint에 authkey, searchdate와 data=AP01을 전달한다.",
+      "parameters": ["authkey", "searchdate", "data"],
+      "data_code": "AP01"
+    },
+    {
+      "claim_id": "KOREAEXIM_AP01_RESULT_CODES",
+      "locator": "개발 명세 / 출력결과 (Response Element) / RESULT",
+      "topic": "reference_fx",
+      "normalized_summary": "RESULT 1만 성공이며 2는 DATA 코드 오류, 3은 인증코드 오류, 4는 일일 제한횟수 마감이다.",
+      "result_codes": {
+        "1": "success",
+        "2": "data_code_error",
+        "3": "authentication_code_error",
+        "4": "daily_limit_exhausted"
+      }
+    },
+    {
+      "claim_id": "KOREAEXIM_AP01_RESPONSE_FIELDS",
+      "locator": "개발 명세 / 출력결과 (Response Element)",
+      "topic": "reference_fx",
+      "normalized_summary": "응답은 통화코드·국가통화명·송금 받을/보낼 때 환율·매매기준율·장부가격·환가료율·서울외국환중개 기준율과 장부가격을 제공한다.",
+      "fields": [
+        "RESULT",
+        "CUR_UNIT",
+        "CUR_NM",
+        "TTB",
+        "TTS",
+        "DEAL_BAS_R",
+        "BKPR",
+        "YY_EFEE_R",
+        "TEN_DD_EFEE_R",
+        "KFTC_DEAL_BAS_R",
+        "KFTC_BKPR"
+      ]
+    },
+    {
+      "claim_id": "KOREAEXIM_REFERENCE_NOT_EXECUTION_PRICE",
+      "locator": "TradeFlow source-role policy",
+      "topic": "reference_fx",
+      "normalized_summary": "공식 API 환율은 기준·분석용이며 기업별 체결 가능 가격, 수수료와 호가 유효시간을 증명하지 않는다.",
+      "automation_level": "deterministic_reference_only"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "한국수출입은행 공식 개발 명세의 신규 endpoint, 요청변수, RESULT 코드와 출력필드 표 확인 및 신규 endpoint의 오류 응답 교차 확인",
+    "limitations": [
+      "Open API 활용신청으로 발급받은 인증키가 필요하다.",
+      "공공데이터포털의 실시간 업데이트 표시는 기업별 실행 가능한 스트리밍 호가를 의미하지 않는다.",
+      "통화별 고시단위를 보존하고 실제 계약가격은 은행 또는 브로커 근거로 별도 확인해야 한다."
+    ]
+  }
+}

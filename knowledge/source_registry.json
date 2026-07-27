@@ -30,6 +30,26 @@
       "attribution": "한국은행 경제통계시스템(ECOS)"
     },
     {
+      "source_id": "KOREAEXIM_REFERENCE_FX",
+      "title": "한국수출입은행 환율 정보 Open API (AP01)",
+      "organization": "한국수출입은행",
+      "url": "https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C&searchselect=&searchword=",
+      "official": true,
+      "retrieved_at": "2026-07-27T00:00:00+09:00",
+      "published_at": null,
+      "effective_from": null,
+      "effective_to": null,
+      "content_hash": "sha256:efb6332d90e98c3baa97f9503288ada66f8454545bf48990e609494da1dc70b2",
+      "verified": true,
+      "freshness_required": true,
+      "source_kind": "official_api_documentation",
+      "authority_level": "primary",
+      "extract_path": "knowledge/extracts/KOREAEXIM_REFERENCE_FX.json",
+      "refresh_interval_days": 30,
+      "usage_policy_url": "https://www.data.go.kr/data/3068846/openapi.do",
+      "attribution": "한국수출입은행 환율 정보 Open API"
+    },
+    {
       "source_id": "FX_TRANSACTION_ACT_2026_01_02",
       "title": "외국환거래법 [시행 2026. 1. 2.]",
       "organization": "대한민국",

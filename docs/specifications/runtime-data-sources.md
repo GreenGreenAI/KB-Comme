@@ -30,7 +30,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | 공급자 | 제공 데이터 | 접근 조건 | TradeFlow 용도 | 결정 |
 |---|---|---|---|---|
 | 한국은행 ECOS | USD/KRW 일별 매매기준율과 과거 시계열 | ECOS 인증키 | 변동성·기준 시나리오 | 현재 사용 |
-| 한국수출입은행 Open API | 통화별 고시 환율 | 무료 활용 신청 키, 신규 `oapi.koreaexim.go.kr` 도메인 | 다통화 기준환율·교차검증 | 다음 어댑터 후보 |
+| 한국수출입은행 Open API | 통화별 고시 환율 | 무료 활용 신청 키, 신규 `oapi.koreaexim.go.kr` 도메인 | 다통화 기준환율·교차검증 | AP01 어댑터·typed catalog 구현, 운영 키 연결 대기 |
 | Microsoft Dynamics 365 Business Central API v2.0 | 판매·구매 송장, 통화, 지급기일, 잔액 | 테넌트와 Entra OAuth 권한 | 거래·예정 현금흐름 원천 | fail-closed 매퍼 구현, 실제 테넌트 연결 대기 |
 | SAP S/4HANA Cloud OData API | AR/AP 개방항목 | 고객 시스템 통신 설정과 권한 | 거래·잔액·실현 현금흐름 원천 | fail-closed 매퍼 구현, 실제 시스템 연결 대기 |
 | 은행 기업 API/브로커 API | 실시간 또는 지연 호가, 거래 가능 조건 | 법인 계약과 별도 권한 | 최종 실행 가격 | 공급자 계약 후 추가 |
@@ -68,6 +68,25 @@ API 키, bearer token, 고객 endpoint는 레지스트리에 저장하지 않는
 - 공식 USD/KRW 일별 시계열을 가져온다.
 - 기존 원문 응답을 변경하지 않고 `ECOS_USD_KRW` 스냅샷으로 저장한다.
 - 인증키는 요청 시점에만 읽으며 스냅샷과 오류에 포함하지 않는다.
+
+### `KoreaEximFxAdapter`
+
+- 공식 신규 도메인의 `exchangeJSON`과 `data=AP01`만 호출한다.
+- `authkey`는 `KOREAEXIM_API_KEY` 또는 생성자에서 읽고 snapshot·repr·오류에
+  포함하지 않는다.
+- `searchdate`를 명시적으로 요구하며 요청 날짜와 snapshot 관측일을 일치시킨다.
+- HTTP 200이어도 `result=2` DATA 코드 오류, `3` 인증 오류, `4` 일일 한도 소진은
+  실패한다.
+- 공식 응답의 `CUR_UNIT`, `TTB`, `TTS`, `DEAL_BAS_R`, `BKPR`, 환가료율과
+  서울외국환중개 값을 `ReferenceFxCatalog`에 보존한다.
+- `JPY(100)`처럼 100통화 단위로 고시된 행은 raw 단위와 배수를 보존하고
+  `krw_per_currency_unit`에서만 1통화 단위로 환산한다.
+- 쉼표가 포함된 숫자는 `Decimal`로 정규화하고, 중복 통화·부분 필드·음수·0 이하
+  매매기준율은 거부한다.
+
+이 catalog는 다통화 분석 기준과 ECOS 교차검증용이다. TTB/TTS가 포함되어 있어도
+기업별 실제 체결 가능 호가, 수수료 또는 유효시간을 증명하지 않으므로 실행가격으로
+사용하지 않는다.
 
 ### `JsonTradeFeedAdapter`
 
@@ -212,6 +231,7 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 | 봉투 검증 | `read_snapshot` | 해시 또는 경로 identity 불일치 |
 | 거래 정규화 | `read_trade_feed_snapshot` | 스키마·버전·관측시각 불일치 |
 | 환율 정규화 | `read_ecos_usd_krw_snapshot` | 통계코드·항목·단위·중복·부분응답 오류 |
+| 다통화 기준환율 | `KoreaEximReferenceFxV1Parser` | API result·필드·통화단위·숫자·관측일 오류 |
 | 자격 증거 정규화 | `EligibilityEvidenceV1Parser` | schema·주체·시간대·중복·scalar fact 오류 |
 | tenant 투영 | `SnapshotEligibilityEvidenceProvider` | 회사 불일치 record 제외·snapshot stale |
 | 최신성 게이트 | 작업별 `FreshnessPolicy` | 관측 또는 수집 SLA 초과 |
@@ -227,7 +247,7 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 2. 샌드박스 읽기 전용 자격증명을 발급하고 판매·구매 양쪽의 증분 수집·페이지 순회
    기준을 정한다.
 3. 구현된 공급자별 매퍼를 샌드박스 응답 fixture와 대조하고 고객별 확장 필드를 확정한다.
-4. 한국수출입은행 다통화 기준환율 어댑터를 추가하고 ECOS와 출처 역할을 분리한다.
+4. 한국수출입은행 운영 API 키를 연결하고 수집 스케줄·실패율을 관측한다.
 5. 제휴 은행이 정해지면 호가의 유효시간·bid/ask·수수료를 포함한 실행가격 어댑터를
    별도 계약으로 추가한다.
 

@@ -32,6 +32,21 @@
       }
     },
     {
+      "dataset_id": "KOREAEXIM_REFERENCE_FX_DAILY",
+      "source_id": "KOREAEXIM_REFERENCE_FX",
+      "kind": "reference_fx_catalog",
+      "adapter_key": "koreaexim_reference_fx",
+      "parser_key": "koreaexim_reference_fx_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "committed_public",
+      "storage_root": "data/snapshots",
+      "freshness": {
+        "max_observation_age_seconds": 604800,
+        "max_retrieval_age_seconds": 604800
+      }
+    },
+    {
       "dataset_id": "BIZINFO_SUPPORT_PROGRAMS_DAILY",
       "source_id": "BIZINFO_SUPPORT_API",
       "kind": "support_program_catalog",
