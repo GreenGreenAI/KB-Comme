@@ -22,6 +22,15 @@ class DecisionStatus(StrEnum):
     SOURCE_EXPIRED = "source_expired"
 
 
+class DecisionCategory(StrEnum):
+    CANDIDATE = "candidate"
+    EXCLUDED = "excluded"
+    MISSING_INFORMATION = "missing_information"
+    EXPERT_REVIEW = "expert_review"
+    SOURCE_UNUSABLE = "source_unusable"
+    URGENT_ACTION = "urgent_action"
+
+
 class RuleType(StrEnum):
     ELIGIBILITY = "eligibility"
     REQUIREMENT = "requirement"

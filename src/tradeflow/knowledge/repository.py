@@ -5,7 +5,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from tradeflow.domain.enums import DecisionStatus, Freshness, RuleType, SourceStatus
+from tradeflow.domain.enums import (
+    DecisionCategory,
+    DecisionStatus,
+    Freshness,
+    RuleType,
+    SourceStatus,
+)
 from tradeflow.domain.models import DecisionRequirement, RuleDecision
 from tradeflow.knowledge.conditions import evaluate_condition
 from tradeflow.knowledge.models import (
@@ -139,6 +145,11 @@ class KnowledgeRepository:
                     candidate_outcome=rule.candidate_outcome,
                     subject_id=subject_id,
                     matched=matched,
+                    categories=_decision_categories(
+                        status=status,
+                        matched=matched,
+                        candidate_outcome=rule.candidate_outcome,
+                    ),
                 )
             )
         return tuple(decisions)
@@ -221,3 +232,31 @@ def _source_status_reason(statuses: Mapping[str, SourceStatus]) -> str:
         if status is not SourceStatus.ACTIVE
     )
     return f"source status: {details}"
+
+
+def _decision_categories(
+    *,
+    status: DecisionStatus,
+    matched: bool | None,
+    candidate_outcome: Mapping[str, Any],
+) -> tuple[DecisionCategory, ...]:
+    categories: list[DecisionCategory] = []
+    if matched is True:
+        categories.append(DecisionCategory.CANDIDATE)
+    elif matched is False:
+        categories.append(DecisionCategory.EXCLUDED)
+    else:
+        categories.append(DecisionCategory.MISSING_INFORMATION)
+
+    if status is DecisionStatus.INSUFFICIENT_INFORMATION:
+        categories.append(DecisionCategory.MISSING_INFORMATION)
+    elif status is DecisionStatus.EXPERT_CONFIRMATION_REQUIRED:
+        categories.append(DecisionCategory.EXPERT_REVIEW)
+    elif status is DecisionStatus.SOURCE_EXPIRED:
+        categories.append(DecisionCategory.SOURCE_UNUSABLE)
+    elif status is DecisionStatus.NOT_ELIGIBLE:
+        categories.append(DecisionCategory.EXCLUDED)
+
+    if matched is True and candidate_outcome.get("timing") == "immediate":
+        categories.append(DecisionCategory.URGENT_ACTION)
+    return tuple(dict.fromkeys(categories))

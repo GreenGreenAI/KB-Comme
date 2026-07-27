@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any, Mapping
 
 from tradeflow.contracts.evidence import EvidenceDescriptor
-from tradeflow.domain.enums import DecisionStatus, EvidenceRole
+from tradeflow.domain.enums import DecisionCategory, DecisionStatus, EvidenceRole
 from tradeflow.domain.models import (
     AnalysisResult,
     CurrencyExposure,
@@ -65,12 +65,13 @@ class PacketDecision:
     candidate_outcome: tuple[tuple[str, Any], ...]
     subject_id: str | None
     matched: bool | None
+    categories: tuple[DecisionCategory, ...]
 
 
 @dataclass(frozen=True)
 class PacketAction:
     subject_id: str | None
-    rule_id: str
+    rule_ids: tuple[str, ...]
     authority: str | None
     action: str
     timing: str | None
@@ -127,7 +128,7 @@ class DecisionPacket:
             packet_id=(
                 f"decision:{result.program_id}:{as_of.isoformat()}:{fingerprint[:16]}"
             ),
-            schema_version="1.2",
+            schema_version="1.3",
             program_id=result.program_id,
             as_of=as_of,
             inputs=tuple(
@@ -299,13 +300,14 @@ def _freeze_decision(decision: RuleDecision) -> PacketDecision:
         candidate_outcome=_freeze(decision.candidate_outcome),
         subject_id=decision.subject_id,
         matched=decision.matched,
+        categories=decision.categories,
     )
 
 
 def _freeze_action(action: RecommendedAction) -> PacketAction:
     return PacketAction(
         subject_id=action.subject_id,
-        rule_id=action.rule_id,
+        rule_ids=action.rule_ids,
         authority=action.authority,
         action=action.action,
         timing=action.timing,

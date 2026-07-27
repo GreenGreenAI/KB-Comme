@@ -165,6 +165,54 @@ class PipelineTests(unittest.TestCase):
             packet.evidence[0].source_ids,
         )
 
+    def test_duplicate_actions_merge_without_losing_rule_lineage(self) -> None:
+        source = SourceRecord(
+            "S1", "Source", "Authority", "https://example.test/source", True,
+            datetime(2026, 7, 1), date(2026, 1, 1), date(2026, 12, 31),
+            "sha256:test", True,
+        )
+        common = {
+            "topic": "trade_support",
+            "rule_type": RuleType.PROCEDURE,
+            "conditions": (Condition("company.is_sme", "eq", True),),
+            "source_ids": ("S1",),
+            "effective_from": date(2026, 1, 1),
+            "effective_to": date(2026, 12, 31),
+            "production_ready": True,
+            "candidate_outcome": {
+                "authority": "support_agency",
+                "action": "submit_application",
+                "timing": "before_deadline",
+            },
+        }
+        first = KnowledgeRule(
+            "R1",
+            "First route",
+            required_documents=("application",),
+            procedure_steps=("verify",),
+            source_claim_ids=("C1",),
+            **common,
+        )
+        second = KnowledgeRule(
+            "R2",
+            "Second route",
+            required_documents=("evidence",),
+            procedure_steps=("submit",),
+            source_claim_ids=("C2",),
+            **common,
+        )
+
+        result = TradeFlowPipeline(
+            KnowledgeRepository((source,), (first, second))
+        ).analyze(self._program())
+
+        self.assertEqual(1, len(result.actions))
+        action = result.actions[0]
+        self.assertEqual(("R1", "R2"), action.rule_ids)
+        self.assertEqual(("application", "evidence"), action.required_documents)
+        self.assertEqual(("verify", "submit"), action.steps)
+        self.assertEqual(("C1", "C2"), action.source_claim_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

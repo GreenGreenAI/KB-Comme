@@ -335,7 +335,7 @@ class TradeFlowPipeline:
             actions.append(
                 RecommendedAction(
                     subject_id=decision.subject_id,
-                    rule_id=decision.rule_id,
+                    rule_ids=(decision.rule_id,),
                     authority=outcome.get("authority"),
                     action=action_name,
                     timing=outcome.get("timing"),
@@ -347,7 +347,73 @@ class TradeFlowPipeline:
                     source_claim_ids=tuple(procedure["source_claim_ids"]),
                 )
             )
-        return tuple(actions)
+        return self._merge_actions(actions)
+
+    @staticmethod
+    def _merge_actions(
+        actions: list[RecommendedAction],
+    ) -> tuple[RecommendedAction, ...]:
+        merged: list[RecommendedAction] = []
+        for action in actions:
+            key = (
+                action.subject_id,
+                action.authority,
+                action.action,
+                action.timing,
+                action.deadline,
+            )
+            existing_index = next(
+                (
+                    index
+                    for index, item in enumerate(merged)
+                    if (
+                        item.subject_id,
+                        item.authority,
+                        item.action,
+                        item.timing,
+                        item.deadline,
+                    )
+                    == key
+                ),
+                None,
+            )
+            if existing_index is None:
+                merged.append(action)
+                continue
+            existing = merged[existing_index]
+            merged[existing_index] = RecommendedAction(
+                subject_id=existing.subject_id,
+                rule_ids=tuple(
+                    dict.fromkeys((*existing.rule_ids, *action.rule_ids))
+                ),
+                authority=existing.authority,
+                action=existing.action,
+                timing=existing.timing,
+                deadline=existing.deadline,
+                requirements=_unique_items(
+                    (*existing.requirements, *action.requirements)
+                ),
+                required_documents=tuple(
+                    dict.fromkeys(
+                        (
+                            *existing.required_documents,
+                            *action.required_documents,
+                        )
+                    )
+                ),
+                steps=tuple(
+                    dict.fromkeys((*existing.steps, *action.steps))
+                ),
+                source_ids=tuple(
+                    dict.fromkeys((*existing.source_ids, *action.source_ids))
+                ),
+                source_claim_ids=tuple(
+                    dict.fromkeys(
+                        (*existing.source_claim_ids, *action.source_claim_ids)
+                    )
+                ),
+            )
+        return tuple(merged)
 
     def _base_evidence(self, program: TradeProgram, exposures) -> tuple[EvidenceDescriptor, ...]:
         snapshot_payload = [
@@ -433,3 +499,11 @@ class TradeFlowPipeline:
                 for ref in program.input_snapshots
             ]
         return facts
+
+
+def _unique_items(items):
+    unique = []
+    for item in items:
+        if item not in unique:
+            unique.append(item)
+    return tuple(unique)

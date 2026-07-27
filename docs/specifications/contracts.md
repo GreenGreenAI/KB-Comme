@@ -57,4 +57,15 @@ LLM 출력은 `SynthesisResult`로 구조화한다. 설명문은 비권위적이
   증명한 경우에만 규칙 입력이 된다.
 - `RuleDecision.matched=true`인 규칙만 `actions`로 투영한다. 판정 상태는
   초안 여부나 출처 상태를 포함하므로 적용성의 대용으로 사용하지 않는다.
-- 이 계약을 포함하는 `DecisionPacket` schema version은 `1.2`다.
+- 기한·실행계획을 처음 추가한 schema는 `1.2`이며, 현재 계약은 아래
+  분류·통합 필드를 포함한 `1.3`이다.
+
+## 판정 분류와 실행계획 통합
+
+- 판정은 `candidate`, `excluded`, `missing_information`, `expert_review`,
+  `source_unusable`, `urgent_action`을 복수 태그로 가질 수 있다.
+- 분류는 `matched`, 판정 상태, 구조화된 `timing`에서만 파생한다.
+- 같은 케이스·기관·행동·시점·기한의 실행계획은 하나로 통합한다.
+- 통합 결과의 `rule_ids`, 미충족요건, 문서, 절차, source/claim ID는
+  최초 등장 순서로 모두 보존한다.
+- 이 계약을 포함하는 `DecisionPacket` schema version은 `1.3`이다.

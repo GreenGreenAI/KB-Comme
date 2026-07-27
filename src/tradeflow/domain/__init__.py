@@ -1,6 +1,11 @@
 """TradeFlow domain types."""
 
-from tradeflow.domain.enums import DecisionStatus, PaymentMethod, TradeDirection
+from tradeflow.domain.enums import (
+    DecisionCategory,
+    DecisionStatus,
+    PaymentMethod,
+    TradeDirection,
+)
 from tradeflow.domain.models import (
     CompanyProfile,
     RecommendedAction,
@@ -10,6 +15,7 @@ from tradeflow.domain.models import (
 
 __all__ = [
     "CompanyProfile",
+    "DecisionCategory",
     "DecisionStatus",
     "PaymentMethod",
     "RecommendedAction",

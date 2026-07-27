@@ -193,13 +193,9 @@ class CaseOrchestrationTests(unittest.TestCase):
             },
         )
 
-        actions = {item.rule_id: item for item in packet.actions}
-        filing = actions[
-            "FX_MUTUAL_ACCOUNT_BALANCE_FILING_OVERDUE_CANDIDATE"
-        ]
-        settlement = actions[
-            "FX_MUTUAL_ACCOUNT_BALANCE_SETTLEMENT_OVERDUE_CANDIDATE"
-        ]
+        actions = {item.action: item for item in packet.actions}
+        filing = actions["file_balance_settlement"]
+        settlement = actions["settle_balance"]
         self.assertEqual(date(2026, 6, 30), filing.deadline)
         self.assertEqual(date(2026, 6, 30), settlement.deadline)
         self.assertTrue(filing.required_documents)
@@ -208,7 +204,11 @@ class CaseOrchestrationTests(unittest.TestCase):
         self.assertEqual("EXP-1", filing.subject_id)
         self.assertNotIn(
             "FX_MUTUAL_ACCOUNT_MULTILATERAL_RECLASSIFICATION_CANDIDATE",
-            actions,
+            {
+                rule_id
+                for item in packet.actions
+                for rule_id in item.rule_ids
+            },
         )
         self.assertTrue(
             any(
@@ -223,6 +223,9 @@ class CaseOrchestrationTests(unittest.TestCase):
             == "FX_MUTUAL_ACCOUNT_BALANCE_FILING_OVERDUE_CANDIDATE"
         )
         self.assertTrue(filing_decision.matched)
+        self.assertIn("candidate", filing_decision.categories)
+        self.assertIn("expert_review", filing_decision.categories)
+        self.assertIn("urgent_action", filing_decision.categories)
 
     def test_llm_cannot_drop_case_identity_from_rule_decisions(self) -> None:
         packet = self.pipeline.analyze_case_packet(

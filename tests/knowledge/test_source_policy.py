@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from tradeflow.domain.enums import (
+    DecisionCategory,
     DecisionStatus,
     Freshness,
     RuleType,
@@ -98,6 +99,27 @@ class SourceStatusCompositionTests(unittest.TestCase):
 
 
 class ConditionalDecisionTests(unittest.TestCase):
+    def test_expired_source_is_classified_as_unusable(self) -> None:
+        repository = KnowledgeRepository(
+            (_source(effective_to=date(2026, 7, 1)),),
+            (_rule(Condition("company.is_sme", "eq", True)),),
+        )
+
+        decision = repository.evaluate(
+            topic="trade_support",
+            facts={"company.is_sme": True},
+            as_of=date(2026, 7, 27),
+        )[0]
+
+        self.assertEqual(DecisionStatus.SOURCE_EXPIRED, decision.status)
+        self.assertEqual(
+            (
+                DecisionCategory.CANDIDATE,
+                DecisionCategory.SOURCE_UNUSABLE,
+            ),
+            decision.categories,
+        )
+
     def test_known_remediable_failure_returns_structured_requirement(self) -> None:
         condition = Condition(
             "company.has_required_document",
@@ -120,6 +142,10 @@ class ConditionalDecisionTests(unittest.TestCase):
         self.assertEqual("company.has_required_document", requirement.field)
         self.assertEqual(True, requirement.expected_value)
         self.assertEqual(False, requirement.current_value)
+        self.assertEqual(
+            (DecisionCategory.CANDIDATE,),
+            decision.categories,
+        )
 
     def test_missing_fact_is_information_gap_not_conditional_eligibility(self) -> None:
         condition = Condition(
@@ -140,6 +166,10 @@ class ConditionalDecisionTests(unittest.TestCase):
         self.assertEqual(DecisionStatus.INSUFFICIENT_INFORMATION, decision.status)
         self.assertEqual(("company.has_required_document",), decision.missing_fields)
         self.assertEqual((), decision.requirements)
+        self.assertEqual(
+            (DecisionCategory.MISSING_INFORMATION,),
+            decision.categories,
+        )
 
     def test_hard_rejection_precedes_remediable_condition(self) -> None:
         repository = KnowledgeRepository(
@@ -169,6 +199,10 @@ class ConditionalDecisionTests(unittest.TestCase):
 
         self.assertEqual(DecisionStatus.NOT_ELIGIBLE, decision.status)
         self.assertEqual((), decision.requirements)
+        self.assertEqual(
+            (DecisionCategory.EXCLUDED,),
+            decision.categories,
+        )
 
 
 class EcosRegistryTests(unittest.TestCase):

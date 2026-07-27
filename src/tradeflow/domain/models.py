@@ -7,6 +7,7 @@ from typing import Any
 
 from tradeflow.domain.enums import (
     AvailabilityStatus,
+    DecisionCategory,
     DecisionStatus,
     FinancialInstrumentKind,
     HedgeMeasureCategory,
@@ -245,6 +246,7 @@ class RuleDecision:
     candidate_outcome: dict[str, Any] = field(default_factory=dict)
     subject_id: str | None = None
     matched: bool | None = None
+    categories: tuple[DecisionCategory, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -252,7 +254,7 @@ class RecommendedAction:
     """A deterministic procedure projected from an applicable rule."""
 
     subject_id: str | None
-    rule_id: str
+    rule_ids: tuple[str, ...]
     authority: str | None
     action: str
     timing: str | None
@@ -262,6 +264,14 @@ class RecommendedAction:
     steps: tuple[str, ...]
     source_ids: tuple[str, ...]
     source_claim_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.rule_ids:
+            raise ValueError("an action must reference at least one rule")
+        if len(set(self.rule_ids)) != len(self.rule_ids):
+            raise ValueError("action rule_ids must not contain duplicates")
+        if not self.action:
+            raise ValueError("action name must not be empty")
 
 
 @dataclass(frozen=True)
