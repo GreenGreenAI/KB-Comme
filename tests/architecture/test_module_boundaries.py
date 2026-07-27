@@ -10,8 +10,10 @@ FORBIDDEN_DEPENDENCIES = {
     "contracts": {"knowledge", "tools", "runtime", "integration"},
     "knowledge": {"tools", "runtime", "integration"},
     "tools": {"contracts", "knowledge", "runtime", "integration"},
-    "runtime": {"integration"},
-    "integration": {"knowledge", "tools", "runtime"},
+    "runtime": {"integration", "agent", "web"},
+    "agent": {"integration", "web"},
+    "web": {"integration"},
+    "integration": {"knowledge", "tools", "runtime", "agent", "web"},
 }
 
 # `integration` performs network I/O and must stay reachable only through the
