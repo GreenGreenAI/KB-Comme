@@ -14,6 +14,7 @@ from unittest import mock
 
 from tradeflow.integration.ecos import (
     API_KEY_ENV,
+    EcosFxAdapter,
     EcosError,
     load_api_key,
     observed_at,
@@ -92,6 +93,17 @@ class ApiKeyTests(unittest.TestCase):
                 load_api_key(self.root)
 
         self.assertIn(API_KEY_ENV, str(caught.exception))
+
+
+class AdapterTests(unittest.TestCase):
+    @mock.patch("tradeflow.integration.ecos.fetch_rates")
+    def test_adapter_uses_its_explicit_key(self, fetch: mock.Mock) -> None:
+        fetch.return_value = _payload("20260724")
+
+        payload = EcosFxAdapter(api_key="secret").fetch("20260701", "20260724")
+
+        self.assertEqual(_payload("20260724"), payload)
+        fetch.assert_called_once_with("20260701", "20260724", api_key="secret")
 
 
 if __name__ == "__main__":
