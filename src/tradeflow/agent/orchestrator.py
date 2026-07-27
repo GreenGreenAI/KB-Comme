@@ -10,7 +10,7 @@ missing information rather than filled in.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
@@ -21,7 +21,7 @@ from tradeflow.contracts.response import project_cashflow_analysis
 from tradeflow.domain.enums import Freshness
 from tradeflow.domain.models import HedgeMeasure, TradeProgram
 from tradeflow.domain.snapshot import FreshnessPolicy, SnapshotRef
-from tradeflow.domain.snapshot_file import read_snapshot
+from tradeflow.domain.snapshot_file import latest_snapshot_path, read_snapshot
 from tradeflow.knowledge.facts import FactAssembler, FactCatalog
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
@@ -29,6 +29,7 @@ from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
+from tradeflow.tools.source_freshness import load_source_freshness
 from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
 
 FX_SOURCE = "ECOS_USD_KRW"
@@ -87,19 +88,6 @@ class Analysis:
         return bool(self.review_reasons)
 
 
-def _latest_snapshot(root: Path | str, source_id: str) -> Path:
-    """Newest snapshot for a source.
-
-    Versions are the observation date, so filename order is observation order
-    and only the chosen file has to be read. PR #4 introduces a shared helper
-    that verifies every candidate instead; switch to it once that lands.
-    """
-    candidates = sorted((Path(root) / source_id).glob("*.json"))
-    if not candidates:
-        raise FileNotFoundError(f"no snapshot stored for {source_id}")
-    return candidates[-1]
-
-
 def _business_days_until(target, as_of) -> int:
     """Working days between two dates, weekends removed.
 
@@ -153,6 +141,20 @@ def analyze(
     cashflow = project_cashflow_analysis(exposures)
 
     pipeline = knowledge_pipeline or _default_knowledge_pipeline()
+    source_freshness = _isolated(
+        report,
+        "source_verification",
+        lambda: load_source_freshness(
+            snapshot_root, as_of=as_of or datetime.now(UTC)
+        ),
+    )
+    if source_freshness is not None:
+        report.completed.append("source_verification")
+    else:
+        review.append(
+            "공식 출처 검증 기록을 읽지 못해 규칙 판정을 자동으로 확정할 수 "
+            "없습니다"
+        )
     decision_packet = _isolated(
         report,
         "knowledge",
@@ -160,6 +162,7 @@ def analyze(
             program,
             assertions_by_case={case.case_id: () for case in program.cases},
             evidence=(),
+            source_freshness=source_freshness,
         ),
     )
     if decision_packet is not None:
@@ -183,7 +186,7 @@ def analyze(
 
     def _market() -> ScenarioBand:
         nonlocal snapshot
-        path = _latest_snapshot(snapshot_root, FX_SOURCE)
+        path = latest_snapshot_path(snapshot_root, FX_SOURCE)
         ref, payload = read_snapshot(path)
         snapshot = ref
         require_fresh(ref, FX_FRESHNESS, as_of or datetime.now(ref.observed_at.tzinfo))

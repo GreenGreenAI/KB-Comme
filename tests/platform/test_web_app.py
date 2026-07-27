@@ -48,8 +48,13 @@ class WebApiValidationTests(unittest.TestCase):
         self.assertTrue(body["result"]["packet_id"].startswith("decision:"))
         self.assertIn("support", body["result"]["workers"]["completed"])
         self.assertIn("compliance", body["result"]["workers"]["completed"])
+
+        # Fail-closed, and the reason reaches the caller. Which reason applies
+        # depends on how old the committed snapshot is on the day this runs, so
+        # the specific wording is asserted in test_orchestrator.py, which builds
+        # its own snapshot instead of reading the repository's.
         self.assertIsNone(body["result"]["hedge_analysis"])
-        self.assertIn("검증된 이용 가능", body["result"]["workers"]["skipped"]["hedge"])
+        self.assertIn("hedge", body["result"]["workers"]["skipped"])
 
 
 if __name__ == "__main__":
