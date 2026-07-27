@@ -1,0 +1,544 @@
+<title>TradeFlow — 대화형 분석 (디자인 초안)</title>
+<style>
+  /* Palette is four values only: #5f5449, #9b6a6c, #b09398 and white.
+     Softer tones are those same values mixed with white, never new hues.
+     With no green/amber/red to lean on, state is carried by form — filled vs
+     outlined vs dashed — and the most chromatic value is reserved for the one
+     thing that should pull the eye. */
+  :root {
+    --ink: #5f5449;
+    --accent: #9b6a6c;
+    --soft: #b09398;
+    --paper: #ffffff;
+
+    --ink-70: color-mix(in srgb, var(--ink) 70%, #fff);
+    --ink-45: color-mix(in srgb, var(--ink) 45%, #fff);
+    --rule: color-mix(in srgb, var(--soft) 42%, #fff);
+    --rule-faint: color-mix(in srgb, var(--soft) 22%, #fff);
+    --tint: color-mix(in srgb, var(--soft) 14%, #fff);
+    --tint-strong: color-mix(in srgb, var(--soft) 26%, #fff);
+    --accent-tint: color-mix(in srgb, var(--accent) 12%, #fff);
+    --accent-deep: color-mix(in srgb, var(--accent) 78%, var(--ink));
+    --wash: color-mix(in srgb, var(--soft) 16%, #fff);
+    --wash-2: color-mix(in srgb, var(--ink) 7%, #fff);
+
+    --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
+            0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
+    --lift-lg: 0 2px 4px color-mix(in srgb, var(--ink) 8%, transparent),
+               0 26px 62px color-mix(in srgb, var(--ink) 12%, transparent);
+
+    --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+      "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+
+  /* A committed single-theme design: this palette is a warm light world, and
+     inverting it would keep the hex values while losing the thing they make. */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] { color-scheme: light; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.62;
+    background:
+      radial-gradient(1150px 540px at 20% -10%, var(--wash), transparent 60%),
+      radial-gradient(880px 460px at 90% 2%, var(--wash-2), transparent 55%),
+      var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- floating nav ---------- */
+  .nav {
+    position: sticky; top: 14px; z-index: 40;
+    width: min(1180px, calc(100% - 2.5rem)); margin: 14px auto 0;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: .55rem .65rem .55rem 1.15rem;
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--lift);
+  }
+  .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.02em; }
+  .brand i {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    border: 1.5px solid var(--accent); color: var(--accent);
+    font-family: var(--mono); font-size: .75rem; font-style: normal;
+  }
+  .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
+  .nav nav a { text-decoration: none; color: inherit; }
+  .nav nav a.on { color: var(--accent); font-weight: 600; }
+  .nav-cta {
+    border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
+    border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;
+    box-shadow: var(--lift);
+  }
+  .nav-cta:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- account ---------- */
+  .account { position: relative; }
+  body[data-auth="out"] .signed-in,
+  body[data-auth="in"] .signed-out { display: none; }
+
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--rule); background: var(--tint-strong); color: var(--ink);
+    font-size: .875rem; font-weight: 600; display: grid; place-items: center;
+    box-shadow: var(--lift); padding: 0;
+  }
+  .avatar:hover { border-color: var(--accent); }
+  .avatar[aria-expanded="true"] { border-color: var(--accent); }
+
+  .menu {
+    position: absolute; top: calc(100% + 10px); right: 0; width: 16.5rem;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 12px;
+    box-shadow: var(--lift-lg); padding: .35rem; text-align: left; z-index: 50;
+  }
+  .menu[hidden] { display: none; }
+  .menu-id {
+    display: flex; gap: .6rem; align-items: center;
+    padding: .6rem .65rem .7rem; border-bottom: 1px solid var(--rule-faint); margin-bottom: .35rem;
+  }
+  .menu-id .avatar { cursor: default; box-shadow: none; }
+  .menu-id div { min-width: 0; }
+  .menu-id b { display: block; font-size: .875rem; }
+  .menu-id span { font-size: .75rem; color: var(--ink-45); }
+
+  .menu a {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .6rem;
+    text-decoration: none; color: inherit; font-size: .875rem;
+    padding: .5rem .65rem; border-radius: 7px;
+  }
+  .menu a:hover { background: var(--tint); }
+  .menu a em {
+    font-style: normal; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
+  }
+  .menu a.saved em { color: var(--accent); }
+  .menu hr { border: none; border-top: 1px solid var(--rule-faint); margin: .35rem 0; }
+  .menu .note {
+    margin: .1rem .65rem .5rem; font-size: .6875rem; color: var(--ink-45); line-height: 1.55;
+  }
+
+  /* ---------- state machine ---------- */
+  .stage { display: grid; }
+  .view { grid-area: 1 / 1; transition: opacity .28s ease, transform .28s ease; }
+  body[data-view="entry"] .view.work,
+  body[data-view="work"] .view.entry { opacity: 0; pointer-events: none; transform: translateY(6px); }
+
+  /* ================= ENTRY ================= */
+  .entry-wrap {
+    width: min(760px, calc(100% - 2.5rem)); margin: 0 auto;
+    padding: clamp(3.5rem, 11vh, 8rem) 0 5rem; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: color-mix(in srgb, var(--paper) 84%, transparent);
+    border: 1px solid var(--rule); border-radius: 999px;
+    padding: .3rem .85rem .3rem .35rem; font-size: .8125rem; color: var(--ink-70);
+    box-shadow: var(--lift);
+  }
+  .badge em {
+    font-style: normal; background: var(--tint-strong); color: var(--ink);
+    border-radius: 999px; padding: .12rem .5rem;
+    font-family: var(--mono); font-size: .625rem; letter-spacing: .08em;
+  }
+  h1.hero {
+    margin: .3rem 0 0; font-size: clamp(2.6rem, 5.6vw, 4.2rem); font-weight: 300;
+    letter-spacing: -.045em; line-height: 1.08; text-wrap: balance;
+  }
+  h1.hero b { font-weight: 600; color: var(--accent); }
+  .standfirst { margin: 0; max-width: 34rem; color: var(--ink-70); font-size: 1.0625rem; }
+
+  .prompt {
+    width: 100%; margin-top: 1.4rem; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 16px; box-shadow: var(--lift-lg);
+    padding: 1.15rem 1.15rem .8rem; text-align: left;
+    display: flex; flex-direction: column; gap: .85rem;
+  }
+  .prompt textarea {
+    border: none; background: none; resize: none; outline: none;
+    font-size: 1.0625rem; min-height: 3.6rem; line-height: 1.55;
+  }
+  .prompt textarea::placeholder { color: var(--ink-45); }
+  .prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .toggles { display: flex; align-items: center; gap: .5rem; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: .45rem; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 999px; background: var(--paper);
+    padding: .32rem .7rem; font-size: .8125rem; color: var(--ink-70);
+  }
+  .toggle i { width: 26px; height: 15px; border-radius: 999px; background: var(--accent); position: relative; flex: none; }
+  .toggle i::after { content: ""; position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+  .toggle.off i { background: var(--rule); }
+  .toggle.off i::after { right: auto; left: 2px; }
+  .toggle.off { color: var(--ink-45); }
+  /* Every action the user can take carries the same colour, so "this is a
+     control" never has to be worked out twice. */
+  .send {
+    width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 1rem; flex: none;
+  }
+  .send:hover { background: var(--accent-deep); }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin-top: .3rem; }
+  .chip {
+    cursor: pointer; background: color-mix(in srgb, var(--paper) 85%, transparent);
+    border: 1px solid var(--rule); border-radius: 999px;
+    padding: .45rem 1rem; font-size: .875rem; color: var(--ink-70); box-shadow: var(--lift);
+  }
+  .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .assurance { margin: 1.6rem 0 0; font-size: .8125rem; color: var(--ink-45); max-width: 33rem; }
+
+  /* ================= WORK ================= */
+  .work-wrap {
+    width: min(1180px, calc(100% - 2.5rem)); margin: 1.5rem auto 2rem;
+    display: grid; grid-template-columns: minmax(0, 47fr) minmax(0, 53fr);
+    gap: 1rem; align-items: start;
+  }
+  .col { background: var(--paper); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--lift); }
+
+  .thread { padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+  .turn { display: flex; flex-direction: column; gap: .35rem; }
+  .who { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); }
+  .turn.agent p { margin: 0; }
+  .turn.agent p + p { margin-top: .65rem; }
+  .turn.agent strong { color: var(--accent); font-weight: 600; }
+  .turn.user { align-items: flex-end; }
+  .said { background: var(--tint); border-radius: 12px 12px 3px 12px; padding: .5rem .85rem; max-width: 86%; font-size: .9375rem; }
+
+  .trace {
+    display: flex; flex-direction: column; gap: .25rem; margin: .2rem 0 .1rem;
+    border-left: 2px solid var(--rule); padding-left: .8rem;
+    font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
+  }
+  .trace .ok::before { content: "✓ "; color: var(--ink); }
+  .trace .wait::before { content: "· "; color: var(--accent); }
+  .trace .wait { color: var(--accent); }
+
+  .slotline { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .55rem; }
+  .slotline input {
+    font-family: var(--mono); font-size: .875rem; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem; width: 10rem;
+  }
+  .slotline button { cursor: pointer; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: .4rem .95rem; font-size: .8125rem; }
+  .slotline button:hover { background: var(--accent-deep); }
+  .quick { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+  .quick button { cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 999px; padding: .25rem .8rem; font-size: .8125rem; }
+  .quick button:hover { border-color: var(--accent); }
+
+  .composer { border-top: 1px solid var(--rule-faint); padding: .9rem 1.5rem 1.1rem; }
+  .composer-box { display: flex; gap: .6rem; align-items: flex-end; background: var(--tint); border: 1px solid var(--rule); border-radius: 12px; padding: .55rem .6rem .55rem .85rem; }
+  .composer-box textarea { flex: 1; border: none; background: none; resize: none; outline: none; min-height: 1.6rem; font-size: .9375rem; }
+  .composer-box .send { width: 32px; height: 32px; font-size: .9rem; }
+  .composer-hint { margin: .55rem 0 0; font-size: .6875rem; color: var(--ink-45); }
+
+  /* panel */
+  .panel { padding: 1.1rem 1.3rem 1.6rem; display: flex; flex-direction: column; gap: .8rem; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--rule-faint); }
+  .panel-title { margin: 0; font-size: .9375rem; font-weight: 700; }
+  .progress { display: flex; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
+  .pips { display: flex; gap: 3px; }
+  .pip { width: 16px; height: 4px; border-radius: 2px; background: var(--rule); }
+  .pip.on { background: var(--ink); }
+
+  .sec { border: 1px solid var(--rule); border-radius: 10px; padding: 1rem 1.1rem; background: var(--paper); }
+  /* Locked sections are outlined and dashed rather than tinted a different
+     hue — with one palette, the border carries the state. */
+  .sec.locked { border-style: dashed; border-color: var(--soft); background: transparent; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .eyebrow { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); margin: 0; }
+  .sec h3 { margin: .12rem 0 0; font-size: 1rem; letter-spacing: -.01em; }
+  .sec.locked h3 { color: var(--ink-45); }
+
+  .state { font-family: var(--mono); font-size: .625rem; letter-spacing: .06em; padding: .12rem .5rem; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .state.done { background: var(--tint-strong); color: var(--ink); }
+  .state.need { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
+  .state.soon { background: transparent; color: var(--ink-45); border-style: dashed; border-color: var(--soft); }
+
+  .figs { display: flex; flex-wrap: wrap; gap: 1rem 1.9rem; margin-top: .85rem; }
+  .fig { display: flex; flex-direction: column; gap: .08rem; }
+  .fig-l { font-size: .75rem; color: var(--ink-70); }
+  .fig-v { font-family: var(--mono); font-size: 1.45rem; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  /* The single most chromatic value is spent here: the figure that should be
+     looked at before any other. */
+  .fig-v.alarm { color: var(--accent); }
+  .fig-v small { font-size: .8125rem; font-weight: 500; color: var(--ink-70); letter-spacing: 0; }
+  .fig-s { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
+
+  .basis { font-family: var(--mono); font-size: .625rem; color: var(--ink-45); border-top: 1px dashed var(--rule); padding-top: .5rem; margin: .85rem 0 0; line-height: 1.75; }
+  .basis b { font-weight: 600; color: var(--ink-70); }
+  .unlock { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink-70); }
+  .unlock b { color: var(--accent); }
+
+  .band { position: relative; height: 5.4rem; margin-top: 1rem; }
+  .band-fill { position: absolute; top: 1.95rem; height: 1.6rem; background: var(--tint-strong); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); border-radius: 2px; }
+  .band-mid { position: absolute; top: 1.95rem; height: 1.6rem; width: 2px; background: var(--ink); }
+  .tick { position: absolute; font-family: var(--mono); font-size: .625rem; line-height: 1.3; white-space: nowrap; transform: translateX(-50%); color: var(--ink-45); }
+  .tick b { display: block; font-size: .75rem; color: var(--ink); }
+  .tick.up { top: 0; } .tick.dn { top: 3.85rem; }
+
+  .back { display: block; margin: 0 auto; background: none; border: none; cursor: pointer; color: var(--ink-45); font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; padding: .5rem; }
+  footer { text-align: center; font-size: .6875rem; color: var(--ink-45); padding: 1rem 1.5rem 2.5rem; }
+</style>
+
+<header class="nav">
+  <div class="brand"><i>T</i> TradeFlow</div>
+  <nav>
+    <a href="#" class="on">분석</a>
+    <a href="#">지원제도</a>
+    <a href="#">신고의무</a>
+    <a href="#">근거</a>
+  </nav>
+  <div class="account">
+    <button class="nav-cta signed-out" type="button" onclick="signIn()">로그인</button>
+
+    <button class="avatar signed-in" type="button" aria-expanded="false"
+            aria-haspopup="true" aria-label="계정 메뉴" onclick="toggleMenu()">한</button>
+
+    <div class="menu signed-in" id="account-menu" hidden>
+      <div class="menu-id">
+        <span class="avatar" aria-hidden="true">한</span>
+        <div>
+          <b>한빛정밀</b>
+          <span>중소기업 · 제조업</span>
+        </div>
+      </div>
+
+      <a href="#">저장한 분석 <em>4건</em></a>
+      <a href="#" class="saved">기업 정보 <em>3개 항목 저장됨</em></a>
+      <a href="#">근거 이력 <em>스냅샷 12건</em></a>
+
+      <p class="note">
+        중소기업 여부·담보 여력·업종은 계정에 저장되어 있어, 새 분석에서 다시
+        묻지 않습니다.
+      </p>
+
+      <hr>
+      <a href="#" onclick="signOut(); return false;">로그아웃</a>
+    </div>
+  </div>
+</header>
+
+<div class="stage">
+
+  <!-- ============================ 진입 ============================ -->
+  <div class="view entry">
+    <div class="entry-wrap">
+      <span class="badge"><em>연동</em> 한국은행 ECOS 매매기준율 · 2026-07-24 기준</span>
+
+      <h1 class="hero">짐작하지 말고<br><b>계산하세요</b></h1>
+      <p class="standfirst">
+        수출입 거래의 환위험을 한국은행 환율로 계산하고, 출처와 기준일까지 함께
+        보여드립니다. 환율을 예측하지는 않습니다.
+      </p>
+
+      <div class="prompt">
+        <textarea rows="2" placeholder="거래를 편하게 설명해 주세요. 예: 10월 24일에 수출대금 10만 달러 받기로 했어요"></textarea>
+        <div class="prompt-foot">
+          <div class="toggles">
+            <span class="toggle"><i></i> 근거 표시</span>
+            <span class="toggle off"><i></i> 상세 계산</span>
+          </div>
+          <button class="send" type="button" onclick="go('work')" aria-label="분석 시작">↑</button>
+        </div>
+      </div>
+
+      <div class="chips">
+        <button class="chip" type="button" onclick="go('work')">수출대금을 몇 달 뒤에 받아요</button>
+        <button class="chip" type="button" onclick="go('work')">수출과 수입이 둘 다 있어요</button>
+        <button class="chip" type="button" onclick="go('work')">환변동보험 받을 수 있나요?</button>
+        <button class="chip" type="button" onclick="go('work')">신고 의무가 있나요?</button>
+      </div>
+
+      <p class="assurance">
+        금액 계산과 규정 판정은 모두 결정론적 코드가 수행합니다.
+        AI는 묻고 설명할 뿐, 수치를 만들지 않습니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- ============================ 작업 ============================ -->
+  <div class="view work">
+    <div class="work-wrap">
+
+      <section class="col">
+        <div class="thread">
+          <div class="turn user">
+            <span class="who">나</span>
+            <div class="said">10월에 수출대금 10만 달러 들어와요</div>
+          </div>
+
+          <div class="turn agent">
+            <span class="who">TradeFlow</span>
+            <p>수출 10만 달러로 이해했습니다. 10월 중 며칠에 받기로 하셨나요?</p>
+            <div class="slotline">
+              <input type="date" value="2026-10-24" aria-label="결제 예정일">
+              <button type="button">확인</button>
+            </div>
+          </div>
+
+          <div class="turn user">
+            <span class="who">나</span>
+            <div class="said">10월 24일이요</div>
+          </div>
+
+          <div class="turn agent">
+            <span class="who">TradeFlow</span>
+            <div class="trace">
+              <span class="ok">환율 스냅샷 확인 — ECOS_USD_KRW 2026-07-24</span>
+              <span class="ok">순노출·자금공백 산출</span>
+              <span class="ok">변동성 추정 — 최근 60영업일</span>
+              <span class="wait">헤지비율 — 영업이익 입력 대기</span>
+            </div>
+            <p>계산했습니다. <strong>결제일까지 환율이 1,363원까지 내려갈 수 있고</strong>, 그러면 받는 금액이 지금보다 <strong>1,062만원 적어집니다.</strong></p>
+            <p>영업이익을 알려주시면 손익분기 환율과 필요한 헤지 비율까지 계산해 드릴게요.</p>
+            <div class="slotline">
+              <input inputmode="decimal" value="6,000,000" aria-label="기준 영업이익">
+              <button type="button">계산</button>
+            </div>
+            <div class="quick">
+              <button type="button">잘 모르겠어요</button>
+              <button type="button">수입 거래도 있어요</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer-box">
+            <textarea rows="1" placeholder="예: 8월에 수입대금 6만 달러도 나가요"></textarea>
+            <button class="send" type="button" aria-label="보내기">↑</button>
+          </div>
+          <p class="composer-hint">숫자 계산과 규정 판정은 결정론적 코드가 수행합니다.</p>
+        </div>
+      </section>
+
+      <aside class="col panel">
+        <div class="panel-head">
+          <h2 class="panel-title">분석 결과</h2>
+          <div class="progress">
+            <span>2 / 5 완료</span>
+            <span class="pips"><i class="pip on"></i><i class="pip on"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></span>
+          </div>
+        </div>
+
+        <section class="sec">
+          <div class="sec-head">
+            <div><p class="eyebrow">현금흐름</p><h3>지금 얼마나 노출되어 있나?</h3></div>
+            <span class="state done">계산 완료</span>
+          </div>
+          <div class="figs">
+            <div class="fig"><span class="fig-l">순노출</span><span class="fig-v">+100,000<small> USD</small></span><span class="fig-s">수취 초과</span></div>
+            <div class="fig"><span class="fig-l">최대 자금 공백</span><span class="fig-v">0<small> USD</small></span><span class="fig-s">따로 마련할 자금 없음</span></div>
+            <div class="fig"><span class="fig-l">자연헤지 가능액</span><span class="fig-v">0<small> USD</small></span><span class="fig-s">반대방향 거래 없음</span></div>
+          </div>
+          <p class="basis"><b>통화</b> USD · <b>기준일</b> 2026-07-26 · <b>거래</b> 1건</p>
+        </section>
+
+        <section class="sec">
+          <div class="sec-head">
+            <div><p class="eyebrow">시장 시나리오</p><h3>환율이 어디까지 움직일 수 있나?</h3></div>
+            <span class="state done">계산 완료</span>
+          </div>
+          <div class="band">
+            <div class="band-fill" style="left:12%; width:76%"></div>
+            <div class="band-mid" style="left:50%"></div>
+            <div class="tick up" style="left:50%">현재<b>1,469.4</b></div>
+            <div class="tick dn" style="left:12%">하단<b>1,363.15</b></div>
+            <div class="tick dn" style="left:88%">상단<b>1,583.93</b></div>
+          </div>
+          <div class="figs">
+            <div class="fig"><span class="fig-l">불리하게 움직이면</span><span class="fig-v alarm">−10,625,000<small> 원</small></span><span class="fig-s">1,363.15원 도달 시</span></div>
+            <div class="fig"><span class="fig-l">연환산 변동성</span><span class="fig-v">9.05<small>%</small></span></div>
+          </div>
+          <p class="basis">
+            <b>기준환율</b> 1,469.4원 · <b>관측</b> 60영업일 · <b>신뢰수준</b> 90% ·
+            <b>기간</b> 64영업일 · <b>드리프트</b> 0 고정 · <b>반올림</b> ROUND_HALF_UP
+          </p>
+        </section>
+
+        <section class="sec locked">
+          <div class="sec-head">
+            <div><p class="eyebrow">손익 · 헤지</p><h3>얼마나 헤지하면 되나?</h3></div>
+            <span class="state need">입력 필요</span>
+          </div>
+          <p class="unlock"><b>기준 영업이익</b>을 알려주시면 손익분기 환율, 적자 전환 확률, 헤지 비율 0% / 필요한 만큼 / 100%의 손익 비교를 계산합니다.</p>
+        </section>
+
+        <section class="sec locked">
+          <div class="sec-head">
+            <div><p class="eyebrow">지원제도</p><h3>쓸 수 있는 제도가 있나?</h3></div>
+            <span class="state need">입력 필요</span>
+          </div>
+          <p class="unlock"><b>담보·신용 여력</b>과 <b>수입자 소재국</b>을 알려주시면 자격을 판정합니다. 안 되는 제도는 이유와 함께 알려드립니다.</p>
+        </section>
+
+        <section class="sec locked">
+          <div class="sec-head">
+            <div><p class="eyebrow">규제</p><h3>해야 할 신고가 있나?</h3></div>
+            <span class="state soon">연결 예정</span>
+          </div>
+          <p class="unlock">외국환거래법상 신고의무 판정은 아직 연결되지 않았습니다. 빠진 항목은 빈칸으로 두지 않고 그대로 표시합니다.</p>
+        </section>
+
+        <section class="sec">
+          <div class="sec-head">
+            <div><p class="eyebrow">근거</p><h3>이 숫자는 어디서 왔나?</h3></div>
+            <span class="state done">추적 가능</span>
+          </div>
+          <p class="basis" style="border-top:none; padding-top:0">
+            <b>환율</b> 한국은행 ECOS 731Y001 / 0000001 · <b>스냅샷</b> 2026-07-24 (2,599영업일) ·
+            <b>해시</b> sha256:8bd42c2396… · <b>계산 버전</b> exposure.v1 + scenario.v1 ·
+            <b>밴드 검증</b> 백테스트 커버리지 85.4% (목표 85~95%)
+          </p>
+        </section>
+      </aside>
+    </div>
+
+    <button class="back" type="button" onclick="go('entry')">← 진입 화면으로 (디자인 시안 전환)</button>
+  </div>
+</div>
+
+<footer>TradeFlow MVP · 의사결정 지원 도구이며 투자 권유가 아닙니다 · 최종 판단과 책임은 이용자에게 있습니다</footer>
+
+<script>
+  const menu = document.getElementById("account-menu");
+  const avatar = document.querySelector(".avatar.signed-in");
+
+  function go(view) {
+    document.body.dataset.view = view;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    avatar.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleMenu() {
+    const open = menu.hidden;
+    menu.hidden = !open;
+    avatar.setAttribute("aria-expanded", String(open));
+  }
+
+  function signIn() {
+    document.body.dataset.auth = "in";
+  }
+
+  function signOut() {
+    closeMenu();
+    document.body.dataset.auth = "out";
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!menu.hidden && !event.target.closest(".account")) closeMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      closeMenu();
+      avatar.focus();
+    }
+  });
+
+  document.body.dataset.view = "entry";
+  document.body.dataset.auth = "out";
+</script>
