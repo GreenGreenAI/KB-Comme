@@ -64,17 +64,30 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
             extract["document"]["instrument"],
         )
 
-        expected_chain = {
+        regulatory_chain = {
             "FX_TRANSACTION_ACT_2026_01_02",
             "FX_TRANSACTION_DECREE_2026_04_28",
             "FX_TRANSACTION_REGULATION_2026_88",
+        }
+        operational_sources = {
             "BOK_FX_REPORTING_GUIDE",
+            "BOK_FX_MUTUAL_ACCOUNT_FAQ",
         }
         rulepack = _json(
             KNOWLEDGE_ROOT / "rulepacks" / "fx_compliance_mvp.json"
         )
         for rule in rulepack["rules"]:
-            self.assertEqual(expected_chain, set(rule["source_ids"]))
+            with self.subTest(rule_id=rule["rule_id"]):
+                source_ids = set(rule["source_ids"])
+                self.assertTrue(regulatory_chain <= source_ids)
+                self.assertEqual(
+                    1,
+                    len(source_ids & operational_sources),
+                )
+                self.assertEqual(
+                    regulatory_chain | (source_ids & operational_sources),
+                    source_ids,
+                )
 
     def test_rules_reference_registered_sources_and_cataloged_facts(self) -> None:
         rule_ids: set[str] = set()
@@ -382,6 +395,88 @@ class CuratedRuleSafetyTests(unittest.TestCase):
         )
         export = decisions["FX_EXPORT_ADVANCE_RECEIPT_BOK_FILING_CANDIDATE"]
         self.assertEqual(DecisionStatus.NOT_ELIGIBLE, export.status)
+
+    def test_unfiled_bilateral_mutual_account_routes_to_designated_bank(
+        self,
+    ) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.uses_mutual_account": True,
+                "payment.mutual_account.party_count": 2,
+                "payment.mutual_account.opening_filing_completed": False,
+            }
+        )
+        opening = decisions[
+            "FX_MUTUAL_ACCOUNT_OPENING_BANK_FILING_CANDIDATE"
+        ]
+        self.assertEqual(
+            DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            opening.status,
+        )
+        self.assertEqual(
+            "designated_foreign_exchange_bank",
+            opening.candidate_outcome["authority"],
+        )
+        self.assertIn("BOK_FX_MUTUAL_ACCOUNT_FAQ", opening.source_ids)
+
+    def test_multilateral_mutual_account_is_reclassified(self) -> None:
+        decisions = self._fx_decisions(
+            {
+                "payment.uses_mutual_account": True,
+                "payment.mutual_account.party_count": 3,
+            }
+        )
+        reclassification = decisions[
+            "FX_MUTUAL_ACCOUNT_MULTILATERAL_RECLASSIFICATION_CANDIDATE"
+        ]
+        self.assertEqual(
+            DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            reclassification.status,
+        )
+        self.assertEqual(
+            "reclassify_as_multilateral_netting",
+            reclassification.candidate_outcome["action"],
+        )
+
+    def test_mutual_account_entry_deadline_breach_is_not_inferred(self) -> None:
+        rule_id = "FX_MUTUAL_ACCOUNT_ENTRY_DEADLINE_BREACH_CANDIDATE"
+        missing = self._fx_decisions(
+            {"payment.uses_mutual_account": True}
+        )[rule_id]
+        self.assertEqual(
+            DecisionStatus.INSUFFICIENT_INFORMATION,
+            missing.status,
+        )
+        self.assertIn(
+            "payment.mutual_account.entry_deadline_breached",
+            missing.missing_fields,
+        )
+
+        breached = self._fx_decisions(
+            {
+                "payment.uses_mutual_account": True,
+                "payment.mutual_account.entry_deadline_breached": True,
+            }
+        )[rule_id]
+        self.assertEqual(
+            DecisionStatus.EXPERT_CONFIRMATION_REQUIRED,
+            breached.status,
+        )
+
+    def test_mutual_account_retention_boundary_is_five_years(self) -> None:
+        rule_id = "FX_MUTUAL_ACCOUNT_RETENTION_GAP_CANDIDATE"
+        for years, status in (
+            (4, DecisionStatus.EXPERT_CONFIRMATION_REQUIRED),
+            (5, DecisionStatus.NOT_ELIGIBLE),
+        ):
+            with self.subTest(years=years):
+                decision = self._fx_decisions(
+                    {
+                        "payment.uses_mutual_account": True,
+                        "payment.mutual_account.records_retention_years": years,
+                    }
+                )[rule_id]
+                self.assertEqual(status, decision.status)
 
     def test_missing_ksure_grade_is_not_guessed(self) -> None:
         repository = self._repository("ksure_mvp_candidates.json")

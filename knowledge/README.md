@@ -66,6 +66,10 @@ python scripts/check_sources.py
 미분류 상태는 누락 또는 `unknown`으로 유지한다. LLM은 예외 코드를 확정하지 않고
 결정론적 규칙 결과를 설명하는 역할만 맡는다.
 
+상호계산의 30일 기장기한과 결산 종료 후 3개월 기한은
+`tradeflow.domain.compliance_dates`가 계산한다. 여기서 3개월은 90일로
+치환하지 않고 달력 월을 더하며, 말일이 없는 달은 해당 달의 말일로 보정한다.
+
 ## Rulepacks
 
 규칙의 기본 실패 효과는 `reject`다. 충족 가능한 조건을 조건부 후보로 표현하려면

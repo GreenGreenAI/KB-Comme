@@ -27,6 +27,48 @@
       "automation_level": "requires_transaction_evidence"
     },
     {
+      "claim_id": "FXR_ARTICLE_5_5",
+      "locator": "제5-5조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산계정의 개설과 폐쇄는 지정거래외국환은행에 신고해야 하며 폐쇄계정 잔액은 제5-7조제3항 절차를 따른다.",
+      "authority": "designated_foreign_exchange_bank",
+      "action": "file",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_6",
+      "locator": "제5-6조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산계정에는 상대방과의 채권·채무만 기장할 수 있고 수출입은 완료 후, 그 밖의 거래는 채권·채무 확정 후 30일 이내에 기장해야 한다.",
+      "thresholds": {
+        "entry_days": {
+          "operator": "lte",
+          "value": 30,
+          "unit": "day"
+        }
+      },
+      "automation_level": "deterministic_with_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_7",
+      "locator": "제5-7조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산은 원칙적으로 월 단위 결산주기를 사용하고, 결산 종료 후 3개월 이내 지정거래외국환은행 신고 후 잔액을 지급·수령하며, 요구 보고서 제출과 장부·증빙 5년 보관이 필요하다.",
+      "thresholds": {
+        "balance_settlement_months": {
+          "operator": "lte",
+          "value": 3,
+          "unit": "calendar_month"
+        },
+        "record_retention_years": {
+          "operator": "gte",
+          "value": 5,
+          "unit": "year"
+        }
+      },
+      "automation_level": "deterministic_with_evidence"
+    },
+    {
       "claim_id": "FXR_ARTICLE_5_8",
       "locator": "제5-8조",
       "topic": "extended_payment_period",

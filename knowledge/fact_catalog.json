@@ -264,6 +264,103 @@
       "evidence_role": "compliance"
     },
     {
+      "field": "payment.uses_mutual_account",
+      "type": "boolean",
+      "description": "지속적인 양자 거래의 향후 채권·채무를 상호계산계정으로 정기 차액결제하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.party_count",
+      "type": "integer",
+      "description": "상호계산에 참여하는 당사자 수",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.opening_filing_completed",
+      "type": "boolean",
+      "description": "계정 개설 전 지정거래외국환은행에 상호계산신고서를 제출했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.closure_planned",
+      "type": "boolean",
+      "description": "상호계산계정을 폐쇄하려는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.closure_filing_completed",
+      "type": "boolean",
+      "description": "계정 폐쇄 신고를 지정거래외국환은행에 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.entry_scope_valid",
+      "type": "boolean",
+      "description": "기장 항목이 상호계산 상대방과의 채권·채무이며 별도 신고 의무를 이행했는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.entry_deadline_breached",
+      "type": "boolean",
+      "description": "수출입 완료일 또는 기타 채권·채무 확정일부터 30일 기장기한을 초과했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.settlement_cycle_category",
+      "type": "enum",
+      "allowed_values": [
+        "monthly",
+        "alternate_within_accounting_period",
+        "noncompliant",
+        "unknown"
+      ],
+      "description": "회계기간 범위 내에서 정한 상호계산 결산주기",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.balance_calculation_valid",
+      "type": "boolean",
+      "description": "상대방별 대차기잔액을 합산해 결산잔액을 계산했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_deadline_breached",
+      "type": "boolean",
+      "description": "결산기간 종료일부터 3개월의 신고·지급 기한을 초과했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_filing_completed",
+      "type": "boolean",
+      "description": "결산잔액 지급·수령 전 지정거래외국환은행 신고를 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.balance_settlement_completed",
+      "type": "boolean",
+      "description": "결산기간 종료 후 3개월 이내 잔액 지급·수령을 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.required_report_due",
+      "type": "boolean",
+      "description": "지정거래외국환은행이 정한 결산보고서 등 보고서의 제출기한이 도래했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.required_report_submitted",
+      "type": "boolean",
+      "description": "지정거래외국환은행이 요구한 보고서를 제출했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.records_retention_years",
+      "type": "integer",
+      "unit": "year",
+      "description": "장부 및 관계 증빙에 적용한 보관기간",
+      "evidence_role": "procedure"
+    },
+    {
       "field": "program.has_export",
       "type": "boolean",
       "description": "프로그램에 수출 거래가 하나 이상 존재하는지 여부",

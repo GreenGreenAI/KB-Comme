@@ -48,6 +48,16 @@
       ]
     },
     {
+      "source_id": "BOK_FX_MUTUAL_ACCOUNT_FAQ",
+      "url": "https://www.bok.or.kr/portal/bbs/B0000267/list.do?menuNo=200796&pageIndex=9",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "상호계산은 거주자와 비거주자간의 지속적으로 거래가 이루어지고",
+        "지정거래외국환은행 신고사항임",
+        "다자간의 거래에 대해서는 상호계산으로 채권·채무를 차액 정산하는 것은 불가능"
+      ]
+    },
+    {
       "source_id": "KSURE_FX_INSURANCE_ELIGIBILITY",
       "url": "https://www.ksure.or.kr/rh-fx/cntnts/i-514/web.do",
       "storage_policy": "metadata_and_fingerprint_only",
