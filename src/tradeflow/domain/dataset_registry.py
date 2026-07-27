@@ -15,8 +15,10 @@ from tradeflow.domain.datasets import (
     FxSeries,
     SnapshotDataset,
     StaleDatasetError,
+    SupportProgramCatalog,
     TradeFeedData,
     parse_ecos_usd_krw_payload,
+    parse_bizinfo_support_payload,
     parse_trade_feed_payload,
 )
 from tradeflow.domain.enums import Freshness
@@ -27,6 +29,7 @@ from tradeflow.domain.snapshot_file import read_snapshot, safe_segment
 class DatasetKind(StrEnum):
     TRADE_FEED = "trade_feed"
     FX_SERIES = "fx_series"
+    SUPPORT_PROGRAM_CATALOG = "support_program_catalog"
 
 
 class StorageScope(StrEnum):
@@ -72,7 +75,9 @@ class DatasetParser(Protocol):
     kind: DatasetKind
     schema_version: str
 
-    def parse(self, payload: Any, ref: SnapshotRef) -> TradeFeedData | FxSeries: ...
+    def parse(
+        self, payload: Any, ref: SnapshotRef
+    ) -> TradeFeedData | FxSeries | SupportProgramCatalog: ...
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,15 @@ class EcosUsdKrwV1Parser:
         return series
 
 
+@dataclass(frozen=True)
+class BizinfoSupportV1Parser:
+    kind: DatasetKind = DatasetKind.SUPPORT_PROGRAM_CATALOG
+    schema_version: str = "1.0"
+
+    def parse(self, payload: Any, ref: SnapshotRef) -> SupportProgramCatalog:
+        return parse_bizinfo_support_payload(payload)
+
+
 class ParserRegistry:
     def __init__(self, parsers: Mapping[str, DatasetParser] | None = None) -> None:
         self._parsers: dict[str, DatasetParser] = {}
@@ -124,7 +138,7 @@ class ParserRegistry:
         definition: DatasetDefinition,
         payload: Any,
         ref: SnapshotRef,
-    ) -> TradeFeedData | FxSeries:
+    ) -> TradeFeedData | FxSeries | SupportProgramCatalog:
         parser = self._parsers.get(definition.parser_key)
         if parser is None:
             raise DatasetContractError(
@@ -194,6 +208,7 @@ def default_parser_registry() -> ParserRegistry:
         {
             "trade_feed_v1": TradeFeedV1Parser(),
             "ecos_usd_krw_v1": EcosUsdKrwV1Parser(),
+            "bizinfo_support_v1": BizinfoSupportV1Parser(),
         }
     )
 

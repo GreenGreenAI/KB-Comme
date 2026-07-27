@@ -88,6 +88,16 @@ PYTHONPATH=src python -m tradeflow.integration.ecos 20160101 20260724
 
 ## 소비 규칙
 
+### `BIZINFO_SUPPORT_API`
+
+기업마당 지원사업 목록은 `BIZINFO_API_KEY` 인증키로 수집하고 원문 JSON을 공통
+스냅샷 봉투에 저장합니다. 인증키는 파일이나 레지스트리에 기록하지 않습니다.
+
+스냅샷은 `BizinfoSupportV1Parser`를 통해 `SupportProgramCatalog`로 읽습니다. 이
+객체는 지원사업 탐색 후보이며, 목록 데이터만으로 기업의 자격이나 추천 여부를
+확정하지 않습니다. 상세 공고의 조건이 근거 규칙으로 검토되기 전에는 최종 판단에
+사용할 수 없습니다.
+
 - `latest_snapshot_path`는 파일명 정렬이 아니라 `observed_at` 기준으로 최신본을 고른다.
 - `read_snapshot`은 해시와 경로의 source/version 일치를 검증한다.
 - 거래피드는 `read_trade_feed_snapshot`, ECOS는 `read_ecos_usd_krw_snapshot`으로

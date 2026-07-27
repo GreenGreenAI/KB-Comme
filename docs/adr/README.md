@@ -23,6 +23,7 @@ last-reviewed: 2026-07-27
 | [ADR-0010](0010-decision-categories-and-action-deduplication.md) | proposed | 판정 분류와 실행계획 중복 통합 |
 | [ADR-0011](0011-declarative-dataset-and-adapter-registries.md) | proposed | 선언형 데이터셋·어댑터 레지스트리 |
 | [ADR-0012](0012-evidence-bound-ksure-case-orchestration.md) | proposed | 근거 결합형 K-SURE 케이스 오케스트레이션 |
+| [ADR-0013](0013-bizinfo-support-program-snapshots.md) | proposed | 기업마당 지원사업 API 스냅샷 |
 
 ## 운영 규칙
 

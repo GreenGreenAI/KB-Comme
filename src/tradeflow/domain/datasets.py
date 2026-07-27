@@ -57,9 +57,30 @@ class FxSeries:
 
 
 @dataclass(frozen=True)
+class SupportProgram:
+    program_id: str
+    title: str
+    authority: str
+    executing_agency: str | None
+    category: str
+    target: str
+    summary: str | None
+    application_period: str | None
+    url: str
+    hashtags: tuple[str, ...]
+    published_at: datetime | None
+
+
+@dataclass(frozen=True)
+class SupportProgramCatalog:
+    programs: tuple[SupportProgram, ...]
+    total_count: int
+
+
+@dataclass(frozen=True)
 class SnapshotDataset:
     ref: SnapshotRef
-    value: TradeFeedData | FxSeries
+    value: TradeFeedData | FxSeries | SupportProgramCatalog
 
 
 def _required_text(record: Mapping[str, Any], field: str) -> str:
@@ -228,6 +249,107 @@ def parse_ecos_usd_krw_payload(payload: Any) -> FxSeries:
         unit="KRW per USD",
         observations=tuple(observations),
     )
+
+
+def parse_bizinfo_support_payload(payload: Any) -> SupportProgramCatalog:
+    """Validate and normalize the official Bizinfo JSON response."""
+    if not isinstance(payload, dict):
+        raise DatasetContractError("Bizinfo payload must be a JSON object")
+    root = payload.get("jsonArray")
+    if not isinstance(root, dict):
+        raise DatasetContractError("Bizinfo jsonArray must be an object")
+    records = root.get("item")
+    if isinstance(records, dict):
+        records = [records]
+    if not isinstance(records, list):
+        raise DatasetContractError("Bizinfo item must be an array")
+
+    programs: list[SupportProgram] = []
+    seen: set[str] = set()
+    totals: list[int] = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise DatasetContractError(f"Bizinfo item[{index}] must be an object")
+        program_id = _first_text(record, "pblancId", "seq")
+        if program_id in seen:
+            raise DatasetContractError(f"duplicate Bizinfo program_id: {program_id}")
+        seen.add(program_id)
+        total_text = _optional_text(record, "totCnt")
+        if total_text is not None:
+            try:
+                totals.append(int(total_text))
+            except ValueError:
+                raise DatasetContractError("Bizinfo totCnt must be an integer") from None
+        hashtags = tuple(
+            item.strip()
+            for item in (_optional_text(record, "hashTags") or "").split(",")
+            if item.strip()
+        )
+        programs.append(
+            SupportProgram(
+                program_id=program_id,
+                title=_first_text(record, "pblancNm", "title"),
+                authority=_first_text(record, "jrsdInsttNm", "author"),
+                executing_agency=_optional_first_text(
+                    record, "excInsttNm"
+                ),
+                category=_first_text(
+                    record, "pldirSportRealmLclasCodeNm", "lcategory"
+                ),
+                target=_first_text(record, "trgetNm"),
+                summary=_optional_first_text(record, "bsnsSumryCn", "description"),
+                application_period=_optional_first_text(
+                    record, "reqstBeginEndDe", "reqstDt"
+                ),
+                url=_first_text(record, "pblancUrl", "link"),
+                hashtags=hashtags,
+                published_at=_optional_datetime(
+                    _optional_first_text(record, "creatPnttm", "pubDate")
+                ),
+            )
+        )
+    total_count = max(totals, default=len(programs))
+    if total_count < len(programs):
+        raise DatasetContractError("Bizinfo total_count is smaller than item count")
+    return SupportProgramCatalog(tuple(programs), total_count)
+
+
+def _optional_text(record: Mapping[str, Any], field: str) -> str | None:
+    value = record.get(field)
+    if value is None or value == "":
+        return None
+    if not isinstance(value, (str, int)):
+        raise DatasetContractError(f"{field} must be text")
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_first_text(record: Mapping[str, Any], *fields: str) -> str | None:
+    for field in fields:
+        value = _optional_text(record, field)
+        if value is not None:
+            return value
+    return None
+
+
+def _first_text(record: Mapping[str, Any], *fields: str) -> str:
+    value = _optional_first_text(record, *fields)
+    if value is None:
+        raise DatasetContractError(
+            "one of these fields is required: " + ", ".join(fields)
+        )
+    return value
+
+
+def _optional_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, pattern)
+        except ValueError:
+            continue
+    raise DatasetContractError(f"invalid Bizinfo publication date: {value}")
 
 
 def _require_fresh(
