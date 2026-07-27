@@ -18,8 +18,8 @@ feed that way would scatter source IDs, parser choices, storage rules, and SLAs.
 
 1. `data/dataset_registry.json` is the versioned operational dataset catalog.
 2. Each `DatasetDefinition` declares dataset/source IDs, data kind, adapter and
-   parser keys, payload contract version, freshness policy, storage scope, and
-   project-relative storage root.
+   parser keys, payload contract version, collection interval, freshness
+   policy, storage scope, and project-relative storage root.
 3. `DatasetRegistry` is network-free and lives in `domain`. It validates the
    catalog, selects definitions, verifies snapshot identity and freshness, and
    delegates payload interpretation to `ParserRegistry`.

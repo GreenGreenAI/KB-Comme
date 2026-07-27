@@ -45,6 +45,7 @@ class DatasetDefinition:
     adapter_key: str
     parser_key: str
     payload_schema_version: str
+    collection_interval: timedelta
     freshness_policy: FreshnessPolicy
     storage_scope: StorageScope
     storage_root: str
@@ -56,6 +57,8 @@ class DatasetDefinition:
         safe_segment(self.parser_key, "parser_key")
         if not self.payload_schema_version:
             raise ValueError("payload_schema_version is required")
+        if self.collection_interval <= timedelta(0):
+            raise ValueError("collection_interval must be positive")
         storage_path = PurePosixPath(self.storage_root)
         if storage_path.is_absolute() or ".." in storage_path.parts:
             raise ValueError("storage_root must stay within the project")
@@ -171,7 +174,7 @@ class DatasetRegistry:
     @classmethod
     def from_json(cls, path: Path | str) -> "DatasetRegistry":
         document = json.loads(Path(path).read_text(encoding="utf-8"))
-        if document.get("schema_version") != "1.0":
+        if document.get("schema_version") != "1.1":
             raise ValueError("unsupported dataset registry schema_version")
         return cls(_parse_definition(item) for item in document["datasets"])
 
@@ -236,6 +239,10 @@ def _parse_definition(item: Mapping[str, Any]) -> DatasetDefinition:
         adapter_key=item["adapter_key"],
         parser_key=item["parser_key"],
         payload_schema_version=item["payload_schema_version"],
+        collection_interval=_parse_positive_seconds(
+            item.get("collection_interval_seconds"),
+            "collection_interval_seconds",
+        ),
         freshness_policy=FreshnessPolicy(
             timedelta(seconds=observation_seconds),
             (
@@ -247,3 +254,9 @@ def _parse_definition(item: Mapping[str, Any]) -> DatasetDefinition:
         storage_scope=StorageScope(item["storage_scope"]),
         storage_root=item["storage_root"],
     )
+
+
+def _parse_positive_seconds(value: Any, field: str) -> timedelta:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field} must be a positive integer")
+    return timedelta(seconds=value)

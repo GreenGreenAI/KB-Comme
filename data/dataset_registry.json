@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "datasets": [
     {
       "dataset_id": "ECOS_USD_KRW_DAILY",
@@ -8,6 +8,7 @@
       "adapter_key": "ecos_fx",
       "parser_key": "ecos_usd_krw_v1",
       "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
       "storage_scope": "committed_public",
       "storage_root": "data/snapshots",
       "freshness": {
@@ -22,6 +23,7 @@
       "adapter_key": "json_trade_feed",
       "parser_key": "trade_feed_v1",
       "payload_schema_version": "1.0",
+      "collection_interval_seconds": 3600,
       "storage_scope": "runtime_private",
       "storage_root": "data/runtime",
       "freshness": {
@@ -36,6 +38,7 @@
       "adapter_key": "bizinfo_support",
       "parser_key": "bizinfo_support_v1",
       "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
       "storage_scope": "committed_public",
       "storage_root": "data/snapshots",
       "freshness": {

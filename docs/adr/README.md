@@ -24,6 +24,7 @@ last-reviewed: 2026-07-27
 | [ADR-0011](0011-declarative-dataset-and-adapter-registries.md) | proposed | 선언형 데이터셋·어댑터 레지스트리 |
 | [ADR-0012](0012-evidence-bound-ksure-case-orchestration.md) | proposed | 근거 결합형 K-SURE 케이스 오케스트레이션 |
 | [ADR-0013](0013-bizinfo-support-program-snapshots.md) | proposed | 기업마당 지원사업 API 스냅샷 |
+| [ADR-0014](0014-deterministic-collection-orchestration.md) | proposed | 결정론적 수집 주기·재시도·fallback |
 
 ## 운영 규칙
 

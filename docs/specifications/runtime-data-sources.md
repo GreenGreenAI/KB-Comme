@@ -50,6 +50,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | `kind` | `trade_feed`, `fx_series` 등 정규화 결과 종류 |
 | `adapter_key`, `parser_key` | 수집 객체와 해석 객체의 명시적 선택 |
 | `payload_schema_version` | 파서가 지원해야 하는 입력 계약 버전 |
+| `collection_interval_seconds` | 마지막 취득시각 기준 다음 수집이 필요한 주기 |
 | `freshness` | 관측·취득시각 기준 사용 가능 SLA |
 | `storage_scope`, `storage_root` | 공개 재현 데이터와 비공개 고객 데이터 분리 |
 
@@ -113,6 +114,18 @@ ERP 전용 커넥터는 아래 계약으로 변환한 엔드포인트만 제공�
 
 기업마당 목록은 48시간 관측·수집 SLA를 적용한다. API 장애 시에는 공통 수집
 오케스트레이터가 마지막 정상 스냅샷의 신선도를 확인한 뒤 사용 여부를 결정한다.
+
+### 공통 수집 오케스트레이션
+
+`CollectionOrchestrator`는 외부 스케줄러가 호출하는 결정론적 실행 경계다. 최신
+스냅샷이 없거나 stale이거나 `collection_interval_seconds`가 경과했을 때만 수집하며,
+요청별 최대 5회까지 재시도한다. 수집 성공 파일도 레지스트리 파서로 다시 읽어
+source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
+
+수집이 실패하면 마지막 정상 스냅샷을 동일한 검증 경로로 확인한다. 아직 fresh인
+경우에만 `fallback`, 그 외에는 `failed`다. 수집 주기 판정, 재시도 횟수, fallback
+허용에는 LLM을 사용하지 않는다. 운영 스케줄러는 이 오케스트레이터를 주기적으로
+호출할 뿐 최신성이나 사용 가능 여부를 별도로 추정하지 않는다.
 
 고객 거래 스냅샷은 `data/runtime/` 또는 운영 비공개 저장소만 사용하며 Git에 커밋하지
 않는다. 공개 ECOS 스냅샷만 재현 테스트를 위해 `data/snapshots/`에 커밋한다.

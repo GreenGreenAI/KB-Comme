@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -67,6 +68,8 @@ class DatasetRegistryTests(unittest.TestCase):
         bizinfo = self.registry.get("BIZINFO_SUPPORT_PROGRAMS_DAILY")
         self.assertEqual(DatasetKind.FX_SERIES, ecos.kind)
         self.assertEqual(DatasetKind.SUPPORT_PROGRAM_CATALOG, bizinfo.kind)
+        self.assertEqual(timedelta(days=1), bizinfo.collection_interval)
+        self.assertEqual(timedelta(hours=1), erp.collection_interval)
         self.assertEqual(StorageScope.COMMITTED_PUBLIC, ecos.storage_scope)
         self.assertEqual(StorageScope.RUNTIME_PRIVATE, erp.storage_scope)
         self.assertEqual("data/snapshots", ecos.storage_root)
@@ -77,6 +80,8 @@ class DatasetRegistryTests(unittest.TestCase):
             replace(erp, storage_root="../outside")
         with self.assertRaisesRegex(ValueError, "must use data/runtime"):
             replace(erp, storage_root="data/snapshots")
+        with self.assertRaisesRegex(ValueError, "must be positive"):
+            replace(erp, collection_interval=timedelta(0))
 
     def test_registry_reads_committed_ecos_through_registered_parser(self) -> None:
         dataset = self.registry.read_snapshot(
@@ -189,6 +194,22 @@ class DatasetRegistryTests(unittest.TestCase):
                     evaluated_at=ref_time,
                 )
 
+    def test_registry_schema_and_collection_interval_are_versioned(self) -> None:
+        document = json.loads(
+            (ROOT / "data" / "dataset_registry.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "registry.json"
+            document["schema_version"] = "1.0"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "schema_version"):
+                DatasetRegistry.from_json(path)
+
+            document["schema_version"] = "1.1"
+            del document["datasets"][0]["collection_interval_seconds"]
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "positive integer"):
+                DatasetRegistry.from_json(path)
 
 class AdapterRegistryTests(unittest.TestCase):
     def setUp(self) -> None:
