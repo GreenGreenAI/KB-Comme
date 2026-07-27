@@ -88,6 +88,7 @@ class KnowledgeRepository:
                 if result.condition.failure_effect is ConditionFailureEffect.CONDITIONAL
             ]
             reasons = [result.reason for result in results]
+            matched = False if rejected else None if uncertain else True
 
             if missing_sources:
                 status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
@@ -137,6 +138,7 @@ class KnowledgeRepository:
                     source_claim_ids=rule.source_claim_ids,
                     candidate_outcome=rule.candidate_outcome,
                     subject_id=subject_id,
+                    matched=matched,
                 )
             )
         return tuple(decisions)

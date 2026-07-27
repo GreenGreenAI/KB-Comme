@@ -609,7 +609,7 @@
       ],
       "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
       "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_6", "BOK_MUTUAL_ACCOUNT_DEFINITION"],
-      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "report_and_remediate_entry_delay", "timing": "immediate"},
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "report_and_remediate_entry_delay", "timing": "immediate", "deadline_key": "entry"},
       "effective_from": "2026-07-06",
       "effective_to": null,
       "required_documents": ["수출입 완료일 또는 채권·채무 확정일 증빙", "실제 기장일", "지연 사유서"],
@@ -659,12 +659,12 @@
       "rule_type": "procedure",
       "conditions": [
         {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
-        {"field": "payment.mutual_account.balance_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 기한 초과"},
+        {"field": "payment.mutual_account.balance_filing_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 신고 기한 초과"},
         {"field": "payment.mutual_account.balance_filing_completed", "operator": "eq", "value": false, "description": "결산잔액 신고 미완료"}
       ],
       "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
       "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
-      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "file_balance_settlement", "timing": "immediate"},
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "file_balance_settlement", "timing": "immediate", "deadline_key": "balance_filing"},
       "effective_from": "2026-07-06",
       "effective_to": null,
       "required_documents": ["결산보고서", "상대방별 대차기잔액", "결산기간 종료일 증빙"],
@@ -678,12 +678,12 @@
       "rule_type": "procedure",
       "conditions": [
         {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
-        {"field": "payment.mutual_account.balance_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 기한 초과"},
+        {"field": "payment.mutual_account.balance_settlement_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 지급·수령 기한 초과"},
         {"field": "payment.mutual_account.balance_settlement_completed", "operator": "eq", "value": false, "description": "결산잔액 지급·수령 미완료"}
       ],
       "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
       "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
-      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "settle_balance", "timing": "immediate"},
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "settle_balance", "timing": "immediate", "deadline_key": "balance_settlement"},
       "effective_from": "2026-07-06",
       "effective_to": null,
       "required_documents": ["결산잔액 산출표", "신고필증", "지급·수령 증빙"],

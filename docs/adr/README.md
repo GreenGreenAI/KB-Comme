@@ -19,6 +19,7 @@ last-reviewed: 2026-07-27
 | [ADR-0006](0006-source-status-and-conditional-decisions.md) | proposed | 출처 상태 합성과 조건부 판정 계약 |
 | [ADR-0007](0007-llm-execution-boundary-and-decision-packet.md) | proposed | LLM 실행 경계와 DecisionPacket |
 | [ADR-0008](0008-evidence-bound-case-facts.md) | proposed | 근거 결합형 케이스 fact와 규칙 오케스트레이션 |
+| [ADR-0009](0009-derived-deadlines-and-action-plan.md) | proposed | 파생 기한과 결정론적 실행계획 |
 
 ## 운영 규칙
 

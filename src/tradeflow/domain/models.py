@@ -244,6 +244,24 @@ class RuleDecision:
     source_claim_ids: tuple[str, ...] = ()
     candidate_outcome: dict[str, Any] = field(default_factory=dict)
     subject_id: str | None = None
+    matched: bool | None = None
+
+
+@dataclass(frozen=True)
+class RecommendedAction:
+    """A deterministic procedure projected from an applicable rule."""
+
+    subject_id: str | None
+    rule_id: str
+    authority: str | None
+    action: str
+    timing: str | None
+    deadline: date | None
+    requirements: tuple[DecisionRequirement, ...]
+    required_documents: tuple[str, ...]
+    steps: tuple[str, ...]
+    source_ids: tuple[str, ...]
+    source_claim_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -255,4 +273,5 @@ class AnalysisResult:
     evidence_coverage: dict[str, Any]
     review_required: bool
     review_reasons: tuple[str, ...]
+    actions: tuple[RecommendedAction, ...] = ()
 

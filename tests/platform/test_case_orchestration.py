@@ -18,6 +18,7 @@ from tradeflow.domain.enums import (
 )
 from tradeflow.domain.models import CompanyProfile, TradeCase, TradeProgram
 from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
+from tradeflow.knowledge.mutual_account import MutualAccountTimeline
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 
@@ -149,6 +150,79 @@ class CaseOrchestrationTests(unittest.TestCase):
                 evidence=self.evidence,
                 source_freshness=self.freshness,
             )
+
+    def test_overdue_timeline_creates_evidence_bound_action_plan(self) -> None:
+        procedure_evidence = EvidenceDescriptor(
+            "procedure:MA1-balance",
+            EvidenceRole.PROCEDURE,
+            ("EXP-1", "balance-status"),
+            generated_at=datetime(2026, 7, 27, tzinfo=UTC),
+            payload={
+                "facts": {
+                    "payment.mutual_account.balance_filing_completed": False,
+                    "payment.mutual_account.balance_settlement_completed": False,
+                }
+            },
+        )
+        assertions = {
+            "EXP-1": (
+                *self.assertions["EXP-1"],
+                FactAssertion(
+                    "payment.mutual_account.balance_filing_completed",
+                    False,
+                    ("procedure:MA1-balance",),
+                ),
+                FactAssertion(
+                    "payment.mutual_account.balance_settlement_completed",
+                    False,
+                    ("procedure:MA1-balance",),
+                ),
+            )
+        }
+
+        packet = self.pipeline.analyze_case_packet(
+            self.program,
+            assertions_by_case=assertions,
+            evidence=(*self.evidence, procedure_evidence),
+            source_freshness=self.freshness,
+            mutual_account_timelines={
+                "EXP-1": MutualAccountTimeline(
+                    entry_basis_date=date(2026, 6, 1),
+                    period_end=date(2026, 3, 31),
+                )
+            },
+        )
+
+        actions = {item.rule_id: item for item in packet.actions}
+        filing = actions[
+            "FX_MUTUAL_ACCOUNT_BALANCE_FILING_OVERDUE_CANDIDATE"
+        ]
+        settlement = actions[
+            "FX_MUTUAL_ACCOUNT_BALANCE_SETTLEMENT_OVERDUE_CANDIDATE"
+        ]
+        self.assertEqual(date(2026, 6, 30), filing.deadline)
+        self.assertEqual(date(2026, 6, 30), settlement.deadline)
+        self.assertTrue(filing.required_documents)
+        self.assertTrue(filing.steps)
+        self.assertTrue(filing.source_ids)
+        self.assertEqual("EXP-1", filing.subject_id)
+        self.assertNotIn(
+            "FX_MUTUAL_ACCOUNT_MULTILATERAL_RECLASSIFICATION_CANDIDATE",
+            actions,
+        )
+        self.assertTrue(
+            any(
+                item.evidence_id == "calculation:mutual-account:EXP-1"
+                for item in packet.evidence
+            )
+        )
+        filing_decision = next(
+            item
+            for item in packet.decisions
+            if item.rule_id
+            == "FX_MUTUAL_ACCOUNT_BALANCE_FILING_OVERDUE_CANDIDATE"
+        )
+        self.assertTrue(filing_decision.matched)
 
     def test_llm_cannot_drop_case_identity_from_rule_decisions(self) -> None:
         packet = self.pipeline.analyze_case_packet(

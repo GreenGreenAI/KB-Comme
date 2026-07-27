@@ -1,13 +1,17 @@
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from typing import Mapping
 
 from tradeflow.contracts.decision_packet import DecisionPacket
 from tradeflow.contracts.evidence import EvidenceDescriptor, EvidenceRequirement
 from tradeflow.contracts.interfaces import ExposureService, KnowledgeService
 from tradeflow.domain.enums import DecisionStatus, EvidenceRole, Freshness
-from tradeflow.domain.models import AnalysisResult, TradeProgram
+from tradeflow.domain.models import AnalysisResult, RecommendedAction, TradeProgram
 from tradeflow.knowledge.evidence import validate_evidence_contract
 from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactBundle
+from tradeflow.knowledge.mutual_account import (
+    MutualAccountTimeline,
+    derive_mutual_account_timeline,
+)
 from tradeflow.tools.exposure import DefaultExposureService
 
 
@@ -126,6 +130,7 @@ class TradeFlowPipeline:
             evidence_coverage=coverage,
             review_required=bool(review_reasons),
             review_reasons=tuple(dict.fromkeys(review_reasons)),
+            actions=self._project_actions(decisions, {}),
         )
 
     def analyze_packet(self, program: TradeProgram) -> DecisionPacket:
@@ -143,6 +148,7 @@ class TradeFlowPipeline:
         assertions_by_case: Mapping[str, tuple[FactAssertion, ...]],
         evidence: tuple[EvidenceDescriptor, ...],
         source_freshness: Mapping[str, Freshness] | None = None,
+        mutual_account_timelines: Mapping[str, MutualAccountTimeline] | None = None,
     ) -> AnalysisResult:
         """Run the real case-level support and FX-compliance rule topics."""
         result, _ = self._analyze_cases(
@@ -150,6 +156,7 @@ class TradeFlowPipeline:
             assertions_by_case=assertions_by_case,
             evidence=evidence,
             source_freshness=source_freshness,
+            mutual_account_timelines=mutual_account_timelines,
         )
         return result
 
@@ -160,12 +167,14 @@ class TradeFlowPipeline:
         assertions_by_case: Mapping[str, tuple[FactAssertion, ...]],
         evidence: tuple[EvidenceDescriptor, ...],
         source_freshness: Mapping[str, Freshness] | None = None,
+        mutual_account_timelines: Mapping[str, MutualAccountTimeline] | None = None,
     ) -> DecisionPacket:
         result, bundles = self._analyze_cases(
             program,
             assertions_by_case=assertions_by_case,
             evidence=evidence,
             source_freshness=source_freshness,
+            mutual_account_timelines=mutual_account_timelines,
         )
         inputs = {
             "program": self._program_facts(program),
@@ -187,20 +196,34 @@ class TradeFlowPipeline:
         assertions_by_case: Mapping[str, tuple[FactAssertion, ...]],
         evidence: tuple[EvidenceDescriptor, ...],
         source_freshness: Mapping[str, Freshness] | None,
+        mutual_account_timelines: Mapping[str, MutualAccountTimeline] | None,
     ) -> tuple[AnalysisResult, tuple[FactBundle, ...]]:
         if self.fact_assembler is None:
             raise ValueError("case analysis requires a FactAssembler")
         known_case_ids = {case.case_id for case in program.cases}
         unknown_case_ids = set(assertions_by_case) - known_case_ids
+        timeline_by_case = mutual_account_timelines or {}
+        unknown_case_ids.update(set(timeline_by_case) - known_case_ids)
         if unknown_case_ids:
             raise ValueError(
-                "assertions reference unknown cases: "
+                "case inputs reference unknown cases: "
                 + ", ".join(sorted(unknown_case_ids))
             )
 
         exposures = self.exposure.analyze(program)
         base_evidence = self._base_evidence(program, exposures)
-        all_evidence = (*base_evidence, *evidence)
+        derived_by_case = {
+            case_id: derive_mutual_account_timeline(
+                case_id=case_id,
+                timeline=timeline,
+                as_of=program.as_of,
+            )
+            for case_id, timeline in timeline_by_case.items()
+        }
+        derived_evidence = tuple(
+            item.evidence for item in derived_by_case.values()
+        )
+        all_evidence = (*base_evidence, *evidence, *derived_evidence)
         evidence_ids = [item.evidence_id for item in all_evidence]
         if len(set(evidence_ids)) != len(evidence_ids):
             raise ValueError("evidence contains duplicate evidence_id values")
@@ -212,7 +235,14 @@ class TradeFlowPipeline:
             bundle = self.fact_assembler.assemble(
                 program=program,
                 case=case,
-                assertions=assertions_by_case.get(case.case_id, ()),
+                assertions=(
+                    *assertions_by_case.get(case.case_id, ()),
+                    *(
+                        derived_by_case[case.case_id].assertions
+                        if case.case_id in derived_by_case
+                        else ()
+                    ),
+                ),
                 evidence=all_evidence,
             )
             bundles.append(bundle)
@@ -261,6 +291,11 @@ class TradeFlowPipeline:
             requirements.append(EvidenceRequirement(EvidenceRole.COMPLIANCE))
         coverage = validate_evidence_contract(requirements, complete_evidence)
         review_reasons = self._review_reasons(tuple(decisions), coverage)
+        deadlines_by_case = {
+            case_id: item.deadlines
+            for case_id, item in derived_by_case.items()
+        }
+        actions = self._project_actions(tuple(decisions), deadlines_by_case)
         return (
             AnalysisResult(
                 program_id=program.program_id,
@@ -270,9 +305,49 @@ class TradeFlowPipeline:
                 evidence_coverage=coverage,
                 review_required=bool(review_reasons),
                 review_reasons=review_reasons,
+                actions=actions,
             ),
             tuple(bundles),
         )
+
+    def _project_actions(
+        self,
+        decisions,
+        deadlines_by_case: Mapping[str, Mapping[str, date]],
+    ) -> tuple[RecommendedAction, ...]:
+        actions: list[RecommendedAction] = []
+        for decision in decisions:
+            if decision.matched is not True:
+                continue
+            procedure = self.knowledge.procedure_for(decision.rule_id)
+            if not procedure:
+                continue
+            outcome = procedure["candidate_outcome"]
+            action_name = outcome.get("action")
+            if not isinstance(action_name, str) or not action_name:
+                continue
+            deadline = None
+            deadline_key = outcome.get("deadline_key")
+            if deadline_key and decision.subject_id:
+                deadline = deadlines_by_case.get(decision.subject_id, {}).get(
+                    deadline_key
+                )
+            actions.append(
+                RecommendedAction(
+                    subject_id=decision.subject_id,
+                    rule_id=decision.rule_id,
+                    authority=outcome.get("authority"),
+                    action=action_name,
+                    timing=outcome.get("timing"),
+                    deadline=deadline,
+                    requirements=decision.requirements,
+                    required_documents=tuple(procedure["required_documents"]),
+                    steps=tuple(procedure["steps"]),
+                    source_ids=tuple(procedure["source_ids"]),
+                    source_claim_ids=tuple(procedure["source_claim_ids"]),
+                )
+            )
+        return tuple(actions)
 
     def _base_evidence(self, program: TradeProgram, exposures) -> tuple[EvidenceDescriptor, ...]:
         snapshot_payload = [

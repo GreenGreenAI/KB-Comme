@@ -16,7 +16,12 @@ from typing import Any, Mapping
 
 from tradeflow.contracts.evidence import EvidenceDescriptor
 from tradeflow.domain.enums import DecisionStatus, EvidenceRole
-from tradeflow.domain.models import AnalysisResult, CurrencyExposure, RuleDecision
+from tradeflow.domain.models import (
+    AnalysisResult,
+    CurrencyExposure,
+    RecommendedAction,
+    RuleDecision,
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,22 @@ class PacketDecision:
     source_claim_ids: tuple[str, ...]
     candidate_outcome: tuple[tuple[str, Any], ...]
     subject_id: str | None
+    matched: bool | None
+
+
+@dataclass(frozen=True)
+class PacketAction:
+    subject_id: str | None
+    rule_id: str
+    authority: str | None
+    action: str
+    timing: str | None
+    deadline: date | None
+    requirements: tuple[PacketRequirement, ...]
+    required_documents: tuple[str, ...]
+    steps: tuple[str, ...]
+    source_ids: tuple[str, ...]
+    source_claim_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -82,6 +103,7 @@ class DecisionPacket:
     inputs: tuple[DecisionInput, ...]
     exposures: tuple[CurrencyExposure, ...]
     decisions: tuple[PacketDecision, ...]
+    actions: tuple[PacketAction, ...]
     evidence: tuple[PacketEvidence, ...]
     review_required: bool
     review_reasons: tuple[str, ...]
@@ -105,7 +127,7 @@ class DecisionPacket:
             packet_id=(
                 f"decision:{result.program_id}:{as_of.isoformat()}:{fingerprint[:16]}"
             ),
-            schema_version="1.1",
+            schema_version="1.2",
             program_id=result.program_id,
             as_of=as_of,
             inputs=tuple(
@@ -114,6 +136,7 @@ class DecisionPacket:
             ),
             exposures=result.exposures,
             decisions=tuple(_freeze_decision(item) for item in result.decisions),
+            actions=tuple(_freeze_action(item) for item in result.actions),
             evidence=tuple(_freeze_evidence(item) for item in result.evidence),
             review_required=result.review_required,
             review_reasons=result.review_reasons,
@@ -275,6 +298,32 @@ def _freeze_decision(decision: RuleDecision) -> PacketDecision:
         source_claim_ids=decision.source_claim_ids,
         candidate_outcome=_freeze(decision.candidate_outcome),
         subject_id=decision.subject_id,
+        matched=decision.matched,
+    )
+
+
+def _freeze_action(action: RecommendedAction) -> PacketAction:
+    return PacketAction(
+        subject_id=action.subject_id,
+        rule_id=action.rule_id,
+        authority=action.authority,
+        action=action.action,
+        timing=action.timing,
+        deadline=action.deadline,
+        requirements=tuple(
+            PacketRequirement(
+                field=item.field,
+                operator=item.operator,
+                expected_value=_freeze(item.expected_value),
+                description=item.description,
+                current_value=_freeze(item.current_value),
+            )
+            for item in action.requirements
+        ),
+        required_documents=action.required_documents,
+        steps=action.steps,
+        source_ids=action.source_ids,
+        source_claim_ids=action.source_claim_ids,
     )
 
 

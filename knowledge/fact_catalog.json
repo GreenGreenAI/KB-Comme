@@ -324,9 +324,15 @@
       "evidence_role": "calculation"
     },
     {
-      "field": "payment.mutual_account.balance_deadline_breached",
+      "field": "payment.mutual_account.balance_filing_deadline_breached",
       "type": "boolean",
       "description": "결산기간 종료일부터 3개월의 신고·지급 기한을 초과했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_settlement_deadline_breached",
+      "type": "boolean",
+      "description": "Balance settlement exceeded the three-calendar-month deadline.",
       "evidence_role": "calculation"
     },
     {
