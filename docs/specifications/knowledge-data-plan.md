@@ -23,7 +23,7 @@ MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재
 | P0 | 수출신용보증 | K-SURE | 선적전 보증 후보 규칙 | draft |
 | P1 | 지원사업 탐색 | 기업마당 API와 개별 공고 | 일일 API 스냅샷·정규화 객체 | 상세 조건 규칙화 대기 |
 | P1 | 국별인수방침 | K-SURE K-Sight | 일일 비공개 스냅샷·typed catalog·수입자 국가 제한 fact | 구현, 상대 역할 검토 대기 |
-| P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | 회사/케이스 범위 typed evidence·provider registry·FactAssembler 연결 | 실제 provider 연동 대기 |
+| P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | typed evidence·비공개 snapshot feed·tenant-safe provider·FactAssembler 연결 | 기관별 실제 connector/인증 연동 대기 |
 
 ## 데이터 계층
 

@@ -104,6 +104,7 @@ class EligibilityEvidenceTests(unittest.TestCase):
             metadata("ksure-exporter:C1", source_id="KSURE_CREDIT_SOURCE"),
             KsureCreditSubject.EXPORTER,
             "C1",
+            "C1",
             "A",
             "ksure_credit",
         ).to_record()
@@ -115,6 +116,7 @@ class EligibilityEvidenceTests(unittest.TestCase):
             ),
             KsureCreditSubject.IMPORTER,
             "EXP-1",
+            "C1",
             "B",
             "ksure_credit",
         ).to_record()
@@ -131,6 +133,7 @@ class EligibilityEvidenceTests(unittest.TestCase):
             metadata("ksure-importer:EXP-1", source_id="KSURE_CREDIT_SOURCE"),
             KsureCreditSubject.IMPORTER,
             "EXP-1",
+            "C1",
             "B",
             "ksure_credit",
         ).to_record()
@@ -269,8 +272,12 @@ class EligibilityEvidenceTests(unittest.TestCase):
                 "timestamp is in the future",
             ),
             (
-                replace(self.company_record(), subject_id="OTHER"),
-                "company subject does not match",
+                replace(
+                    self.company_record(),
+                    subject_id="OTHER",
+                    company_id="OTHER",
+                ),
+                "evidence company does not match",
             ),
             (
                 replace(

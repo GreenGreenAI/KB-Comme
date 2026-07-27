@@ -154,3 +154,10 @@ draft 규칙팩은 pending 승인과 `production_ready=false`를 blocker로 보�
 `unusable_evidence`에 감사용으로 남기되 assertion과 evidence coverage에서는
 제외한다. 결과인 `EligibilityFactInput`은
 `TradeFlowPipeline.analyze_case_packet_with_eligibility`에 직접 전달한다.
+
+운영 feed는 `data/dataset_registry.json`의 `eligibility_evidence` kind로 등록한다.
+`JsonEligibilityEvidenceAdapter`가 원 응답을 `data/runtime/`에만 저장하고,
+`EligibilityEvidenceV1Parser`가 snapshot version·관측시각·record scope를 검증한다.
+`SnapshotEligibilityEvidenceProvider`는 `company_id`를 먼저 대조하므로 다른 회사에서
+동일한 case ID를 사용해도 현재 프로그램으로 유입되지 않는다. 이 snapshot/provider
+단계와 위 assembler 단계는 서로 대체하지 않으며 모두 통과해야 한다.

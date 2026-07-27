@@ -17,7 +17,7 @@ from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Protocol
 
 from tradeflow.contracts.evidence import EvidenceDescriptor
-from tradeflow.domain.enums import EvidenceRole
+from tradeflow.domain.enums import EvidenceRole, EvidenceSubjectKind
 from tradeflow.domain.models import TradeProgram
 from tradeflow.domain.snapshot import require_aware
 from tradeflow.knowledge.facts import (
@@ -28,11 +28,6 @@ from tradeflow.knowledge.facts import (
 
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
-
-
-class EvidenceSubjectKind(StrEnum):
-    COMPANY = "company"
-    CASE = "case"
 
 
 class KsureCreditSubject(StrEnum):
@@ -75,6 +70,7 @@ class EligibilityEvidenceRecord:
     metadata: EvidenceMetadata
     subject_kind: EvidenceSubjectKind
     subject_id: str
+    company_id: str
     facts: Mapping[str, Any]
     provider_key: str
 
@@ -85,6 +81,13 @@ class EligibilityEvidenceRecord:
             raise TypeError("subject_kind must be EvidenceSubjectKind")
         if not self.subject_id:
             raise ValueError("subject_id is required")
+        if not self.company_id:
+            raise ValueError("company_id is required")
+        if (
+            self.subject_kind is EvidenceSubjectKind.COMPANY
+            and self.subject_id != self.company_id
+        ):
+            raise ValueError("company evidence subject_id must equal company_id")
         if not self.provider_key:
             raise ValueError("provider_key is required")
         if not isinstance(self.facts, Mapping) or not self.facts:
@@ -121,6 +124,7 @@ class CompanyQualificationEvidence:
             metadata=self.metadata,
             subject_kind=EvidenceSubjectKind.COMPANY,
             subject_id=self.company_id,
+            company_id=self.company_id,
             facts=facts,
             provider_key=self.provider_key,
         )
@@ -133,6 +137,7 @@ class KsureCreditEvidence:
     metadata: EvidenceMetadata
     subject: KsureCreditSubject
     subject_id: str
+    company_id: str
     grade: str
     provider_key: str
 
@@ -148,6 +153,7 @@ class KsureCreditEvidence:
                 else EvidenceSubjectKind.CASE
             ),
             subject_id=self.subject_id,
+            company_id=self.company_id,
             facts={
                 (
                     "company.ksure_exporter_grade"
@@ -361,6 +367,7 @@ class EligibilityEvidenceAssembler:
             "provider_key": record.provider_key,
             "subject_kind": record.subject_kind.value,
             "subject_id": record.subject_id,
+            "company_id": record.company_id,
             "observed_at": metadata.observed_at.isoformat(),
             "retrieved_at": metadata.retrieved_at.isoformat(),
             "valid_until": (
@@ -390,11 +397,11 @@ class EligibilityEvidenceAssembler:
         program: TradeProgram,
         cases_by_id: Mapping[str, Any],
     ) -> tuple[str, ...]:
+        if record.company_id != program.company.company_id:
+            raise FactContractError(
+                f"{record.metadata.evidence_id}: evidence company does not match program"
+            )
         if record.subject_kind is EvidenceSubjectKind.COMPANY:
-            if record.subject_id != program.company.company_id:
-                raise FactContractError(
-                    f"{record.metadata.evidence_id}: company subject does not match program"
-                )
             return tuple(cases_by_id)
         if record.subject_id not in cases_by_id:
             raise FactContractError(

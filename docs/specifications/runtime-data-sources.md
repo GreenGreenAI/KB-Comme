@@ -18,6 +18,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | 실제 호가·계약 조건 | 실행 가능한 헤지 가격과 비용 비교 | 계약된 은행·브로커 API에서 수집 |
 | 법령·지원사업 조건 | 자격·제한·절차 판정 | 검증된 규칙·출처 레지스트리 사용 |
 | K-SURE 국별인수방침 | 단기수출보험의 수입국 제한 fact | 공식 K-Sight 응답을 비공개 스냅샷으로 수집 |
+| 기업 자격·K-SURE 신용등급 | 기업규모·신용제한·수출자/수입자 등급 fact | 인증된 정규화 feed를 비공개 스냅샷으로 수집 |
 
 앞의 세 종류는 시점에 따라 값이 달라지므로 API가 적합하다. 법령과 정책은 변경 빈도가
 낮고 해석 검토가 필요하므로 API 응답을 곧바로 판단값으로 쓰지 않는다.
@@ -51,6 +52,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | `dataset_id`, `source_id` | 데이터셋과 원천의 안정적인 식별자 |
 | `kind` | `trade_feed`, `fx_series` 등 정규화 결과 종류 |
 | `adapter_key`, `parser_key` | 수집 객체와 해석 객체의 명시적 선택 |
+| `provider_key` | 자격 증거 dataset이 구현하는 provider 계약 식별자 |
 | `payload_schema_version` | 파서가 지원해야 하는 입력 계약 버전 |
 | `collection_interval_seconds` | 마지막 취득시각 기준 다음 수집이 필요한 주기 |
 | `freshness` | 관측·취득시각 기준 사용 가능 SLA |
@@ -154,6 +156,43 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 고객 거래 스냅샷은 `data/runtime/` 또는 운영 비공개 저장소만 사용하며 Git에 커밋하지
 않는다. 공개 ECOS 스냅샷만 재현 테스트를 위해 `data/snapshots/`에 커밋한다.
 
+### `JsonEligibilityEvidenceAdapter`
+
+중소기업 확인자료와 K-SURE 신용정보는 기관별 원 응답을 규칙 fact로 직접 사용하지
+않는다. 고객별 커넥터가 다음 schema 1.0으로 정규화한 HTTPS feed를 제공하며,
+`COMPANY_QUALIFICATION_EVIDENCE_V1`과 `KSURE_CREDIT_EVIDENCE_V1`은 항상
+`data/runtime/` 범위에 저장한다.
+
+```json
+{
+  "schema_version": "1.0",
+  "version": "company-20260727-v1",
+  "observed_at": "2026-07-27T00:00:00+00:00",
+  "provider_key": "company_qualification",
+  "records": [{
+    "evidence_id": "company:C1:20260727",
+    "company_id": "C1",
+    "subject_kind": "company",
+    "subject_id": "C1",
+    "valid_until": "2026-08-27T00:00:00+00:00",
+    "facts": {"company.size": "small"}
+  }]
+}
+```
+
+- endpoint는 HTTPS만 허용하고 bearer token은 생성자 또는 환경변수에서만 읽는다.
+- endpoint와 token은 repr, 오류, 스냅샷에 기록하지 않는다.
+- schema·중복 evidence ID·시간대·주체 scope를 수집 전후 두 번 검증한다.
+- root와 record의 미정의 필드는 거부해 credential이나 계약 밖 데이터의 저장을 막는다.
+- dataset definition의 provider key와 payload provider key가 다르면 거부한다.
+- 전체 payload의 SHA-256이 각 `EvidenceMetadata`에 연결된다.
+- `company_id`는 모든 record에 필수다. 같은 `case_id`가 다른 tenant에 존재해도
+  `SnapshotEligibilityEvidenceProvider`가 현재 회사의 record만 선택한다.
+- snapshot freshness와 record `valid_until`은 별도 게이트다. 둘 중 하나라도
+  만료되면 fact assertion을 만들 수 없다.
+- provider가 만든 record도 `EligibilityEvidenceAssembler`의 trusted source,
+  catalog type, conflict 검사를 다시 통과해야 한다.
+
 ### `KsureCountryPolicyAdapter`
 
 - 공식 K-Sight Country Risk Map 화면이 사용하는 전체 국가 정책 응답을 POST로 수집한다.
@@ -173,6 +212,8 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 | 봉투 검증 | `read_snapshot` | 해시 또는 경로 identity 불일치 |
 | 거래 정규화 | `read_trade_feed_snapshot` | 스키마·버전·관측시각 불일치 |
 | 환율 정규화 | `read_ecos_usd_krw_snapshot` | 통계코드·항목·단위·중복·부분응답 오류 |
+| 자격 증거 정규화 | `EligibilityEvidenceV1Parser` | schema·주체·시간대·중복·scalar fact 오류 |
+| tenant 투영 | `SnapshotEligibilityEvidenceProvider` | 회사 불일치 record 제외·snapshot stale |
 | 최신성 게이트 | 작업별 `FreshnessPolicy` | 관측 또는 수집 SLA 초과 |
 | 계산 입력 | `trade_program_from_snapshot` | 거래피드가 아닌 데이터셋 |
 | 결과 계보 | `TradeProgram.input_snapshots` → `DecisionPacket` | source/version/hash 누락 |

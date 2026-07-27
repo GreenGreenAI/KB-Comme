@@ -22,6 +22,7 @@ from tradeflow.domain.datasets import (
 )
 from tradeflow.integration.bizinfo import BizinfoSupportAdapter
 from tradeflow.integration.ecos import EcosFxAdapter
+from tradeflow.integration.eligibility_feed import JsonEligibilityEvidenceAdapter
 from tradeflow.integration.ksure_country_policy import KsureCountryPolicyAdapter
 from tradeflow.integration.registry import AdapterRegistry
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
@@ -63,6 +64,8 @@ class DatasetRegistryTests(unittest.TestCase):
                 "ERP_TRADE_FEED_V1",
                 "BIZINFO_SUPPORT_PROGRAMS_DAILY",
                 "KSURE_COUNTRY_POLICY_DAILY",
+                "COMPANY_QUALIFICATION_EVIDENCE_V1",
+                "KSURE_CREDIT_EVIDENCE_V1",
             },
             set(self.registry.definitions),
         )
@@ -70,17 +73,27 @@ class DatasetRegistryTests(unittest.TestCase):
         erp = self.registry.get("ERP_TRADE_FEED_V1")
         bizinfo = self.registry.get("BIZINFO_SUPPORT_PROGRAMS_DAILY")
         country_policy = self.registry.get("KSURE_COUNTRY_POLICY_DAILY")
+        company_evidence = self.registry.get(
+            "COMPANY_QUALIFICATION_EVIDENCE_V1"
+        )
         self.assertEqual(DatasetKind.FX_SERIES, ecos.kind)
         self.assertEqual(DatasetKind.SUPPORT_PROGRAM_CATALOG, bizinfo.kind)
         self.assertEqual(
             DatasetKind.COUNTRY_POLICY_CATALOG, country_policy.kind
         )
+        self.assertEqual(
+            DatasetKind.ELIGIBILITY_EVIDENCE, company_evidence.kind
+        )
+        self.assertEqual("company_qualification", company_evidence.provider_key)
         self.assertEqual(timedelta(days=1), bizinfo.collection_interval)
         self.assertEqual(timedelta(hours=1), erp.collection_interval)
         self.assertEqual(StorageScope.COMMITTED_PUBLIC, ecos.storage_scope)
         self.assertEqual(StorageScope.RUNTIME_PRIVATE, erp.storage_scope)
         self.assertEqual(
             StorageScope.RUNTIME_PRIVATE, country_policy.storage_scope
+        )
+        self.assertEqual(
+            StorageScope.RUNTIME_PRIVATE, company_evidence.storage_scope
         )
         self.assertEqual("data/snapshots", ecos.storage_root)
         self.assertEqual("data/runtime", erp.storage_root)
@@ -92,6 +105,10 @@ class DatasetRegistryTests(unittest.TestCase):
             replace(erp, storage_root="data/snapshots")
         with self.assertRaisesRegex(ValueError, "must be positive"):
             replace(erp, collection_interval=timedelta(0))
+        with self.assertRaisesRegex(ValueError, "only valid"):
+            replace(erp, provider_key="unexpected")
+        with self.assertRaisesRegex(ValueError, "requires provider_key"):
+            replace(company_evidence, provider_key=None)
 
     def test_registry_reads_committed_ecos_through_registered_parser(self) -> None:
         dataset = self.registry.read_snapshot(
@@ -253,7 +270,7 @@ class DatasetRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "schema_version"):
                 DatasetRegistry.from_json(path)
 
-            document["schema_version"] = "1.1"
+            document["schema_version"] = "1.2"
             del document["datasets"][0]["collection_interval_seconds"]
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "positive integer"):
@@ -274,11 +291,25 @@ class AdapterRegistryTests(unittest.TestCase):
         )
         bizinfo = BizinfoSupportAdapter(api_key="secret")
         country_policy = KsureCountryPolicyAdapter()
+        company_evidence = JsonEligibilityEvidenceAdapter(
+            endpoint="https://connector.example/company-evidence",
+            source_id="COMPANY_QUALIFICATION_FEED",
+            adapter_key="company_qualification_json",
+        )
+        ksure_credit = JsonEligibilityEvidenceAdapter(
+            endpoint="https://connector.example/ksure-credit",
+            source_id="KSURE_CREDIT_FEED",
+            adapter_key="ksure_credit_json",
+        )
 
         self.adapters.register("ECOS_USD_KRW_DAILY", ecos)
         self.adapters.register("ERP_TRADE_FEED_V1", erp)
         self.adapters.register("BIZINFO_SUPPORT_PROGRAMS_DAILY", bizinfo)
         self.adapters.register("KSURE_COUNTRY_POLICY_DAILY", country_policy)
+        self.adapters.register(
+            "COMPANY_QUALIFICATION_EVIDENCE_V1", company_evidence
+        )
+        self.adapters.register("KSURE_CREDIT_EVIDENCE_V1", ksure_credit)
 
         self.assertIs(ecos, self.adapters.get("ECOS_USD_KRW_DAILY"))
         self.assertIs(erp, self.adapters.get("ERP_TRADE_FEED_V1"))
@@ -288,6 +319,14 @@ class AdapterRegistryTests(unittest.TestCase):
         self.assertIs(
             country_policy,
             self.adapters.get("KSURE_COUNTRY_POLICY_DAILY"),
+        )
+        self.assertIs(
+            company_evidence,
+            self.adapters.get("COMPANY_QUALIFICATION_EVIDENCE_V1"),
+        )
+        self.assertIs(
+            ksure_credit,
+            self.adapters.get("KSURE_CREDIT_EVIDENCE_V1"),
         )
 
     def test_duplicate_or_mismatched_adapter_is_rejected(self) -> None:

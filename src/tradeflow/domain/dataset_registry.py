@@ -13,12 +13,14 @@ from typing import Any, Iterable, Mapping, Protocol
 from tradeflow.domain.datasets import (
     DatasetContractError,
     FxSeries,
+    EligibilityEvidenceDataset,
     KsureCountryPolicyCatalog,
     SnapshotDataset,
     StaleDatasetError,
     SupportProgramCatalog,
     TradeFeedData,
     parse_ecos_usd_krw_payload,
+    parse_eligibility_evidence_payload,
     parse_bizinfo_support_payload,
     parse_ksure_country_policy_payload,
     parse_trade_feed_payload,
@@ -33,6 +35,7 @@ class DatasetKind(StrEnum):
     FX_SERIES = "fx_series"
     SUPPORT_PROGRAM_CATALOG = "support_program_catalog"
     COUNTRY_POLICY_CATALOG = "country_policy_catalog"
+    ELIGIBILITY_EVIDENCE = "eligibility_evidence"
 
 
 class StorageScope(StrEnum):
@@ -52,12 +55,19 @@ class DatasetDefinition:
     freshness_policy: FreshnessPolicy
     storage_scope: StorageScope
     storage_root: str
+    provider_key: str | None = None
 
     def __post_init__(self) -> None:
         safe_segment(self.dataset_id, "dataset_id")
         safe_segment(self.source_id, "source_id")
         safe_segment(self.adapter_key, "adapter_key")
         safe_segment(self.parser_key, "parser_key")
+        if self.kind is DatasetKind.ELIGIBILITY_EVIDENCE:
+            if self.provider_key is None:
+                raise ValueError("eligibility evidence requires provider_key")
+            safe_segment(self.provider_key, "provider_key")
+        elif self.provider_key is not None:
+            raise ValueError("provider_key is only valid for eligibility evidence")
         if not self.payload_schema_version:
             raise ValueError("payload_schema_version is required")
         if self.collection_interval <= timedelta(0):
@@ -88,6 +98,7 @@ class DatasetParser(Protocol):
         | FxSeries
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
+        | EligibilityEvidenceDataset
     ): ...
 
 
@@ -143,6 +154,27 @@ class KsureCountryPolicyV1Parser:
         return parse_ksure_country_policy_payload(payload)
 
 
+@dataclass(frozen=True)
+class EligibilityEvidenceV1Parser:
+    kind: DatasetKind = DatasetKind.ELIGIBILITY_EVIDENCE
+    schema_version: str = "1.0"
+
+    def parse(
+        self, payload: Any, ref: SnapshotRef
+    ) -> EligibilityEvidenceDataset:
+        data = parse_eligibility_evidence_payload(payload)
+        if data.version != ref.version:
+            raise DatasetContractError(
+                f"evidence version {data.version!r} does not match snapshot "
+                f"{ref.version!r}"
+            )
+        if data.observed_at != ref.observed_at:
+            raise DatasetContractError(
+                "eligibility evidence observed_at does not match snapshot"
+            )
+        return data
+
+
 class ParserRegistry:
     def __init__(self, parsers: Mapping[str, DatasetParser] | None = None) -> None:
         self._parsers: dict[str, DatasetParser] = {}
@@ -165,6 +197,7 @@ class ParserRegistry:
         | FxSeries
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
+        | EligibilityEvidenceDataset
     ):
         parser = self._parsers.get(definition.parser_key)
         if parser is None:
@@ -198,7 +231,7 @@ class DatasetRegistry:
     @classmethod
     def from_json(cls, path: Path | str) -> "DatasetRegistry":
         document = json.loads(Path(path).read_text(encoding="utf-8"))
-        if document.get("schema_version") != "1.1":
+        if document.get("schema_version") != "1.2":
             raise ValueError("unsupported dataset registry schema_version")
         return cls(_parse_definition(item) for item in document["datasets"])
 
@@ -237,6 +270,7 @@ def default_parser_registry() -> ParserRegistry:
             "ecos_usd_krw_v1": EcosUsdKrwV1Parser(),
             "bizinfo_support_v1": BizinfoSupportV1Parser(),
             "ksure_country_policy_v1": KsureCountryPolicyV1Parser(),
+            "eligibility_evidence_v1": EligibilityEvidenceV1Parser(),
         }
     )
 
@@ -278,6 +312,7 @@ def _parse_definition(item: Mapping[str, Any]) -> DatasetDefinition:
         ),
         storage_scope=StorageScope(item["storage_scope"]),
         storage_root=item["storage_root"],
+        provider_key=item.get("provider_key"),
     )
 
 

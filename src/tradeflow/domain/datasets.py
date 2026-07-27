@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 from tradeflow.domain.enums import (
     CountryPolicyStatus,
+    EvidenceSubjectKind,
     Freshness,
     PaymentMethod,
     TradeDirection,
@@ -115,6 +116,27 @@ class KsureCountryPolicyCatalog:
 
 
 @dataclass(frozen=True)
+class EligibilityEvidenceDataRecord:
+    evidence_id: str
+    company_id: str
+    subject_kind: EvidenceSubjectKind
+    subject_id: str
+    valid_until: datetime | None
+    facts: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "facts", MappingProxyType(dict(self.facts)))
+
+
+@dataclass(frozen=True)
+class EligibilityEvidenceDataset:
+    version: str
+    observed_at: datetime
+    provider_key: str
+    records: tuple[EligibilityEvidenceDataRecord, ...]
+
+
+@dataclass(frozen=True)
 class SnapshotDataset:
     ref: SnapshotRef
     value: (
@@ -122,6 +144,7 @@ class SnapshotDataset:
         | FxSeries
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
+        | EligibilityEvidenceDataset
     )
 
 
@@ -412,6 +435,136 @@ def parse_ksure_country_policy_payload(payload: Any) -> KsureCountryPolicyCatalo
             code, name, status, code in sets["deep_watch"]
         )
     return KsureCountryPolicyCatalog(policies)
+
+
+def parse_eligibility_evidence_payload(payload: Any) -> EligibilityEvidenceDataset:
+    """Validate a normalized private company/K-SURE evidence feed."""
+    if not isinstance(payload, dict):
+        raise DatasetContractError("eligibility evidence payload must be an object")
+    if payload.get("schema_version") != "1.0":
+        raise DatasetContractError(
+            "unsupported eligibility evidence schema_version"
+        )
+    unknown_root = set(payload) - {
+        "schema_version",
+        "version",
+        "observed_at",
+        "provider_key",
+        "records",
+    }
+    if unknown_root:
+        raise DatasetContractError(
+            "eligibility evidence payload has unknown fields: "
+            + ", ".join(sorted(unknown_root))
+        )
+    version = _required_text(payload, "version")
+    provider_key = _required_text(payload, "provider_key")
+    try:
+        safe_segment(version, "version")
+        safe_segment(provider_key, "provider_key")
+    except ValueError as exc:
+        raise DatasetContractError(str(exc)) from None
+    try:
+        observed_at = require_aware(
+            datetime.fromisoformat(
+                _required_text(payload, "observed_at").replace("Z", "+00:00")
+            ),
+            "observed_at",
+        )
+    except ValueError as exc:
+        raise DatasetContractError(f"invalid observed_at: {exc}") from None
+
+    raw_records = payload.get("records")
+    if not isinstance(raw_records, list) or not raw_records:
+        raise DatasetContractError("eligibility evidence records must be non-empty")
+    records: list[EligibilityEvidenceDataRecord] = []
+    evidence_ids: set[str] = set()
+    for index, item in enumerate(raw_records):
+        prefix = f"eligibility evidence records[{index}]"
+        if not isinstance(item, Mapping):
+            raise DatasetContractError(f"{prefix} must be an object")
+        unknown_record = set(item) - {
+            "evidence_id",
+            "company_id",
+            "subject_kind",
+            "subject_id",
+            "valid_until",
+            "facts",
+        }
+        if unknown_record:
+            raise DatasetContractError(
+                f"{prefix} has unknown fields: "
+                + ", ".join(sorted(unknown_record))
+            )
+        evidence_id = _required_text(item, "evidence_id")
+        if evidence_id in evidence_ids:
+            raise DatasetContractError(f"duplicate evidence_id: {evidence_id}")
+        evidence_ids.add(evidence_id)
+        try:
+            subject_kind = EvidenceSubjectKind(
+                _required_text(item, "subject_kind")
+            )
+        except ValueError as exc:
+            raise DatasetContractError(
+                f"{prefix}.subject_kind is invalid: {exc}"
+            ) from None
+        subject_id = _required_text(item, "subject_id")
+        company_id = _required_text(item, "company_id")
+        if (
+            subject_kind is EvidenceSubjectKind.COMPANY
+            and subject_id != company_id
+        ):
+            raise DatasetContractError(
+                f"{prefix}: company subject_id must equal company_id"
+            )
+        raw_valid_until = item.get("valid_until")
+        valid_until = None
+        if raw_valid_until is not None:
+            if not isinstance(raw_valid_until, str) or not raw_valid_until:
+                raise DatasetContractError(
+                    f"{prefix}.valid_until must be an ISO timestamp or null"
+                )
+            try:
+                valid_until = require_aware(
+                    datetime.fromisoformat(raw_valid_until.replace("Z", "+00:00")),
+                    f"{prefix}.valid_until",
+                )
+            except ValueError as exc:
+                raise DatasetContractError(
+                    f"{prefix}.valid_until is invalid: {exc}"
+                ) from None
+            if valid_until < observed_at:
+                raise DatasetContractError(
+                    f"{prefix}.valid_until precedes observed_at"
+                )
+        raw_facts = item.get("facts")
+        if not isinstance(raw_facts, Mapping) or not raw_facts:
+            raise DatasetContractError(f"{prefix}.facts must be a non-empty object")
+        facts: dict[str, Any] = {}
+        for field, value in raw_facts.items():
+            if not isinstance(field, str) or not field:
+                raise DatasetContractError(f"{prefix}.facts has an invalid field")
+            if value is None or isinstance(value, (list, dict)):
+                raise DatasetContractError(
+                    f"{prefix}.facts.{field} must be a non-null JSON scalar"
+                )
+            facts[field] = value
+        records.append(
+            EligibilityEvidenceDataRecord(
+                evidence_id=evidence_id,
+                company_id=company_id,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                valid_until=valid_until,
+                facts=facts,
+            )
+        )
+    return EligibilityEvidenceDataset(
+        version=version,
+        observed_at=observed_at,
+        provider_key=provider_key,
+        records=tuple(records),
+    )
 
 
 def _country_code(value: Any, field: str) -> str:

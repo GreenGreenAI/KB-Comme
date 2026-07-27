@@ -49,6 +49,13 @@ class EvidenceRole(StrEnum):
     MARKET_DATA = "market_data"
 
 
+class EvidenceSubjectKind(StrEnum):
+    """The business object an operational evidence record may attest."""
+
+    COMPANY = "company"
+    CASE = "case"
+
+
 class SourceStatus(StrEnum):
     ACTIVE = "active"
     EXPIRED = "expired"
