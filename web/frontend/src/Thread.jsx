@@ -10,7 +10,7 @@ const SLOT_LABEL = {
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, pending, onSlot, endRef }) {
+export default function Thread({ turns, busy, pending, onSlot, onPlace, endRef }) {
   return (
     <div className="thread">
       {turns.length === 0 && !busy && (
@@ -31,6 +31,7 @@ export default function Thread({ turns, busy, pending, onSlot, endRef }) {
             key={index}
             turn={turn}
             live={index === turns.length - 1 && !busy}
+            onPlace={onPlace}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             onSlot={onSlot}
           />
@@ -51,12 +52,36 @@ export default function Thread({ turns, busy, pending, onSlot, endRef }) {
   );
 }
 
-function AgentTurn({ turn, live, onSlot, first }) {
+function AgentTurn({ turn, live, onSlot, onPlace, first }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
         <span className="who">TradeFlow</span>
         <p>{turn.text}</p>
+      </div>
+    );
+  }
+
+  if (turn.kind === "placement") {
+    return (
+      <div className="turn agent">
+        <span className="who">TradeFlow</span>
+        <Understood heard={turn.ask.understood} />
+        <p>{turn.ask.question}</p>
+        {live && (
+          <div className="choices">
+            {turn.ask.options.map((option) => (
+              <button
+                className="choice"
+                type="button"
+                key={option.placement}
+                onClick={() => onPlace(turn.ask.utterance, option.placement)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
