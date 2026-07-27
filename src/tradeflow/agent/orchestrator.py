@@ -25,14 +25,25 @@ from tradeflow.domain.snapshot_file import latest_snapshot_path, read_snapshot
 from tradeflow.knowledge.facts import FactAssembler, FactCatalog
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
+from tradeflow.runtime.provenance import (
+    CalculationVersions,
+    InputFile,
+    fingerprint_knowledge,
+    snapshot_versions,
+)
 from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
-from tradeflow.tools.source_freshness import load_source_freshness
+from tradeflow.tools.source_freshness import load_source_verification
 from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
 
 FX_SOURCE = "ECOS_USD_KRW"
+
+# Which tool versions produced the figures. Kept here rather than in
+# response.py because the orchestrator records it and response.py reads
+# it back out of the analysis.
+FORMULA_VERSION = "exposure.v1+scenario.v1+hedge.v1"
 
 # A daily reference rate more than four days old has usually missed a business
 # day, so a band built on it would understate how much has already moved.
@@ -82,6 +93,7 @@ class Analysis:
     report: WorkerReport
     required_inputs: tuple[str, ...]
     review_reasons: tuple[str, ...]
+    versions: CalculationVersions
 
     @property
     def review_required(self) -> bool:
@@ -103,22 +115,37 @@ def _business_days_until(target, as_of) -> int:
     return max(days, 1)
 
 
+KNOWLEDGE_ROOT = REPO_ROOT / "knowledge"
+SOURCE_REGISTRY = KNOWLEDGE_ROOT / "source_registry.json"
+FACT_CATALOG = KNOWLEDGE_ROOT / "fact_catalog.json"
+RULEPACKS = (
+    KNOWLEDGE_ROOT / "rulepacks" / "ksure_mvp_candidates.json",
+    KNOWLEDGE_ROOT / "rulepacks" / "fx_compliance_mvp.json",
+)
+
+
 @lru_cache(maxsize=1)
 def _default_knowledge_pipeline() -> TradeFlowPipeline:
     """Load the shared Role A rulepacks once for the web process."""
-    knowledge_root = REPO_ROOT / "knowledge"
-    knowledge = KnowledgeRepository.from_json_files(
-        knowledge_root / "source_registry.json",
-        (
-            knowledge_root / "rulepacks" / "ksure_mvp_candidates.json",
-            knowledge_root / "rulepacks" / "fx_compliance_mvp.json",
-        ),
-    )
+    knowledge = KnowledgeRepository.from_json_files(SOURCE_REGISTRY, RULEPACKS)
     return TradeFlowPipeline(
         knowledge,
-        fact_assembler=FactAssembler(
-            FactCatalog.from_json(knowledge_root / "fact_catalog.json")
-        ),
+        fact_assembler=FactAssembler(FactCatalog.from_json(FACT_CATALOG)),
+    )
+
+
+@lru_cache(maxsize=1)
+def _default_knowledge_files() -> tuple[InputFile, ...]:
+    """Fingerprint the rule files the default pipeline was built from.
+
+    Cached alongside the pipeline because they describe the same load: a
+    process that re-read the files would also rebuild the repository.
+    """
+    return fingerprint_knowledge(
+        repo_root=REPO_ROOT,
+        source_registry=SOURCE_REGISTRY,
+        rulepacks=RULEPACKS,
+        fact_catalog=FACT_CATALOG,
     )
 
 
@@ -141,13 +168,14 @@ def analyze(
     cashflow = project_cashflow_analysis(exposures)
 
     pipeline = knowledge_pipeline or _default_knowledge_pipeline()
-    source_freshness = _isolated(
+    verification = _isolated(
         report,
         "source_verification",
-        lambda: load_source_freshness(
+        lambda: load_source_verification(
             snapshot_root, as_of=as_of or datetime.now(UTC)
         ),
     )
+    verification_ref, source_freshness = verification or (None, None)
     if source_freshness is not None:
         report.completed.append("source_verification")
     else:
@@ -274,4 +302,19 @@ def analyze(
         report=report,
         required_inputs=tuple(required_inputs),
         review_reasons=tuple(dict.fromkeys(review)),
+        versions=CalculationVersions(
+            formula_version=FORMULA_VERSION,
+            packet_schema_version=(
+                decision_packet.schema_version
+                if decision_packet is not None
+                else None
+            ),
+            # An injected pipeline was built from files this module never saw,
+            # so claiming the default fingerprints would be a lie. An empty
+            # list reads as "not recorded", which is what happened.
+            knowledge_files=(
+                () if knowledge_pipeline is not None else _default_knowledge_files()
+            ),
+            snapshots=snapshot_versions((snapshot, verification_ref)),
+        ),
     )

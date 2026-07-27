@@ -261,6 +261,14 @@
 
   .basis { font-family: var(--mono); font-size: .625rem; color: var(--ink-45); border-top: 1px dashed var(--rule); padding-top: .5rem; margin: .85rem 0 0; line-height: 1.75; }
   .basis b { font-weight: 600; color: var(--ink-70); }
+  /* The inputs an answer can be replayed from. Read as a lookup, not prose,
+     so the labels stay in one column and the values line up beside them. */
+  .versions { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .3rem; }
+  .versions li { display: grid; grid-template-columns: 6.5rem 1fr; align-items: baseline; gap: .6rem; font-size: .6875rem; }
+  .versions .vk { color: var(--ink-45); }
+  .versions .vv { font-family: var(--mono); color: var(--ink-70); font-variant-numeric: tabular-nums; }
+  .versions .mono { letter-spacing: .02em; }
+
   .unlock { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink-70); }
   .unlock b { color: var(--accent); }
 

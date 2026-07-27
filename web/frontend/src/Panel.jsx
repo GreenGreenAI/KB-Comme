@@ -368,8 +368,17 @@ function Compliance({ result }) {
   );
 }
 
+const SNAPSHOT_LABELS = {
+  ECOS_USD_KRW: "환율 스냅샷",
+  KNOWLEDGE_SOURCES: "출처 검증",
+};
+
 function Evidence({ result }) {
   const market = result.evidence.find((item) => item.role === "market_data");
+  const versions = result.calculation_versions ?? {};
+  const rulepacks = (versions.knowledge_files ?? []).filter(
+    (item) => item.role === "rulepack"
+  );
   return (
     <section className="sec">
       <div className="sec-head">
@@ -386,8 +395,34 @@ function Evidence({ result }) {
             <b>해시</b> {market.content_hash?.slice(0, 20)}… ·{" "}
           </>
         )}
-        <b>계산 버전</b> {result.calculation_versions.formula_version}
+        <b>계산 버전</b> {versions.formula_version}
       </p>
+      <p className="basis">
+        같은 답을 다시 만들어 내려면 아래가 모두 같아야 합니다. 하나라도
+        다르면 재현이 아니라 다른 계산입니다.
+      </p>
+      <ul className="versions">
+        {(versions.snapshots ?? []).map((item) => (
+          <li key={item.source_id}>
+            <span className="vk">{SNAPSHOT_LABELS[item.source_id] ?? item.source_id}</span>
+            <span className="vv">{item.version}</span>
+          </li>
+        ))}
+        {rulepacks.length > 0 && (
+          <li>
+            <span className="vk">적용 규칙</span>
+            <span className="vv">{rulepacks.length}개 규칙팩</span>
+          </li>
+        )}
+        {versions.input_fingerprint && (
+          <li>
+            <span className="vk">입력 지문</span>
+            <span className="vv mono">
+              {versions.input_fingerprint.replace("sha256:", "").slice(0, 16)}…
+            </span>
+          </li>
+        )}
+      </ul>
       {result.review_required && (
         <p className="unlock">
           <b>검토 필요</b> — {result.review_reasons.join(" / ")}

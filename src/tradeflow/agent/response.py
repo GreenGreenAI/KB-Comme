@@ -15,11 +15,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from tradeflow.agent.orchestrator import Analysis
+from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.runtime.analysis_service import decision_packet_document
-
-FORMULA_VERSION = "exposure.v1+scenario.v1+hedge.v1"
-
 
 def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
@@ -214,15 +211,5 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "skipped": analysis.report.skipped,
         },
         "required_inputs": {"hedge": list(analysis.required_inputs)},
-        "calculation_versions": {
-            "snapshot_version": (
-                analysis.snapshot.version if analysis.snapshot else None
-            ),
-            "formula_version": FORMULA_VERSION,
-            "rule_version": (
-                analysis.decision_packet.schema_version
-                if analysis.decision_packet is not None
-                else None
-            ),
-        },
+        "calculation_versions": analysis.versions.as_dict(),
     }
