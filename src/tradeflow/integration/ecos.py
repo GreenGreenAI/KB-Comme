@@ -17,6 +17,7 @@ import os
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +139,24 @@ def observed_at(payload: dict[str, Any]) -> datetime:
     a freshness check to err in.
     """
     return datetime.combine(observed_date(payload), datetime.min.time(), tzinfo=KST)
+
+
+def to_observations(payload: dict[str, Any]) -> list[tuple[date, Decimal]]:
+    """Turn an ECOS payload into a dated rate series, oldest first.
+
+    Rows ECOS returns without a value are dropped rather than carried forward:
+    a rate the source did not publish is absent, not unchanged (§9.2).
+    """
+    observations: list[tuple[date, Decimal]] = []
+    for row in payload["row"]:
+        raw = (row.get("DATA_VALUE") or "").strip()
+        if not raw:
+            continue
+        observations.append(
+            (datetime.strptime(row["TIME"], "%Y%m%d").date(), Decimal(raw))
+        )
+    observations.sort(key=lambda item: item[0])
+    return observations
 
 
 def collect(

@@ -10,6 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
+# Analysis notebooks only. The library and its tests stay dependency-free so CI
+# runs without installing anything (ADR-0003).
+[project.optional-dependencies]
+analysis = ["jupyter", "matplotlib"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
