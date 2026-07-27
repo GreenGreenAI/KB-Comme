@@ -35,8 +35,11 @@
   :root, :root[data-theme="dark"], :root[data-theme="light"] { color-scheme: light; }
 
   * { box-sizing: border-box; }
+  /* The app owns the viewport: nothing outside the thread scrolls, so the
+     page never grows a second scrollbar as the conversation lengthens. */
+  html, body { height: 100%; overflow: hidden; }
   body {
-    margin: 0; min-height: 100vh; color: var(--ink);
+    margin: 0; height: 100%; color: var(--ink);
     font-family: var(--sans); font-size: 15px; line-height: 1.62;
     background:
       radial-gradient(1150px 540px at 20% -10%, var(--wash), transparent 60%),
@@ -187,14 +190,28 @@
   .assurance { margin: 1.6rem 0 0; font-size: .8125rem; color: var(--ink-45); max-width: 33rem; }
 
   /* ================= WORK ================= */
-  .work-wrap {
-    width: min(1180px, calc(100% - 2.5rem)); margin: 1.5rem auto 2rem;
-    display: grid; grid-template-columns: minmax(0, 47fr) minmax(0, 53fr);
-    gap: 1rem; align-items: start;
-  }
-  .col { background: var(--paper); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--lift); }
+  /* 14px nav offset + nav height + the gap under it. Kept as one value so the
+     chat height and the layout stay in step when the nav changes. */
+  :root { --chrome: 104px; }
 
-  .thread { padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+  .chat {
+    width: min(860px, calc(100% - 2.5rem));
+    height: calc(100dvh - var(--chrome));
+    margin: 1.1rem auto 0;
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 16px; box-shadow: var(--lift-lg); overflow: hidden;
+  }
+
+  .thread {
+    flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 1.5rem 1.6rem .4rem;
+    display: flex; flex-direction: column; gap: 1.4rem;
+    scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+  }
+  .thread::-webkit-scrollbar { width: 9px; }
+  .thread::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 99px; border: 3px solid var(--paper); }
+  .composer { flex: none; }
   .turn { display: flex; flex-direction: column; gap: .35rem; }
   .who { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); }
   .turn.agent p { margin: 0; }
@@ -228,6 +245,79 @@
   .composer-box textarea { flex: 1; border: none; background: none; resize: none; outline: none; min-height: 1.6rem; font-size: .9375rem; }
   .composer-box .send { width: 32px; height: 32px; font-size: .9rem; }
   .composer-hint { margin: .55rem 0 0; font-size: .6875rem; color: var(--ink-45); }
+
+
+  /* ---------- the answer, inside the message ---------- */
+  .answer {
+    margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
+    border-radius: 12px; background: var(--wash-2);
+    animation: rise .34s cubic-bezier(.22,.9,.3,1);
+  }
+  .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
+  .figrow > div { min-width: 0; }
+  .figrow dt { font-size: .6875rem; color: var(--ink-45); }
+  .figrow dd {
+    margin: .1rem 0 0; font-family: var(--mono); font-size: 1.2rem;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em; white-space: nowrap;
+  }
+  .figrow dd small { font-size: .625rem; color: var(--ink-45); }
+  .figrow dd.alarm { color: var(--accent); }
+  .answer-note { margin: .6rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.6; }
+  .answer-note b { color: var(--accent); font-weight: 600; }
+
+  /* rate band */
+  .rate { margin-top: .9rem; padding-top: .8rem; border-top: 1px dashed var(--rule); }
+  .rate-track { position: relative; height: 12px; border-radius: 99px; background: var(--tint); overflow: hidden; }
+  .rate-fill { position: absolute; top: 0; bottom: 0; background: var(--tint-strong); }
+  .rate-now { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .rate-be { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--accent); }
+  .rate-legend {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: .35rem 0 0; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
+    font-variant-numeric: tabular-nums;
+  }
+  .rate-legend b { color: var(--ink); font-size: .75rem; }
+
+  .folds { margin-top: .85rem; display: grid; gap: .1rem; }
+  .folds .fold { margin: 0; border-top: 1px dashed var(--rule); padding-top: .45rem; }
+  .folds .fold + .fold { margin-top: .25rem; }
+
+  /* ---------- thinking ---------- */
+  .thinking { animation: rise .22s ease; }
+  .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }
+  .dots { display: inline-flex; gap: 3px; }
+  .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse 1.25s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: .16s; }
+  .dots i:nth-child(3) { animation-delay: .32s; }
+
+  /* ---------- motion ---------- */
+  /* Motion moves things; it never decides whether they are visible.
+     A CSS animation that is applied but not advancing — a hidden tab does
+     exactly that — holds its opening frame indefinitely. An entry animation
+     starting at `opacity: 0` therefore hides the whole conversation until the
+     tab comes back, which is a real state this app was in. So nothing here
+     animates opacity or size on content: only position, whose opening frame
+     is a few pixels off and still perfectly readable.
+
+     The rate band is deliberately not animated at all. Its width is the data,
+     and a width that arrives late is a figure that was briefly wrong. */
+  @keyframes rise { from { transform: translateY(8px); } to { transform: none; } }
+  @keyframes pulse { 0%, 60%, 100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+
+  .turn { animation: rise .3s cubic-bezier(.22,.9,.3,1); }
+
+  .choice, .quick button, .slotline button { transition: transform .12s ease, border-color .15s ease, background .15s ease, color .15s ease; }
+  .choice:active, .quick button:active { transform: scale(.97); }
+  .send { transition: transform .12s ease, background .15s ease; }
+  .send:active:not(:disabled) { transform: scale(.92); }
+  .fold > summary { transition: color .15s ease; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important; scroll-behavior: auto !important;
+    }
+  }
 
   /* panel */
   .panel { padding: 1.1rem 1.3rem 1.6rem; display: flex; flex-direction: column; gap: .8rem; }
