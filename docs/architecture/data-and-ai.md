@@ -64,3 +64,8 @@ source ID로 연결한다.
 LLM은 패킷을 설명하는 표현 계층이다. 판단 상태와 수치를 바꾸거나 패킷 밖의 근거를
 추가할 수 없으며, 구조화된 `SynthesisResult`가 결정론 검증을 통과한 경우에만
 사용자 응답으로 승격할 수 있다.
+
+외부 채널은 파일 경로나 원문 payload를 파이프라인에 직접 전달하지 않는다.
+`AnalysisService`가 데이터셋 ID와 스냅샷 버전을 레지스트리 경로로 해석하고
+source·hash·schema·freshness를 검증한 뒤 `DecisionPacket`을 만든다. API 직렬화는
+Decimal을 문자열로 보존하며, 이 단계에도 LLM은 개입하지 않는다.
