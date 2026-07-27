@@ -81,7 +81,13 @@ export default function App() {
         setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
         setResult(data.result);
         setPending(null);
-        say({ who: "agent", kind: "result", result: data.result });
+        say({
+          who: "agent",
+          kind: "result",
+          result: data.result,
+          heard: data.understood ?? {},
+          spoken: Boolean(utterance),
+        });
       } else {
         setPending(data);
         say({ who: "agent", kind: "ask", ask: data });

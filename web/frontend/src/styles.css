@@ -291,6 +291,24 @@
   .review-head b { color: var(--accent); }
   .review-item { margin: .25rem 0 0; font-size: .8125rem; color: var(--ink-70); line-height: 1.6; }
 
+  /* A section with nothing to show yet: the reason still appears, on one
+     line, so refusing to guess does not cost a full card of height. */
+  .sec.blocked { padding: .85rem 1.15rem; border-style: dashed; }
+  .blocked-head { display: flex; align-items: baseline; gap: .6rem; margin: 0; flex-wrap: wrap; }
+  .blocked-head .eyebrow { margin: 0; }
+  .blocked-title { font-size: .9375rem; font-weight: 600; color: var(--ink-70); }
+  .blocked-head .state { margin-left: auto; }
+  .blocked-why { margin: .3rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.65; }
+
+  /* Reference material: present when checked for, folded when reading. */
+  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
+  .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform .15s ease; }
+  .fold[open] > summary::before { transform: rotate(90deg); }
+  .fold > summary:hover { color: var(--accent); }
+  .fold-note { margin: .5rem 0 0; font-size: .6875rem; color: var(--ink-45); line-height: 1.6; }
+
   .unlock { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink-70); }
   .unlock b { color: var(--accent); }
 

@@ -248,24 +248,37 @@ function Market({ market, hedge }) {
   );
 }
 
+/** A section that has nothing to show yet.
+ *
+ *  It still has to say why — a silently absent card would read as "no hedge
+ *  needed" rather than "we refused to guess". But a full card header for one
+ *  sentence spent 920px on 66 characters, so the reason is stated on one line
+ *  and the space goes to the sections that have something in them. */
+function Blocked({ eyebrow, title, state, reason, id }) {
+  return (
+    <section className="sec blocked" id={id}>
+      <p className="blocked-head">
+        <span className="eyebrow">{eyebrow}</span>
+        <span className="blocked-title">{title}</span>
+        <span className="state need">{state}</span>
+      </p>
+      <p className="blocked-why">{reason}</p>
+    </section>
+  );
+}
+
 function Hedge({ hedge, reason, requiredInputs }) {
   if (!hedge) {
     return (
-      <section className="sec locked">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">손익 · 헤지</p>
-            <h3>얼마나 헤지하면 되나?</h3>
-          </div>
-          <span className="state need">
-            {requiredInputs.length > 0 ? "입력 필요" : "검토 필요"}
-          </span>
-        </div>
-        <p className="unlock">
-          {reason ??
-            "검증된 헤지 수단과 가격 정보가 준비되면 손익 비교를 계산합니다."}
-        </p>
-      </section>
+      <Blocked
+        eyebrow="손익 · 헤지"
+        title="얼마나 헤지하면 되나?"
+        state={requiredInputs.length > 0 ? "입력 필요" : "검토 필요"}
+        reason={
+          reason ??
+          "검증된 헤지 수단과 가격 정보가 준비되면 손익 비교를 계산합니다."
+        }
+      />
     );
   }
 
@@ -394,25 +407,17 @@ function Compliance({ result }) {
   const completed = result?.workers?.completed?.includes("compliance");
 
   return (
-    <section className={`sec ${completed ? "" : "locked"}`} id="sec-compliance">
-      <div className="sec-head">
-        <div>
-          <p className="eyebrow">규제</p>
-          <h3>해야 할 신고가 있나?</h3>
-        </div>
-        <span className={`state ${completed ? "done" : "need"}`}>
-          {completed ? "규칙 판정 완료" : "대기 중"}
-        </span>
-      </div>
-      {completed ? (
-        <p className="unlock">
-          검토 항목 {findings.length}건 · 실행 의무 후보 {obligations.length}건.
-          정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.
-        </p>
-      ) : (
-        <p className="unlock">거래 정보가 준비되면 역할 A 규칙으로 판정합니다.</p>
-      )}
-    </section>
+    <Blocked
+      id="sec-compliance"
+      eyebrow="규제"
+      title="해야 할 신고가 있나?"
+      state={completed ? "규칙 판정 완료" : "대기 중"}
+      reason={
+        completed
+          ? `검토 항목 ${findings.length}건 · 실행 의무 후보 ${obligations.length}건. 정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.`
+          : "거래 정보가 준비되면 역할 A 규칙으로 판정합니다."
+      }
+    />
   );
 }
 
@@ -476,38 +481,47 @@ function Evidence({ result }) {
       <p className="basis" style={{ borderTop: "none", paddingTop: 0 }}>
         {market && (
           <>
-            <b>환율</b> 한국은행 ECOS · <b>스냅샷</b> {market.version} ·{" "}
-            <b>해시</b> {market.content_hash?.slice(0, 20)}… ·{" "}
+            <b>환율</b> 한국은행 ECOS · <b>계산</b> {versions.formula_version} ·{" "}
           </>
         )}
-        <b>계산 버전</b> {versions.formula_version}
+        <b>규칙</b> {rulepacks.length}개 규칙팩
       </p>
-      <p className="basis">
-        같은 답을 다시 만들어 내려면 아래가 모두 같아야 합니다. 하나라도
-        다르면 재현이 아니라 다른 계산입니다.
-      </p>
-      <ul className="versions">
-        {(versions.snapshots ?? []).map((item) => (
-          <li key={item.source_id}>
-            <span className="vk">{SNAPSHOT_LABELS[item.source_id] ?? item.source_id}</span>
-            <span className="vv">{item.version}</span>
-          </li>
-        ))}
-        {rulepacks.length > 0 && (
-          <li>
-            <span className="vk">적용 규칙</span>
-            <span className="vv">{rulepacks.length}개 규칙팩</span>
-          </li>
-        )}
-        {versions.input_fingerprint && (
-          <li>
-            <span className="vk">입력 지문</span>
-            <span className="vv mono">
-              {versions.input_fingerprint.replace("sha256:", "").slice(0, 16)}…
-            </span>
-          </li>
-        )}
-      </ul>
+
+      {/* The full input identity is what a replay has to match, but it is
+          reference material — open when someone is checking, folded when they
+          are reading the answer. */}
+      <details className="fold">
+        <summary>재현에 필요한 입력</summary>
+        <ul className="versions">
+          {(versions.snapshots ?? []).map((item) => (
+            <li key={item.source_id}>
+              <span className="vk">
+                {SNAPSHOT_LABELS[item.source_id] ?? item.source_id}
+              </span>
+              <span className="vv">{item.version}</span>
+            </li>
+          ))}
+          {rulepacks.map((item) => (
+            <li key={item.path}>
+              <span className="vk">규칙팩</span>
+              <span className="vv">{item.path.split("/").pop()}</span>
+            </li>
+          ))}
+          {versions.input_fingerprint && (
+            <li>
+              <span className="vk">입력 지문</span>
+              <span className="vv mono">
+                {versions.input_fingerprint.replace("sha256:", "").slice(0, 16)}…
+              </span>
+            </li>
+          )}
+        </ul>
+        <p className="fold-note">
+          이 넷이 모두 같아야 같은 답이 나옵니다. 하나라도 다르면 재현이 아니라
+          다른 계산입니다.
+        </p>
+      </details>
+
       {result.review_required && <ReviewReasons reasons={result.review_reasons} />}
     </section>
   );
