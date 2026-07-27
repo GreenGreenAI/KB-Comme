@@ -128,7 +128,10 @@ def _profit_at(
 ) -> float:
     unhedged = (1.0 - ratio) * (rate - spot)
     hedged = ratio * (contract_rate - spot)
-    cost = cost_rate * ratio * exposure * spot
+    # A fee is charged on notional regardless of whether the exposure is a
+    # receipt or a payment. The exposure sign controls FX payoff direction,
+    # never whether a cost is added or deducted.
+    cost = cost_rate * ratio * abs(exposure) * spot
     return baseline_profit + exposure * (unhedged + hedged) - cost
 
 
@@ -174,7 +177,10 @@ def analyze_hedge(
     favourable = spot * math.exp(direction * z * scaled_volatility)
 
     intercept = baseline + exposure * (adverse - spot)
-    slope = exposure * ((contract - spot) - (adverse - spot) - cost * spot)
+    slope = (
+        exposure * ((contract - spot) - (adverse - spot))
+        - cost * abs(exposure) * spot
+    )
 
     if intercept >= floor:
         optimal: float | None = 0.0
@@ -256,31 +262,36 @@ def breakeven(
         raise ExposureDirectionError(
             "a breakeven rate is undefined for zero net exposure"
         )
+    if spot_rate <= 0:
+        raise ValueError(f"spot_rate must be positive, got {spot_rate}")
+    if scaled_volatility < 0:
+        raise ValueError(
+            f"scaled_volatility must not be negative, got {scaled_volatility}"
+        )
 
     exposure = float(net_exposure)
     spot = float(spot_rate)
     rate = spot - float(baseline_profit) / exposure
 
     if rate <= 0:
-        # No positive rate turns this position negative.
-        return BreakevenAnalysis(rate=None, loss_probability=0.0)
-    if scaled_volatility <= 0:
+        # The algebraic threshold sits outside the positive-rate support. A
+        # receipt is then always safe; a payment is already loss-making at
+        # every possible positive rate.
+        probability = 0.0 if exposure > 0 else 1.0
+        return BreakevenAnalysis(rate=None, loss_probability=probability)
+    if scaled_volatility == 0:
+        # With a point-mass rate distribution, unhedged profit at spot is
+        # exactly baseline_profit. The event is strictly profit < 0, so zero
+        # profit is not a loss.
         return BreakevenAnalysis(
             rate=_rate(rate),
-            loss_probability=0.0 if _profit_is_safe(exposure, spot, rate) else 1.0,
+            loss_probability=1.0 if baseline_profit < 0 else 0.0,
         )
 
     standardized = math.log(rate / spot) / scaled_volatility
     below = NormalDist().cdf(standardized)
     probability = below if exposure > 0 else 1.0 - below
     return BreakevenAnalysis(rate=_rate(rate), loss_probability=probability)
-
-
-def _profit_is_safe(exposure: float, spot: float, breakeven_rate: float) -> bool:
-    """Whether the spot sits on the profitable side of the breakeven."""
-    return spot > breakeven_rate if exposure > 0 else spot < breakeven_rate
-
-
 def usable_ratio_bounds() -> tuple[float, float]:
     """The hard constraint the optimizer never leaves (§5.3)."""
     return (0.0, 1.0)

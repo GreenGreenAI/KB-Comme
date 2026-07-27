@@ -174,6 +174,36 @@ class ComparisonTests(unittest.TestCase):
 
         self.assertEqual(1, len(profits))
 
+    def test_importer_cost_is_deducted_from_profit(self) -> None:
+        full = analyze_hedge(_measure(), **IMPORTER).comparison[-1]
+        expected = (
+            IMPORTER["baseline_profit"]
+            - Decimal("0.004")
+            * abs(IMPORTER["net_exposure"])
+            * IMPORTER["spot_rate"]
+        )
+
+        self.assertEqual(expected.quantize(Decimal("1")), full.at("median").profit)
+
+    def test_importer_optimal_ratio_uses_absolute_notional_for_cost(self) -> None:
+        floor = Decimal("15000000")
+        analysis = analyze_hedge(
+            _measure(), **IMPORTER, profit_floor=floor
+        )
+        exposure = float(IMPORTER["net_exposure"])
+        spot = float(IMPORTER["spot_rate"])
+        baseline = float(IMPORTER["baseline_profit"])
+        cost = 0.004
+        adverse = spot * math.exp(z_one_sided(0.05) * IMPORTER["scaled_volatility"])
+        intercept = baseline + exposure * (adverse - spot)
+        expected_slope = (
+            exposure * (float(_measure().contract_rate) - adverse)
+            - cost * abs(exposure) * spot
+        )
+        expected = (float(floor) - intercept) / expected_slope
+
+        self.assertAlmostEqual(expected, analysis.optimal_ratio, places=6)
+
     def test_result_carries_the_basis_needed_to_read_it(self) -> None:
         analysis = analyze_hedge(_measure(), **EXPORTER)
 
@@ -240,6 +270,37 @@ class BreakevenTests(unittest.TestCase):
 
         self.assertIsNone(result.rate)
         self.assertEqual(0.0, result.loss_probability)
+
+    def test_payer_already_in_loss_is_certain_to_remain_in_loss(self) -> None:
+        result = breakeven(
+            net_exposure=Decimal("-100000"),
+            spot_rate=Decimal("1400.00"),
+            baseline_profit=Decimal("-200000000"),
+            scaled_volatility=0.05,
+        )
+
+        self.assertIsNone(result.rate)
+        self.assertEqual(1.0, result.loss_probability)
+
+    def test_zero_volatility_at_zero_profit_is_not_a_loss(self) -> None:
+        result = breakeven(
+            net_exposure=Decimal("100000"),
+            spot_rate=Decimal("1400.00"),
+            baseline_profit=Decimal("0"),
+            scaled_volatility=0.0,
+        )
+
+        self.assertEqual(Decimal("1400.00"), result.rate)
+        self.assertEqual(0.0, result.loss_probability)
+
+    def test_negative_volatility_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            breakeven(
+                net_exposure=Decimal("100000"),
+                spot_rate=Decimal("1400.00"),
+                baseline_profit=Decimal("20000000"),
+                scaled_volatility=-0.01,
+            )
 
     def test_zero_exposure_is_refused(self) -> None:
         with self.assertRaises(ExposureDirectionError):
