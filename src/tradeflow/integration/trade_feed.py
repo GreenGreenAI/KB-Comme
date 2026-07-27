@@ -59,6 +59,8 @@ def parse_trade_feed(payload: Any) -> TradeFeedBatch:
 class JsonTradeFeedAdapter:
     """Read an HTTPS JSON feed using an optional bearer token."""
 
+    adapter_key = "json_trade_feed"
+
     def __init__(
         self,
         *,

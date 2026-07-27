@@ -39,6 +39,25 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 
 ## 구현된 경계
 
+### 선언형 데이터 레지스트리
+
+운영 데이터셋은 `data/dataset_registry.json`에 등록한다. 각 항목은 다음
+계약을 한곳에서 관리한다.
+
+| 필드 | 의미 |
+|---|---|
+| `dataset_id`, `source_id` | 데이터셋과 원천의 안정적인 식별자 |
+| `kind` | `trade_feed`, `fx_series` 등 정규화 결과 종류 |
+| `adapter_key`, `parser_key` | 수집 객체와 해석 객체의 명시적 선택 |
+| `payload_schema_version` | 파서가 지원해야 하는 입력 계약 버전 |
+| `freshness` | 관측·취득시각 기준 사용 가능 SLA |
+| `storage_scope`, `storage_root` | 공개 재현 데이터와 비공개 고객 데이터 분리 |
+
+`DatasetRegistry`와 `ParserRegistry`는 네트워크를 사용하지 않는 domain
+객체다. `AdapterRegistry`는 integration leaf에서만 사용하며 등록 시
+definition의 source ID와 adapter key가 실제 객체와 일치하는지 확인한다.
+API 키, bearer token, 고객 endpoint는 레지스트리에 저장하지 않는다.
+
 ### `EcosFxAdapter`
 
 - 공식 USD/KRW 일별 시계열을 가져온다.

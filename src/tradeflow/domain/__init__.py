@@ -1,5 +1,10 @@
 """TradeFlow domain types."""
 
+from tradeflow.domain.dataset_registry import (
+    DatasetDefinition,
+    DatasetRegistry,
+    ParserRegistry,
+)
 from tradeflow.domain.enums import (
     DecisionCategory,
     DecisionStatus,
@@ -17,7 +22,10 @@ __all__ = [
     "CompanyProfile",
     "DecisionCategory",
     "DecisionStatus",
+    "DatasetDefinition",
+    "DatasetRegistry",
     "PaymentMethod",
+    "ParserRegistry",
     "RecommendedAction",
     "TradeCase",
     "TradeDirection",

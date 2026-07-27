@@ -19,7 +19,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
 
@@ -173,6 +173,7 @@ class EcosFxAdapter:
 
     api_key: str | None = field(default=None, repr=False)
     source_id: str = SOURCE_ID
+    adapter_key: ClassVar[str] = "ecos_fx"
 
     def fetch(self, start: str, end: str) -> dict[str, Any]:
         return fetch_rates(start, end, api_key=self.api_key or load_api_key())

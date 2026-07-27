@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "datasets": [
+    {
+      "dataset_id": "ECOS_USD_KRW_DAILY",
+      "source_id": "ECOS_USD_KRW",
+      "kind": "fx_series",
+      "adapter_key": "ecos_fx",
+      "parser_key": "ecos_usd_krw_v1",
+      "payload_schema_version": "1.0",
+      "storage_scope": "committed_public",
+      "storage_root": "data/snapshots",
+      "freshness": {
+        "max_observation_age_seconds": 604800,
+        "max_retrieval_age_seconds": null
+      }
+    },
+    {
+      "dataset_id": "ERP_TRADE_FEED_V1",
+      "source_id": "ERP_TRADE_FEED",
+      "kind": "trade_feed",
+      "adapter_key": "json_trade_feed",
+      "parser_key": "trade_feed_v1",
+      "payload_schema_version": "1.0",
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 86400,
+        "max_retrieval_age_seconds": 86400
+      }
+    }
+  ]
+}

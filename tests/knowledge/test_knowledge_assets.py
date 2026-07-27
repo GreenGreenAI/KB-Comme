@@ -3,6 +3,7 @@ import unittest
 from datetime import date, datetime
 from pathlib import Path
 
+from tradeflow.domain.dataset_registry import DatasetRegistry, StorageScope
 from tradeflow.domain.enums import DecisionStatus, Freshness
 from tradeflow.domain.snapshot_file import content_hash
 from tradeflow.knowledge.repository import KnowledgeRepository
@@ -54,6 +55,16 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
                 self.assertEqual(source["source_id"], extract["source_id"])
                 self.assertEqual(source["url"], extract["document"]["official_url"])
                 self.assertEqual(source["content_hash"], content_hash(extract))
+
+    def test_public_datasets_reference_governed_sources(self) -> None:
+        datasets = DatasetRegistry.from_json(
+            PROJECT_ROOT / "data" / "dataset_registry.json"
+        )
+
+        for definition in datasets.definitions.values():
+            if definition.storage_scope is StorageScope.COMMITTED_PUBLIC:
+                self.assertIn(definition.source_id, self.sources)
+                self.assertTrue(self.sources[definition.source_id]["verified"])
 
     def test_fx_rules_use_the_verified_current_regulatory_chain(self) -> None:
         current = self.sources["FX_TRANSACTION_REGULATION_2026_88"]

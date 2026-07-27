@@ -4,18 +4,20 @@ import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from tradeflow.domain.datasets import (
-    read_trade_feed_snapshot,
-    trade_program_from_snapshot,
+from tradeflow.domain.dataset_registry import (
+    DatasetRegistry,
+    default_parser_registry,
 )
+from tradeflow.domain.datasets import trade_program_from_snapshot
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.domain.snapshot import FreshnessPolicy
 from tradeflow.domain.snapshot_file import latest_snapshot_path
+from tradeflow.integration.registry import AdapterRegistry
 from tradeflow.integration.trade_feed import JsonTradeFeedAdapter
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 
 KST = timezone(timedelta(hours=9))
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class _Response:
@@ -63,17 +65,23 @@ class RuntimeDataFlowTests(unittest.TestCase):
             source_id="ERP_TRADE_FEED",
             opener=lambda request, timeout: _Response(payload),
         )
+        datasets = DatasetRegistry.from_json(
+            ROOT / "data" / "dataset_registry.json"
+        )
+        adapters = AdapterRegistry(datasets)
+        adapters.register("ERP_TRADE_FEED_V1", adapter)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            adapter.collect(
+            adapters.get("ERP_TRADE_FEED_V1").collect(
                 root,
                 retrieved_at=datetime(2026, 7, 27, 9, 1, tzinfo=KST),
             )
             path = latest_snapshot_path(root, "ERP_TRADE_FEED")
-            dataset = read_trade_feed_snapshot(
+            dataset = datasets.read_snapshot(
+                "ERP_TRADE_FEED_V1",
                 path,
-                freshness_policy=FreshnessPolicy(timedelta(hours=1)),
+                parsers=default_parser_registry(),
                 evaluated_at=datetime(2026, 7, 27, 9, 30, tzinfo=KST),
             )
             program = trade_program_from_snapshot(
