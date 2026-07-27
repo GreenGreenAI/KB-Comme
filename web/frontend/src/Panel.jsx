@@ -1,4 +1,15 @@
+import { Fragment } from "react";
+
 import { won, pct } from "./api.js";
+
+/** Mirrors tools/intent.DEFAULT_ORDER, used until a response arrives. */
+const DEFAULT_ORDER = [
+  "exposure",
+  "market_scenario",
+  "hedge",
+  "support",
+  "compliance",
+];
 
 /** The living document. Sections fill in as the conversation supplies what
  *  they need, and a locked section states what would unlock it — that is the
@@ -8,6 +19,7 @@ export default function Panel({ result, pending, facts }) {
   const market = result?.market_scenario;
   const hedge = result?.hedge_analysis;
   const completed = result?.workers?.completed ?? [];
+  const order = result?.execution_plan?.section_order ?? DEFAULT_ORDER;
 
   const sections = [
     Boolean(cash),
@@ -52,15 +64,29 @@ export default function Panel({ result, pending, facts }) {
       {result?.trade_timeline?.length > 0 && (
         <Understanding cases={result.trade_timeline} />
       )}
-      {cash && <Cashflow cash={cash} />}
-      {market && <Market market={market} hedge={hedge} />}
-      <Hedge
-        hedge={hedge}
-        reason={result?.workers?.skipped?.hedge}
-        requiredInputs={result?.required_inputs?.hedge ?? []}
-      />
-      <Support result={result} />
-      <Compliance result={result} />
+
+      {/* §4.2[2]'s third input, applied. The question moves a section to the
+          front; it never removes one, so a reader who asked about the rate
+          still meets their filing duty further down. Input confirmation stays
+          first regardless — every section below it rests on that reading. */}
+      {order.map((section) => {
+        const card = {
+          exposure: cash ? <Cashflow cash={cash} /> : null,
+          market_scenario: market ? (
+            <Market market={market} hedge={hedge} />
+          ) : null,
+          hedge: (
+            <Hedge
+              hedge={hedge}
+              reason={result?.workers?.skipped?.hedge}
+              requiredInputs={result?.required_inputs?.hedge ?? []}
+            />
+          ),
+          support: <Support result={result} />,
+          compliance: <Compliance result={result} />,
+        }[section];
+        return card ? <Fragment key={section}>{card}</Fragment> : null;
+      })}
 
       {result && <Evidence result={result} />}
     </aside>

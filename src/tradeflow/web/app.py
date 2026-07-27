@@ -206,6 +206,7 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
         snapshot_root=SNAPSHOT_ROOT,
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
+        utterance=request.utterance,
     )
     return {
         "status": "ready",

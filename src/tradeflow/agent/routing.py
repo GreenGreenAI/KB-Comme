@@ -26,6 +26,7 @@ from typing import Any, Mapping
 
 from tradeflow.domain.enums import TradeDirection
 from tradeflow.domain.models import CurrencyExposure, TradeProgram
+from tradeflow.tools.intent import describe
 
 #: The trade structures §5.5's rules are about. Every one of the nineteen
 #: filing rules is gated on one of these.
@@ -102,6 +103,8 @@ class ExecutionPlan:
     """§4.2[2]'s output: the workers to call, and why the rest were not."""
 
     decisions: tuple[WorkerDecision, ...]
+    #: §4.2[2]'s third input. It is carried, not applied: see plan_execution.
+    intent: tuple[str, ...] = ()
 
     def runs(self, name: str) -> bool:
         return any(item.name == name and item.run for item in self.decisions)
@@ -129,6 +132,7 @@ class ExecutionPlan:
         return {
             "workers": [item.as_dict() for item in self.decisions],
             "planned": [item.name for item in self.decisions if item.run],
+            **describe(self.intent),
         }
 
 
@@ -208,11 +212,18 @@ def plan_execution(
     baseline_profit: Decimal | None = None,
     profit_floor: Decimal | None = None,
     has_usable_measure: bool = False,
+    intent: tuple[str, ...] = (),
 ) -> ExecutionPlan:
     """Build the call plan from §4.2[2]'s routing table.
 
     Exposure is not in the plan: it has already run, because every other
     decision here reads its result.
+
+    `intent` — §4.2[2]'s third input — is recorded and never subtracts from the
+    plan. A question about the exchange rate does not stop this company having
+    a filing duty, and a plan narrowed to what was asked would be the one shape
+    of answer §2's user cannot benefit from: they came not knowing what to ask.
+    What intent does change is the order the answer is read in (tools/intent).
     """
     decisions: list[WorkerDecision] = [
         WorkerDecision(EXPOSURE, True),
@@ -231,7 +242,7 @@ def plan_execution(
             has_usable_measure=has_usable_measure,
         )
     )
-    return ExecutionPlan(tuple(decisions))
+    return ExecutionPlan(tuple(decisions), intent=tuple(intent))
 
 
 def _support(company_facts: Mapping[str, Any] | None) -> WorkerDecision:

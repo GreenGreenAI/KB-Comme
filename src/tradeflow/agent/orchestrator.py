@@ -46,6 +46,7 @@ from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
+from tradeflow.tools.intent import read_intent
 from tradeflow.tools.source_freshness import load_source_verification
 from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
 
@@ -225,6 +226,7 @@ def analyze(
     profit_floor: Decimal | None = None,
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
+    utterance: str | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -250,6 +252,7 @@ def analyze(
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
         has_usable_measure=bool(usable_measures(hedge_measures)),
+        intent=read_intent(utterance),
     )
     report.skipped.update(plan.skipped())
 
