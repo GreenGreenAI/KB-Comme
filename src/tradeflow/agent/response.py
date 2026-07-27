@@ -211,5 +211,9 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "skipped": analysis.report.skipped,
         },
         "required_inputs": {"hedge": list(analysis.required_inputs)},
+        # §4.2[2]'s output. A reader can see which workers were called and, for
+        # the rest, what would call them — so an empty section is never left to
+        # be read as "nothing to report".
+        "execution_plan": analysis.plan.as_dict(),
         "calculation_versions": analysis.versions.as_dict(),
     }
