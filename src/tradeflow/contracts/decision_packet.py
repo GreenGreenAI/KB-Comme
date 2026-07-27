@@ -72,6 +72,7 @@ class PacketDecision:
 class PacketAction:
     subject_id: str | None
     rule_ids: tuple[str, ...]
+    product_ids: tuple[str, ...]
     authority: str | None
     action: str
     timing: str | None
@@ -128,7 +129,7 @@ class DecisionPacket:
             packet_id=(
                 f"decision:{result.program_id}:{as_of.isoformat()}:{fingerprint[:16]}"
             ),
-            schema_version="1.3",
+            schema_version="1.4",
             program_id=result.program_id,
             as_of=as_of,
             inputs=tuple(
@@ -308,6 +309,7 @@ def _freeze_action(action: RecommendedAction) -> PacketAction:
     return PacketAction(
         subject_id=action.subject_id,
         rule_ids=action.rule_ids,
+        product_ids=action.product_ids,
         authority=action.authority,
         action=action.action,
         timing=action.timing,

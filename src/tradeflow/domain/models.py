@@ -255,6 +255,7 @@ class RecommendedAction:
 
     subject_id: str | None
     rule_ids: tuple[str, ...]
+    product_ids: tuple[str, ...]
     authority: str | None
     action: str
     timing: str | None
@@ -270,6 +271,8 @@ class RecommendedAction:
             raise ValueError("an action must reference at least one rule")
         if len(set(self.rule_ids)) != len(self.rule_ids):
             raise ValueError("action rule_ids must not contain duplicates")
+        if len(set(self.product_ids)) != len(self.product_ids):
+            raise ValueError("action product_ids must not contain duplicates")
         if not self.action:
             raise ValueError("action name must not be empty")
 

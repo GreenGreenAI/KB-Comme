@@ -87,7 +87,7 @@ class DecisionPacketTests(unittest.TestCase):
         )
 
     def test_pipeline_builds_versioned_immutable_packet(self) -> None:
-        self.assertEqual("1.3", self.packet.schema_version)
+        self.assertEqual("1.4", self.packet.schema_version)
         currencies = next(
             item.value
             for item in self.packet.inputs

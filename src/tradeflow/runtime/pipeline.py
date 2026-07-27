@@ -336,6 +336,11 @@ class TradeFlowPipeline:
                 RecommendedAction(
                     subject_id=decision.subject_id,
                     rule_ids=(decision.rule_id,),
+                    product_ids=(
+                        (outcome["product_id"],)
+                        if isinstance(outcome.get("product_id"), str)
+                        else ()
+                    ),
                     authority=outcome.get("authority"),
                     action=action_name,
                     timing=outcome.get("timing"),
@@ -361,6 +366,7 @@ class TradeFlowPipeline:
                 action.action,
                 action.timing,
                 action.deadline,
+                action.product_ids,
             )
             existing_index = next(
                 (
@@ -372,6 +378,7 @@ class TradeFlowPipeline:
                         item.action,
                         item.timing,
                         item.deadline,
+                        item.product_ids,
                     )
                     == key
                 ),
@@ -385,6 +392,9 @@ class TradeFlowPipeline:
                 subject_id=existing.subject_id,
                 rule_ids=tuple(
                     dict.fromkeys((*existing.rule_ids, *action.rule_ids))
+                ),
+                product_ids=tuple(
+                    dict.fromkeys((*existing.product_ids, *action.product_ids))
                 ),
                 authority=existing.authority,
                 action=existing.action,

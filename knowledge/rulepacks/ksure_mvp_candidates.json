@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "pack_id": "KSURE_MVP_CANDIDATES",
   "as_of": "2026-07-27",
   "status": "draft",
@@ -50,7 +50,10 @@
       ],
       "candidate_outcome": {
         "kind": "support_candidate",
-        "product_id": "ksure_fx_insurance_general_export"
+        "product_id": "ksure_fx_insurance_general_export",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_application"
       },
       "effective_from": null,
       "effective_to": null,
@@ -117,7 +120,10 @@
       ],
       "candidate_outcome": {
         "kind": "support_candidate",
-        "product_id": "ksure_short_term_export_postshipment_individual"
+        "product_id": "ksure_short_term_export_postshipment_individual",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_shipment_or_credit_limit_request"
       },
       "effective_from": null,
       "effective_to": null,
@@ -179,7 +185,10 @@
       ],
       "candidate_outcome": {
         "kind": "support_candidate",
-        "product_id": "ksure_export_credit_guarantee_preshipment"
+        "product_id": "ksure_export_credit_guarantee_preshipment",
+        "authority": "ksure_and_financial_institution",
+        "action": "consult_and_apply_for_preshipment_guarantee",
+        "timing": "before_financing_application"
       },
       "effective_from": null,
       "effective_to": null,
