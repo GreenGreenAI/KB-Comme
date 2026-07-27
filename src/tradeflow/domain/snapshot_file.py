@@ -30,6 +30,10 @@ class SnapshotIntegrityError(RuntimeError):
     """Raised when a stored payload no longer matches its recorded hash."""
 
 
+class SnapshotNotFoundError(FileNotFoundError):
+    """Raised when a source has no stored snapshot."""
+
+
 def canonical_json(payload: Any) -> str:
     """Serialize a payload so that equal payloads always hash equally."""
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -61,7 +65,8 @@ def read_snapshot(path: Path | str) -> tuple[SnapshotRef, Any]:
     otherwise produce a different result under the same version, which is the
     one thing a version exists to rule out (§9.1).
     """
-    envelope = json.loads(Path(path).read_text(encoding="utf-8"))
+    path = Path(path)
+    envelope = json.loads(path.read_text(encoding="utf-8"))
     payload = envelope["payload"]
 
     recorded = envelope["content_hash"]
@@ -79,4 +84,47 @@ def read_snapshot(path: Path | str) -> tuple[SnapshotRef, Any]:
         retrieved_at=datetime.fromisoformat(envelope["retrieved_at"]),
         content_hash=recorded,
     )
+    expected_name = f"{safe_segment(ref.version, 'version')}.json"
+    expected_parent = safe_segment(ref.source_id, "source_id")
+    if path.name != expected_name or path.parent.name != expected_parent:
+        raise SnapshotIntegrityError(
+            f"{path}: path identity does not match "
+            f"{ref.source_id}@{ref.version}"
+        )
     return ref, payload
+
+
+def list_snapshot_refs(
+    root: Path | str,
+    source_id: str,
+) -> tuple[tuple[Path, SnapshotRef], ...]:
+    """Read and order all snapshots for a source by what they observed."""
+    directory = Path(root) / safe_segment(source_id, "source_id")
+    if not directory.is_dir():
+        return ()
+    snapshots: list[tuple[Path, SnapshotRef]] = []
+    for path in directory.glob("*.json"):
+        ref, _ = read_snapshot(path)
+        if ref.source_id != source_id:
+            raise SnapshotIntegrityError(
+                f"{path}: expected source_id {source_id!r}, got {ref.source_id!r}"
+            )
+        snapshots.append((path, ref))
+    return tuple(
+        sorted(
+            snapshots,
+            key=lambda item: (
+                item[1].observed_at,
+                item[1].retrieved_at,
+                item[1].version,
+            ),
+        )
+    )
+
+
+def latest_snapshot_path(root: Path | str, source_id: str) -> Path:
+    """Return the most recently observed intact snapshot for a source."""
+    snapshots = list_snapshot_refs(root, source_id)
+    if not snapshots:
+        raise SnapshotNotFoundError(f"no snapshot found for {source_id}")
+    return snapshots[-1][0]

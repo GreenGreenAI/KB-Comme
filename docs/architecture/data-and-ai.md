@@ -11,8 +11,25 @@ last-reviewed: 2026-07-27
 
 - 원문 출처와 확인 정보: `knowledge/source_registry.json`
 - 실행 가능한 구조화 규칙: `knowledge/rulepacks/`
-- 거래 입력과 계산 결과: 도메인 모델과 런타임 저장소
+- 공개 기준데이터: 커밋된 `data/snapshots/`와 무결성 검증 리더
+- 고객 거래 입력: Git 제외 `data/runtime/` 또는 암호화된 운영 저장소
+- 정규화 데이터: `TradeFeedData`, `FxSeries`와 `TradeProgram`
 - 설명과 검토 기록: 근거 패킷을 통해 계산 결과와 연결
+
+```text
+공식/ERP API
+  → integration 수집기
+  → 원문 SnapshotRef(source/version/time/hash)
+  → domain 스키마·무결성·최신성 검증
+  → TradeProgram / FxSeries
+  → 결정론 계산·규칙
+  → EvidenceDescriptor
+  → DecisionPacket
+  → LLM 설명
+```
+
+스냅샷이 없거나, 손상되었거나, 스키마가 다르거나, SLA를 넘기면 계산에 진입하지
+않는다. LLM은 이 실패를 보정하거나 누락 데이터를 추정하지 않는다.
 
 ## AI 사용 원칙
 

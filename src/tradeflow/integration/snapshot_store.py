@@ -48,6 +48,8 @@ def build_envelope(
         retrieved_at=retrieved_at,
         content_hash=content_hash(payload),
     )
+    if ref.observed_at > ref.retrieved_at:
+        raise ValueError("observed_at cannot be later than retrieved_at")
     safe_segment(ref.source_id, "source_id")
     safe_segment(ref.version, "version")
     return {

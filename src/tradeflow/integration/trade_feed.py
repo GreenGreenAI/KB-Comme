@@ -13,11 +13,11 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from tradeflow.domain.enums import PaymentMethod, TradeDirection
+from tradeflow.domain.datasets import DatasetContractError, parse_trade_feed_payload
 from tradeflow.domain.models import TradeCase
 from tradeflow.domain.snapshot import require_aware
 from tradeflow.domain.snapshot_file import safe_segment
@@ -41,113 +41,17 @@ class TradeFeedBatch:
     raw_payload: dict[str, Any]
 
 
-def _required_text(record: Mapping[str, Any], field: str) -> str:
-    value = record.get(field)
-    if not isinstance(value, str) or not value.strip():
-        raise TradeFeedError(f"{field} must be a non-empty string")
-    return value.strip()
-
-
-def _decimal(value: Any, field: str) -> Decimal:
-    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
-        raise TradeFeedError(f"{field} must be a decimal string or number")
-    try:
-        return Decimal(str(value))
-    except InvalidOperation:
-        raise TradeFeedError(f"{field} is not a valid decimal") from None
-
-
 def parse_trade_feed(payload: Any) -> TradeFeedBatch:
     """Validate version 1 of the normalized feed and create domain values."""
-    if not isinstance(payload, dict):
-        raise TradeFeedError("feed root must be a JSON object")
-
-    schema_version = payload.get("schema_version")
-    if schema_version != "1.0":
-        raise TradeFeedError(f"unsupported schema_version: {schema_version!r}")
-
-    version = _required_text(payload, "version")
     try:
-        safe_segment(version, "version")
-    except ValueError as exc:
+        data = parse_trade_feed_payload(payload)
+    except DatasetContractError as exc:
         raise TradeFeedError(str(exc)) from None
-    observed_text = _required_text(payload, "observed_at")
-    try:
-        observed_at = require_aware(
-            datetime.fromisoformat(observed_text.replace("Z", "+00:00")),
-            "observed_at",
-        )
-    except ValueError as exc:
-        raise TradeFeedError(f"invalid observed_at: {exc}") from None
-
-    records = payload.get("trades")
-    if not isinstance(records, list) or not records:
-        raise TradeFeedError("trades must be a non-empty array")
-
-    cases: list[TradeCase] = []
-    seen: set[str] = set()
-    for index, record in enumerate(records):
-        prefix = f"trades[{index}]"
-        if not isinstance(record, dict):
-            raise TradeFeedError(f"{prefix} must be an object")
-        case_id = _required_text(record, "case_id")
-        if case_id in seen:
-            raise TradeFeedError(f"duplicate case_id: {case_id}")
-        seen.add(case_id)
-
-        try:
-            direction = TradeDirection(_required_text(record, "direction").lower())
-            payment_method = PaymentMethod(
-                _required_text(record, "payment_method").lower()
-            )
-            expected_payment_date = datetime.strptime(
-                _required_text(record, "expected_payment_date"), "%Y-%m-%d"
-            ).date()
-        except ValueError as exc:
-            raise TradeFeedError(f"{prefix} has an invalid enum or date: {exc}") from None
-
-        confirmed = record.get("confirmed", True)
-        if not isinstance(confirmed, bool):
-            raise TradeFeedError(f"{prefix}.confirmed must be boolean")
-        attributes = record.get("attributes", {})
-        if not isinstance(attributes, dict):
-            raise TradeFeedError(f"{prefix}.attributes must be an object")
-        country = record.get("counterparty_country")
-        if country is not None and not isinstance(country, str):
-            raise TradeFeedError(f"{prefix}.counterparty_country must be a string")
-
-        try:
-            cases.append(
-                TradeCase(
-                    case_id=case_id,
-                    direction=direction,
-                    currency=_required_text(record, "currency"),
-                    amount=_decimal(record.get("amount"), f"{prefix}.amount"),
-                    expected_payment_date=expected_payment_date,
-                    payment_method=payment_method,
-                    counterparty_country=country,
-                    confirmed=confirmed,
-                    attributes=dict(attributes),
-                )
-            )
-        except ValueError as exc:
-            raise TradeFeedError(f"{prefix} is invalid: {exc}") from None
-
-    raw_balances = payload.get("opening_balances", {})
-    if not isinstance(raw_balances, dict):
-        raise TradeFeedError("opening_balances must be an object")
-    balances = {
-        _required_text({"currency": currency}, "currency").upper(): _decimal(
-            value, f"opening_balances.{currency}"
-        )
-        for currency, value in raw_balances.items()
-    }
-
     return TradeFeedBatch(
-        version=version,
-        observed_at=observed_at,
-        cases=tuple(cases),
-        opening_balances=balances,
+        version=data.version,
+        observed_at=data.observed_at,
+        cases=data.cases,
+        opening_balances=data.opening_balances,
         raw_payload=payload,
     )
 

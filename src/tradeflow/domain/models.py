@@ -14,6 +14,7 @@ from tradeflow.domain.enums import (
     PaymentMethod,
     TradeDirection,
 )
+from tradeflow.domain.snapshot import SnapshotRef
 
 
 def money(value: Decimal | str | int | float) -> Decimal:
@@ -78,12 +79,23 @@ class TradeProgram:
     cases: tuple[TradeCase, ...]
     opening_balances: dict[str, Decimal] = field(default_factory=dict)
     as_of: date = field(default_factory=date.today)
+    input_snapshots: tuple[SnapshotRef, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.cases:
             raise ValueError("at least one trade case is required")
         normalized = {key.upper(): money(value) for key, value in self.opening_balances.items()}
         object.__setattr__(self, "opening_balances", normalized)
+        snapshots = tuple(self.input_snapshots)
+        if not all(isinstance(ref, SnapshotRef) for ref in snapshots):
+            raise TypeError("input_snapshots must contain SnapshotRef values")
+        identities = {
+            (ref.source_id, ref.version, ref.content_hash)
+            for ref in snapshots
+        }
+        if len(identities) != len(snapshots):
+            raise ValueError("input_snapshots must not contain duplicates")
+        object.__setattr__(self, "input_snapshots", snapshots)
 
 
 @dataclass(frozen=True)

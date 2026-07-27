@@ -8,3 +8,5 @@ build/
 *.egg-info/
 .env
 
+# Runtime customer/ERP snapshots contain confidential business data.
+data/runtime/

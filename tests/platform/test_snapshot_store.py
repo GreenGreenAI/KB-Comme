@@ -70,6 +70,16 @@ class EnvelopeTests(unittest.TestCase):
                 payload=PAYLOAD,
             )
 
+    def test_future_observation_is_rejected_before_reaching_disk(self) -> None:
+        with self.assertRaisesRegex(ValueError, "later than"):
+            build_envelope(
+                source_id="ECOS_USD_KRW",
+                version="2026-07-27",
+                observed_at=RETRIEVED + timedelta(seconds=1),
+                retrieved_at=RETRIEVED,
+                payload=PAYLOAD,
+            )
+
     def test_path_traversal_in_identifiers_is_rejected(self) -> None:
         for source_id, version in (
             ("../escape", "2026-07-26"),
@@ -173,6 +183,16 @@ class ReadSnapshotTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             read_snapshot(path)
+
+    def test_path_must_match_envelope_identity(self) -> None:
+        path = write_snapshot(self.root, _envelope())
+        wrong_parent = self.root / "OTHER_SOURCE"
+        wrong_parent.mkdir()
+        moved = wrong_parent / path.name
+        path.replace(moved)
+
+        with self.assertRaisesRegex(SnapshotIntegrityError, "path identity"):
+            read_snapshot(moved)
 
     def test_utc_snapshot_round_trips(self) -> None:
         envelope = build_envelope(

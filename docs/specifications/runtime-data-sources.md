@@ -81,6 +81,24 @@ ERP 전용 커넥터는 아래 계약으로 변환한 엔드포인트만 제공�
 어댑터는 파싱된 `TradeCase`와 기초잔액을 반환하고 원문 전체를 스냅샷으로 보존한다.
 계산 계층은 네트워크 어댑터를 import하지 않고 스냅샷을 읽는 기존 원칙을 유지한다.
 
+고객 거래 스냅샷은 `data/runtime/` 또는 운영 비공개 저장소만 사용하며 Git에 커밋하지
+않는다. 공개 ECOS 스냅샷만 재현 테스트를 위해 `data/snapshots/`에 커밋한다.
+
+## 소비와 계보
+
+| 단계 | 구현 | 실패 조건 |
+|---|---|---|
+| 최신본 선택 | `latest_snapshot_path` | 출처 디렉터리 없음 |
+| 봉투 검증 | `read_snapshot` | 해시 또는 경로 identity 불일치 |
+| 거래 정규화 | `read_trade_feed_snapshot` | 스키마·버전·관측시각 불일치 |
+| 환율 정규화 | `read_ecos_usd_krw_snapshot` | 통계코드·항목·단위·중복·부분응답 오류 |
+| 최신성 게이트 | 작업별 `FreshnessPolicy` | 관측 또는 수집 SLA 초과 |
+| 계산 입력 | `trade_program_from_snapshot` | 거래피드가 아닌 데이터셋 |
+| 결과 계보 | `TradeProgram.input_snapshots` → `DecisionPacket` | source/version/hash 누락 |
+
+이 경로에서는 LLM을 사용하지 않는다. 데이터의 선택, 검증, 정규화, 신선성 판정과
+계보 전달은 모두 결정론 코드가 담당한다.
+
 ## 다음 연결 순서
 
 1. 실제 사용 ERP와 원장 필드 소유자를 확정한다.

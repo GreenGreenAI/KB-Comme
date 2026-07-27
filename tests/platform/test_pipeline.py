@@ -1,5 +1,5 @@
 import unittest
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from tradeflow.domain.enums import (
@@ -9,6 +9,7 @@ from tradeflow.domain.enums import (
     TradeDirection,
 )
 from tradeflow.domain.models import CompanyProfile, TradeCase, TradeProgram
+from tradeflow.domain.snapshot import SnapshotRef
 from tradeflow.knowledge.models import (
     Condition,
     ConditionFailureEffect,
@@ -128,6 +129,41 @@ class PipelineTests(unittest.TestCase):
             result.decisions[0].status,
         )
         self.assertTrue(result.review_required)
+
+    def test_input_snapshot_lineage_reaches_evidence_and_packet(self) -> None:
+        ref = SnapshotRef(
+            source_id="ERP_TRADE_FEED",
+            version="erp-v1",
+            observed_at=datetime(2026, 7, 26, tzinfo=UTC),
+            retrieved_at=datetime(2026, 7, 26, 1, tzinfo=UTC),
+            content_hash="sha256:input",
+        )
+        base = self._program()
+        program = TradeProgram(
+            base.program_id,
+            base.company,
+            base.cases,
+            as_of=base.as_of,
+            input_snapshots=(ref,),
+        )
+
+        pipeline = TradeFlowPipeline(
+            self._knowledge(verified=True, production_ready=True)
+        )
+        result = pipeline.analyze(program)
+        packet = pipeline.analyze_packet(program)
+
+        trade_evidence = result.evidence[0]
+        self.assertEqual(("ERP_TRADE_FEED",), trade_evidence.source_ids)
+        self.assertEqual(
+            "erp-v1", trade_evidence.payload["snapshots"][0]["version"]
+        )
+        packet_inputs = {item.name: item.value for item in packet.inputs}
+        self.assertIn("program.input_snapshots", packet_inputs)
+        self.assertEqual(
+            ("ERP_TRADE_FEED",),
+            packet.evidence[0].source_ids,
+        )
 
 
 if __name__ == "__main__":

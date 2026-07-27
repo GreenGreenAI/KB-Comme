@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, time
+
 from tradeflow.contracts.decision_packet import DecisionPacket
 from tradeflow.contracts.evidence import EvidenceDescriptor, EvidenceRequirement
 from tradeflow.contracts.interfaces import ExposureService, KnowledgeService
@@ -21,6 +23,28 @@ class TradeFlowPipeline:
     def analyze(self, program: TradeProgram) -> AnalysisResult:
         exposures = self.exposure.analyze(program)
         facts = self._program_facts(program)
+        snapshot_payload = [
+            {
+                "source_id": ref.source_id,
+                "version": ref.version,
+                "observed_at": ref.observed_at.isoformat(),
+                "retrieved_at": ref.retrieved_at.isoformat(),
+                "content_hash": ref.content_hash,
+            }
+            for ref in program.input_snapshots
+        ]
+        trade_payload: dict[str, object] = {"case_count": len(program.cases)}
+        calculation_payload: dict[str, object] = {
+            "engine": "tradeflow.exposure.v1"
+        }
+        if snapshot_payload:
+            trade_payload["snapshots"] = snapshot_payload
+            calculation_payload["input_snapshots"] = snapshot_payload
+        generated_at = (
+            max(ref.retrieved_at for ref in program.input_snapshots)
+            if program.input_snapshots
+            else datetime.combine(program.as_of, time.min, tzinfo=UTC)
+        )
 
         decisions = self.knowledge.evaluate(
             topic="trade_support",
@@ -33,13 +57,21 @@ class TradeFlowPipeline:
                 evidence_id=f"trade:{program.program_id}",
                 role=EvidenceRole.USER_TRADE,
                 identifiers=tuple(case.case_id for case in program.cases),
-                payload={"case_count": len(program.cases)},
+                source_ids=tuple(
+                    dict.fromkeys(ref.source_id for ref in program.input_snapshots)
+                ),
+                generated_at=generated_at,
+                payload=trade_payload,
             ),
             EvidenceDescriptor(
                 evidence_id=f"calculation:{program.program_id}",
                 role=EvidenceRole.CALCULATION,
                 identifiers=tuple(exposure.currency for exposure in exposures),
-                payload={"engine": "tradeflow.exposure.v1"},
+                source_ids=tuple(
+                    dict.fromkeys(ref.source_id for ref in program.input_snapshots)
+                ),
+                generated_at=generated_at,
+                payload=calculation_payload,
             ),
         ]
         for decision in decisions:
@@ -106,4 +138,14 @@ class TradeFlowPipeline:
         facts["program.has_export"] = "export" in directions
         facts["program.has_import"] = "import" in directions
         facts["program.currencies"] = sorted({case.currency for case in program.cases})
+        if program.input_snapshots:
+            facts["program.input_snapshots"] = [
+                {
+                    "source_id": ref.source_id,
+                    "version": ref.version,
+                    "observed_at": ref.observed_at.isoformat(),
+                    "content_hash": ref.content_hash,
+                }
+                for ref in program.input_snapshots
+            ]
         return facts
