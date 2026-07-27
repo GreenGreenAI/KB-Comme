@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from tradeflow.domain.enums import EvidenceRole
@@ -17,7 +17,6 @@ class EvidenceDescriptor:
     evidence_id: str
     role: EvidenceRole
     identifiers: tuple[str, ...]
+    generated_at: datetime
     source_ids: tuple[str, ...] = ()
-    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any] = field(default_factory=dict)
-
