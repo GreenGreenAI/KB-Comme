@@ -22,15 +22,32 @@ class KnowledgeRepository:
         sources: Iterable[SourceRecord] = (),
         rules: Iterable[KnowledgeRule] = (),
     ) -> None:
+        sources = tuple(sources)
+        rules = tuple(rules)
         self.sources = {source.source_id: source for source in sources}
         self.rules = {rule.rule_id: rule for rule in rules}
+        if len(self.sources) != len(sources):
+            raise ValueError("knowledge sources contain duplicate source_id values")
+        if len(self.rules) != len(rules):
+            raise ValueError("knowledge rules contain duplicate rule_id values")
 
     @classmethod
     def from_json(cls, source_path: Path, rule_path: Path) -> "KnowledgeRepository":
+        return cls.from_json_files(source_path, (rule_path,))
+
+    @classmethod
+    def from_json_files(
+        cls,
+        source_path: Path,
+        rule_paths: Iterable[Path],
+    ) -> "KnowledgeRepository":
         source_data = json.loads(source_path.read_text(encoding="utf-8"))
-        rule_data = json.loads(rule_path.read_text(encoding="utf-8"))
         sources = [_parse_source(item) for item in source_data["sources"]]
-        rules = [_parse_rule(item) for item in rule_data["rules"]]
+        rules = [
+            _parse_rule(item)
+            for path in rule_paths
+            for item in json.loads(path.read_text(encoding="utf-8"))["rules"]
+        ]
         return cls(sources, rules)
 
     def evaluate(
@@ -40,6 +57,7 @@ class KnowledgeRepository:
         facts: dict[str, Any],
         as_of: date,
         source_freshness: Mapping[str, Freshness] | None = None,
+        subject_id: str | None = None,
     ) -> tuple[RuleDecision, ...]:
         freshness_by_source = source_freshness or {}
         decisions: list[RuleDecision] = []
@@ -118,6 +136,7 @@ class KnowledgeRepository:
                     ),
                     source_claim_ids=rule.source_claim_ids,
                     candidate_outcome=rule.candidate_outcome,
+                    subject_id=subject_id,
                 )
             )
         return tuple(decisions)

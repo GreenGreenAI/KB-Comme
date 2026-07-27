@@ -35,3 +35,14 @@ last-reviewed: 2026-07-27
 LLM 출력은 `SynthesisResult`로 구조화한다. 설명문은 비권위적이며, 함께 반환된
 판단 상태·수치 주장·근거 ID·검토 상태가 `validate_synthesis`를 통과해야 한다.
 검증 실패 시 생성 설명을 폐기하고 패킷 기반 대체 응답 또는 사람 검토를 사용한다.
+
+## 케이스 fact 계약
+
+실제 규칙 topic의 입력은 [ADR-0008](../adr/0008-evidence-bound-case-facts.md)의
+`FactBundle`을 사용한다.
+
+- catalog에 없는 fact는 거부한다.
+- supplemental fact는 evidence ID가 필수다.
+- evidence role, 케이스 identifier와 `payload.facts`의 field/value가 모두 일치해야 한다.
+- 프로그램·거래에서 결정론적으로 얻는 core fact는 assertion으로 덮지 못한다.
+- 케이스 판정 identity는 `rule_id`가 아니라 `(subject_id, rule_id)`다.

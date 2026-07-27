@@ -26,6 +26,7 @@ class KnowledgeService(Protocol):
         facts: dict[str, Any],
         as_of: date,
         source_freshness: Mapping[str, Freshness] | None = None,
+        subject_id: str | None = None,
     ) -> tuple[RuleDecision, ...]: ...
 
     def procedure_for(self, rule_id: str) -> dict[str, Any] | None: ...

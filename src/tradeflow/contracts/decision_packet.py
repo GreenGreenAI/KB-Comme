@@ -6,9 +6,12 @@ change decision states, invent evidence, or weaken a review requirement.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Mapping
 
 from tradeflow.contracts.evidence import EvidenceDescriptor
@@ -32,6 +35,7 @@ class NumericClaim:
 class DecisionStatusClaim:
     rule_id: str
     status: DecisionStatus
+    subject_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,7 @@ class PacketDecision:
     requirements: tuple[PacketRequirement, ...]
     source_claim_ids: tuple[str, ...]
     candidate_outcome: tuple[tuple[str, Any], ...]
+    subject_id: str | None
 
 
 @dataclass(frozen=True)
@@ -89,9 +94,18 @@ class DecisionPacket:
         as_of: date,
         inputs: Mapping[str, Any],
     ) -> DecisionPacket:
+        fingerprint = _identity_fingerprint(
+            {
+                "as_of": as_of,
+                "inputs": inputs,
+                "analysis": result,
+            }
+        )
         return cls(
-            packet_id=f"decision:{result.program_id}:{as_of.isoformat()}",
-            schema_version="1.0",
+            packet_id=(
+                f"decision:{result.program_id}:{as_of.isoformat()}:{fingerprint[:16]}"
+            ),
+            schema_version="1.1",
             program_id=result.program_id,
             as_of=as_of,
             inputs=tuple(
@@ -151,10 +165,12 @@ def validate_synthesis(
         errors.append("packet_id does not match")
 
     expected_decisions = {
-        decision.rule_id: decision.status for decision in packet.decisions
+        (decision.subject_id, decision.rule_id): decision.status
+        for decision in packet.decisions
     }
     actual_decisions = {
-        claim.rule_id: claim.status for claim in result.decision_statuses
+        (claim.subject_id, claim.rule_id): claim.status
+        for claim in result.decision_statuses
     }
     if len(actual_decisions) != len(result.decision_statuses):
         errors.append("decision_statuses contains duplicate rule_id values")
@@ -201,6 +217,43 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+def _identity_fingerprint(value: Any) -> str:
+    canonical = json.dumps(
+        _identity_value(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _identity_value(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            item.name: _identity_value(getattr(value, item.name))
+            for item in fields(value)
+        }
+    if isinstance(value, Mapping):
+        return {
+            str(key): _identity_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_identity_value(item) for item in value]
+    if isinstance(value, set):
+        normalized = [_identity_value(item) for item in value]
+        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
+    if isinstance(value, Decimal):
+        return {"$decimal": str(value)}
+    if isinstance(value, (date, datetime)):
+        return {"$datetime": value.isoformat()}
+    if isinstance(value, Enum):
+        return value.value
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"cannot fingerprint {type(value).__name__}")
+
+
 def _freeze_decision(decision: RuleDecision) -> PacketDecision:
     return PacketDecision(
         rule_id=decision.rule_id,
@@ -221,6 +274,7 @@ def _freeze_decision(decision: RuleDecision) -> PacketDecision:
         ),
         source_claim_ids=decision.source_claim_ids,
         candidate_outcome=_freeze(decision.candidate_outcome),
+        subject_id=decision.subject_id,
     )
 
 

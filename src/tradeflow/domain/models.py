@@ -32,14 +32,28 @@ class CompanyProfile:
     industry_code: str | None = None
     attributes: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        reserved = {
+            "company.country_code",
+            "company.is_sme",
+            "company.annual_export_usd",
+            "company.industry_code",
+        }
+        conflicts = reserved.intersection(self.attributes)
+        if conflicts:
+            raise ValueError(
+                "company attributes cannot override core facts: "
+                + ", ".join(sorted(conflicts))
+            )
+
     def facts(self) -> dict[str, Any]:
-        values = {
+        values = dict(self.attributes)
+        values.update({
             "company.country_code": self.country_code,
             "company.is_sme": self.is_sme,
             "company.annual_export_usd": self.annual_export_usd,
             "company.industry_code": self.industry_code,
-        }
-        values.update(self.attributes)
+        })
         return values
 
 
@@ -58,17 +72,30 @@ class TradeCase:
     def __post_init__(self) -> None:
         if self.amount <= 0:
             raise ValueError("trade amount must be positive")
+        reserved = {
+            "trade.direction",
+            "trade.currency",
+            "trade.amount",
+            "trade.payment_method",
+            "trade.counterparty_country",
+        }
+        conflicts = reserved.intersection(self.attributes)
+        if conflicts:
+            raise ValueError(
+                "trade attributes cannot override core facts: "
+                + ", ".join(sorted(conflicts))
+            )
         object.__setattr__(self, "currency", self.currency.upper())
 
     def facts(self) -> dict[str, Any]:
-        values = {
+        values = dict(self.attributes)
+        values.update({
             "trade.direction": self.direction.value,
             "trade.currency": self.currency,
             "trade.amount": self.amount,
             "trade.payment_method": self.payment_method.value,
             "trade.counterparty_country": self.counterparty_country,
-        }
-        values.update(self.attributes)
+        })
         return values
 
 
@@ -84,6 +111,9 @@ class TradeProgram:
     def __post_init__(self) -> None:
         if not self.cases:
             raise ValueError("at least one trade case is required")
+        case_ids = [case.case_id for case in self.cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise ValueError("trade cases must have unique case_id values")
         normalized = {key.upper(): money(value) for key, value in self.opening_balances.items()}
         object.__setattr__(self, "opening_balances", normalized)
         snapshots = tuple(self.input_snapshots)
@@ -213,6 +243,7 @@ class RuleDecision:
     requirements: tuple[DecisionRequirement, ...] = ()
     source_claim_ids: tuple[str, ...] = ()
     candidate_outcome: dict[str, Any] = field(default_factory=dict)
+    subject_id: str | None = None
 
 
 @dataclass(frozen=True)

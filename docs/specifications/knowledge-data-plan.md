@@ -73,5 +73,10 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 
 1. 기업마당 API 인증키와 일일 스냅샷 수집기
 2. K-SURE 국별인수방침 및 상품별 신청서류의 버전 추적
-3. 거래·계정 원장에서 상호계산 기한 fact를 생성하는 runtime adapter
+3. 거래·계정 원장의 완료일·기장일·결산일에서 상호계산 기한 fact를 생성하는
+   결정론 파생기
 4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 증거 인터페이스
+
+거래피드의 스냅샷 수집·정규화와 근거 결합형 `FactAssembler`, 케이스별
+`trade_support_case`·`fx_compliance` 실행은 완료했다. 현재 수직 기준은 양자간
+상호계산계정 개설 신고 검토이며, 규칙은 상대 역할 검토 전까지 draft 상태를 유지한다.

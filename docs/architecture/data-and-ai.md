@@ -22,6 +22,8 @@ last-reviewed: 2026-07-27
   → 원문 SnapshotRef(source/version/time/hash)
   → domain 스키마·무결성·최신성 검증
   → TradeProgram / FxSeries
+  → FactCatalog + evidence-bound FactAssembler
+  → case별 trade_support_case / fx_compliance
   → 결정론 계산·규칙
   → EvidenceDescriptor
   → DecisionPacket
@@ -30,6 +32,10 @@ last-reviewed: 2026-07-27
 
 스냅샷이 없거나, 손상되었거나, 스키마가 다르거나, SLA를 넘기면 계산에 진입하지
 않는다. LLM은 이 실패를 보정하거나 누락 데이터를 추정하지 않는다.
+
+Supplemental fact는 evidence role만 같아서는 부족하다. 근거가 해당 case ID를
+identifier로 포함하고 `payload.facts`에 같은 field/value를 명시해야 규칙 입력으로
+승격된다. 케이스 판정은 `(subject_id, rule_id)`로 식별한다.
 
 ## AI 사용 원칙
 

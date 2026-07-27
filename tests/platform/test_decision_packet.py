@@ -46,7 +46,7 @@ class DecisionPacketTests(unittest.TestCase):
             date(2026, 12, 31),
             production_ready=True,
         )
-        program = TradeProgram(
+        self.program = TradeProgram(
             "P1",
             CompanyProfile("C1", "Test", is_sme=True),
             (
@@ -61,9 +61,10 @@ class DecisionPacketTests(unittest.TestCase):
             ),
             as_of=date(2026, 7, 26),
         )
-        self.packet = TradeFlowPipeline(
+        self.pipeline = TradeFlowPipeline(
             KnowledgeRepository((source,), (rule,))
-        ).analyze_packet(program)
+        )
+        self.packet = self.pipeline.analyze_packet(self.program)
 
     def _valid_result(self) -> SynthesisResult:
         return SynthesisResult(
@@ -86,7 +87,7 @@ class DecisionPacketTests(unittest.TestCase):
         )
 
     def test_pipeline_builds_versioned_immutable_packet(self) -> None:
-        self.assertEqual("1.0", self.packet.schema_version)
+        self.assertEqual("1.1", self.packet.schema_version)
         currencies = next(
             item.value
             for item in self.packet.inputs
@@ -99,6 +100,11 @@ class DecisionPacketTests(unittest.TestCase):
             if item.evidence_id == "calculation:P1"
         )
         self.assertEqual((("engine", "tradeflow.exposure.v1"),), calculation.payload)
+
+    def test_same_analysis_has_the_same_content_addressed_packet_id(self) -> None:
+        repeated = self.pipeline.analyze_packet(self.program)
+
+        self.assertEqual(self.packet.packet_id, repeated.packet_id)
 
     def test_matching_synthesis_is_accepted(self) -> None:
         self.assertEqual((), validate_synthesis(self.packet, self._valid_result()))
