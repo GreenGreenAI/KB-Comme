@@ -64,6 +64,7 @@
         "공통 이용제한 사유 확인",
         "K-SURE 인수한도 상담 및 신청"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -134,6 +135,7 @@
         "국별인수방침 확인",
         "거래별 인수한도 및 보험료 확인"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -194,6 +196,7 @@
         "보증신청서류 준비",
         "K-SURE 신용평가 및 보증심사"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     }
   ]

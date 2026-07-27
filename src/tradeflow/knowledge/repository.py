@@ -19,6 +19,7 @@ from tradeflow.knowledge.models import (
     Condition,
     ConditionFailureEffect,
     KnowledgeRule,
+    ReviewPolicy,
     SourceRecord,
 )
 
@@ -180,6 +181,9 @@ class KnowledgeRepository:
             elif not rule.production_ready:
                 status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
                 reasons.append("draft rule: official confirmation required")
+            elif rule.review_policy is ReviewPolicy.ALWAYS_EXPERT:
+                status = DecisionStatus.EXPERT_CONFIRMATION_REQUIRED
+                reasons.append("rule policy requires expert confirmation")
             else:
                 status = DecisionStatus.ELIGIBLE_CANDIDATE
 
@@ -284,18 +288,22 @@ def _parse_source(item: dict[str, Any]) -> SourceRecord:
         title=item["title"],
         organization=item["organization"],
         url=item["url"],
-        official=bool(item["official"]),
+        official=_strict_bool(item, "official"),
         retrieved_at=datetime.fromisoformat(item["retrieved_at"]),
         effective_from=_parse_date(item.get("effective_from")),
         effective_to=_parse_date(item.get("effective_to")),
         content_hash=item.get("content_hash"),
-        verified=bool(item.get("verified", False)),
+        verified=_strict_bool(item, "verified", default=False),
         published_at=(
             datetime.fromisoformat(item["published_at"])
             if item.get("published_at")
             else None
         ),
-        freshness_required=bool(item.get("freshness_required", False)),
+        freshness_required=_strict_bool(
+            item,
+            "freshness_required",
+            default=False,
+        ),
         usage_policy_url=item.get("usage_policy_url"),
         attribution=item.get("attribution"),
     )
@@ -324,11 +332,24 @@ def _parse_rule(item: dict[str, Any]) -> KnowledgeRule:
         effective_to=_parse_date(item.get("effective_to")),
         required_documents=tuple(item.get("required_documents", [])),
         procedure_steps=tuple(item.get("procedure_steps", [])),
-        production_ready=bool(item.get("production_ready", False)),
+        production_ready=_strict_bool(item, "production_ready", default=False),
         source_claim_ids=tuple(item.get("source_claim_ids", [])),
         candidate_outcome=dict(item.get("candidate_outcome", {})),
         document_set_ids=tuple(item.get("document_set_ids", [])),
+        review_policy=ReviewPolicy(item.get("review_policy", ReviewPolicy.AUTOMATIC)),
     )
+
+
+def _strict_bool(
+    item: Mapping[str, Any],
+    field: str,
+    *,
+    default: bool | None = None,
+) -> bool:
+    value = item.get(field, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be boolean")
+    return value
 
 
 def _source_status_reason(statuses: Mapping[str, SourceStatus]) -> str:

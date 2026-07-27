@@ -29,6 +29,7 @@ last-reviewed: 2026-07-27
 | [ADR-0016](0016-fail-closed-erp-provider-mapping.md) | proposed | ERP 공급자 응답의 fail-closed 매핑 |
 | [ADR-0017](0017-evidence-bound-ksure-country-policy.md) | proposed | K-SURE 국별인수방침의 스냅샷 기반 fact 파생 |
 | [ADR-0018](0018-versioned-application-document-catalog.md) | proposed | 버전형 신청서류 카탈로그와 실행계획 계약 |
+| [ADR-0019](0019-rulepack-promotion-and-review-policy.md) | proposed | 규칙팩 승격 게이트와 전문가 검토 정책 분리 |
 
 ## 운영 규칙
 

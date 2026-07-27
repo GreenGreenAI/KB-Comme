@@ -75,6 +75,7 @@
         "지정거래외국환은행에 보고 대상과 시점 확인",
         "관계 증빙 보관 요건 확인"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -141,6 +142,7 @@
         "한국은행 외환심사 담당부서에 사전 확인",
         "신고서와 관계서류 제출"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -208,6 +210,7 @@
         "한국은행 외환심사 담당부서에 상계센터 구조 확인",
         "지급 전 신고서와 관계서류 제출"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -272,6 +275,7 @@
         "한국은행 신고예외 및 사후신고 가능 사유 확인",
         "필요 시 한국은행 신고"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -336,6 +340,7 @@
         "한국은행 신고예외 및 사후신고 가능 사유 확인",
         "필요 시 한국은행 신고"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -402,6 +407,7 @@
         "외국환은행에 신고예외 및 신고 대상 확인",
         "필요 시 지급 전 신고"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -462,6 +468,7 @@
         "한국은행에 신고예외 및 신고 대상 확인",
         "필요 시 지급 전 신고"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -522,6 +529,7 @@
         "제5-11조 신고예외와 다른 기관 확인·신고 사항 대조",
         "해당하지 않으면 지급 전 한국은행 신고 검토"
       ],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -541,6 +549,7 @@
       "effective_to": null,
       "required_documents": ["별지 제5-2호 상호계산신고서", "상호계산 계약서", "반복 거래 및 당사자 증빙"],
       "procedure_steps": ["지정거래외국환은행에 상호계산 구조 확인", "계정 사용 전 개설 신고"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -560,6 +569,7 @@
       "effective_to": null,
       "required_documents": ["상호계산계정 폐쇄 신고자료", "폐쇄일 기준 대차기잔액 명세"],
       "procedure_steps": ["지정거래외국환은행에 폐쇄 신고", "폐쇄잔액에 제5-7조제3항 절차 적용"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -578,6 +588,7 @@
       "effective_to": null,
       "required_documents": ["참여 당사자 목록", "당사자별 채권·채무 흐름", "상계센터 계약"],
       "procedure_steps": ["상호계산 적용 중단", "한국은행 다자간 상계 신고 대상 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -596,6 +607,7 @@
       "effective_to": null,
       "required_documents": ["기장대상 채권·채무 원인자료", "별도 지급·자본거래 신고필증"],
       "procedure_steps": ["부적격 기장 항목 분리", "별도 신고 의무 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -614,6 +626,7 @@
       "effective_to": null,
       "required_documents": ["수출입 완료일 또는 채권·채무 확정일 증빙", "실제 기장일", "지연 사유서"],
       "procedure_steps": ["결정론적 30일 기한 계산 검증", "지정거래외국환은행에 보완 절차 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -632,6 +645,7 @@
       "effective_to": null,
       "required_documents": ["회계기간", "상호계산 결산주기 정책", "예외 주기 필요성 자료"],
       "procedure_steps": ["결산주기를 월 단위로 조정하거나 회계기간 내 대체 주기 근거 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -650,6 +664,7 @@
       "effective_to": null,
       "required_documents": ["상대방별 계정원장", "대차기잔액 합산표"],
       "procedure_steps": ["상대방별 대차기잔액을 다시 합산", "계산 결과를 신고자료와 대조"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -669,6 +684,7 @@
       "effective_to": null,
       "required_documents": ["결산보고서", "상대방별 대차기잔액", "결산기간 종료일 증빙"],
       "procedure_steps": ["3개월 달력기한 검증", "잔액 지급·수령 전 신고 여부 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -688,6 +704,7 @@
       "effective_to": null,
       "required_documents": ["결산잔액 산출표", "신고필증", "지급·수령 증빙"],
       "procedure_steps": ["상대방별 잔액 합산 검증", "지정거래외국환은행과 지연 해소 절차 확인"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -707,6 +724,7 @@
       "effective_to": null,
       "required_documents": ["결산보고서", "지정거래외국환은행 요구 보고서", "제출이력"],
       "procedure_steps": ["미제출 보고서 확인", "지정거래외국환은행에 제출"],
+      "review_policy": "always_expert",
       "production_ready": false
     },
     {
@@ -725,6 +743,7 @@
       "effective_to": null,
       "required_documents": ["문서보존 정책", "상호계산 장부", "관계증빙 목록"],
       "procedure_steps": ["보관기간을 최소 5년으로 수정", "누락 자료 복구 가능성 검토"],
+      "review_policy": "always_expert",
       "production_ready": false
     }
   ]

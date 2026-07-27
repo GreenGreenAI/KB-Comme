@@ -15,6 +15,13 @@ class ConditionFailureEffect(StrEnum):
     CONDITIONAL = "conditional"
 
 
+class ReviewPolicy(StrEnum):
+    """Whether a validated matching rule may bypass expert review."""
+
+    AUTOMATIC = "automatic"
+    ALWAYS_EXPERT = "always_expert"
+
+
 @dataclass(frozen=True)
 class SourceRecord:
     source_id: str
@@ -82,6 +89,7 @@ class KnowledgeRule:
     source_claim_ids: tuple[str, ...] = ()
     candidate_outcome: dict[str, Any] = field(default_factory=dict)
     document_set_ids: tuple[str, ...] = ()
+    review_policy: ReviewPolicy = ReviewPolicy.AUTOMATIC
 
     def effective_on(self, target_date: date) -> bool:
         return not (

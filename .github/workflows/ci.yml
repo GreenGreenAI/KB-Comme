@@ -21,3 +21,7 @@ jobs:
         run: python -m compileall -q src tests examples
       - name: Check documentation
         run: python scripts/check_docs.py
+      - name: Check rulepack readiness
+        env:
+          PYTHONPATH: src
+        run: python scripts/check_rulepacks.py

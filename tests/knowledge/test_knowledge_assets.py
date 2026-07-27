@@ -130,6 +130,12 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
             self.assertTrue(
                 all(not rule["production_ready"] for rule in rulepack["rules"])
             )
+            self.assertTrue(
+                all(
+                    rule.get("review_policy") == "always_expert"
+                    for rule in rulepack["rules"]
+                )
+            )
 
     def test_chapter5_exception_catalog_is_complete_and_matches_fact_enums(
         self,

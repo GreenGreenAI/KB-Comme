@@ -70,6 +70,11 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 5. 누락·만료·stale 출처가 확정 후보로 승격되지 않는다.
 6. 역할 B와 관련 도메인 전문가의 검토가 완료된다.
 
+이 조건은 `knowledge/validation_suites`의 rule별 true/false/missing 정답 사례와
+`knowledge/reviews/rulepack_promotion.json`의 역할별 승인·artifact hash로 검증한다.
+규칙 검증 완료와 결과의 사람 검토 필요 여부는 독립적이며, 보험·신고 후보는
+`review_policy=always_expert`를 사용한다.
+
 ## 다음 수집 배치
 
 1. 기업마당 공고 상세 조건의 근거 추출과 역할 B 검토

@@ -94,3 +94,13 @@ LLM 출력은 `SynthesisResult`로 구조화한다. 설명문은 비권위적이
   같은 행동명이라도 서로 다른 신청 업무이므로 병합하지 않는다.
 - 은행 상담 미완료처럼 보완 가능한 조건은 실행계획의 구조화된
   `requirements`에 포함한다.
+
+## 규칙 승격과 결과 검토 계약
+
+- `production_ready`는 규칙 자체의 출처·정답·승인 준비 상태다.
+- `review_policy`는 일치 결과를 자동 후보로 내보낼지 전문가 확인으로 보낼지 정한다.
+- `always_expert` 규칙은 `production_ready=true`여도
+  `EXPERT_CONFIRMATION_REQUIRED`를 반환한다.
+- LLM은 이 정책을 제거하거나 `ELIGIBLE_CANDIDATE`로 승격할 수 없다.
+- 규칙팩을 active로 전환하려면 golden suite와 세 역할의 artifact-bound 승인이 모두
+  필요하다.

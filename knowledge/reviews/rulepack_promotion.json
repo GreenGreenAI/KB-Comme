@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "policy": {
+    "required_roles": ["knowledge_domain", "platform_runtime", "domain_expert"],
+    "production_rule": "규칙팩은 validation suite 통과, 공식 출처 검증, 세 역할 승인 전에는 active 또는 production_ready=true가 될 수 없다."
+  },
+  "rulepacks": [
+    {
+      "pack_id": "KSURE_MVP_CANDIDATES",
+      "rulepack_path": "knowledge/rulepacks/ksure_mvp_candidates.json",
+      "validation_suite_path": "knowledge/validation_suites/ksure_mvp_cases.json",
+      "required_roles": ["knowledge_domain", "platform_runtime", "domain_expert"],
+      "approvals": [
+        {"role": "knowledge_domain", "status": "pending"},
+        {"role": "platform_runtime", "status": "pending"},
+        {"role": "domain_expert", "status": "pending"}
+      ]
+    },
+    {
+      "pack_id": "FX_COMPLIANCE_MVP",
+      "rulepack_path": "knowledge/rulepacks/fx_compliance_mvp.json",
+      "validation_suite_path": "knowledge/validation_suites/fx_compliance_mvp_cases.json",
+      "required_roles": ["knowledge_domain", "platform_runtime", "domain_expert"],
+      "approvals": [
+        {"role": "knowledge_domain", "status": "pending"},
+        {"role": "platform_runtime", "status": "pending"},
+        {"role": "domain_expert", "status": "pending"}
+      ]
+    }
+  ]
+}

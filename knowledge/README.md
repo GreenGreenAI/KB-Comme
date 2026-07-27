@@ -116,5 +116,22 @@ claim은 자격 규칙의 근거 계보에 합쳐져 최신성 검사를 받는�
 5. 도메인 전문가가 신고·상품 후보 결과를 확인한다.
 6. 위 검토가 끝난 규칙만 `production_ready=true`로 변경한다.
 
+정답 사례는 `validation_suites/`, 역할별 승인 상태는
+`reviews/rulepack_promotion.json`에 둔다. 다음 명령은 각 규칙의 일치·비일치·누락
+커버리지, 공식 출처 상태와 승인 일관성을 검사한다.
+
+```powershell
+$env:PYTHONPATH="src"
+python scripts/check_rulepacks.py
+```
+
+draft 규칙팩은 pending 승인과 `production_ready=false`를 blocker로 보고하지만 검사의
+정상 상태다. 잘못된 정답, 누락된 규칙, 승인 hash 불일치 또는 승인 전 production
+전환은 integrity error로 실패한다. 실제 운영 준비 여부까지 요구할 때만
+`--require-ready`를 사용한다.
+
+`production_ready`와 사람 검토 정책은 별개다. K-SURE·외국환 규칙은 승격 이후에도
+기관 확인이 필요하므로 `review_policy=always_expert`를 유지한다.
+
 현재 `ksure_mvp_candidates.json`과 `fx_compliance_mvp.json`은 공식 공개정보를
 구조화한 초안이며 자동 확정 판정에 사용하지 않는다.
