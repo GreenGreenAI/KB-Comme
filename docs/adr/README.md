@@ -26,6 +26,7 @@ last-reviewed: 2026-07-27
 | [ADR-0013](0013-bizinfo-support-program-snapshots.md) | proposed | 기업마당 지원사업 API 스냅샷 |
 | [ADR-0014](0014-deterministic-collection-orchestration.md) | proposed | 결정론적 수집 주기·재시도·fallback |
 | [ADR-0015](0015-snapshot-analysis-service-boundary.md) | proposed | 검증된 스냅샷 기반 분석 서비스 경계 |
+| [ADR-0016](0016-fail-closed-erp-provider-mapping.md) | proposed | ERP 공급자 응답의 fail-closed 매핑 |
 
 ## 운영 규칙
 

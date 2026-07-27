@@ -29,8 +29,8 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 |---|---|---|---|---|
 | 한국은행 ECOS | USD/KRW 일별 매매기준율과 과거 시계열 | ECOS 인증키 | 변동성·기준 시나리오 | 현재 사용 |
 | 한국수출입은행 Open API | 통화별 고시 환율 | 무료 활용 신청 키, 신규 `oapi.koreaexim.go.kr` 도메인 | 다통화 기준환율·교차검증 | 다음 어댑터 후보 |
-| Microsoft Dynamics 365 Business Central API v2.0 | 판매·구매 송장, 통화, 지급기일, 잔액 | 테넌트와 Entra OAuth 권한 | 거래·예정 현금흐름 원천 | 사용 ERP일 때 매퍼 추가 |
-| SAP S/4HANA Cloud OData API | 분개·AR/AP·Treasury 항목 | 고객 시스템 통신 설정과 권한 | 거래·잔액·실현 현금흐름 원천 | 사용 ERP일 때 매퍼 추가 |
+| Microsoft Dynamics 365 Business Central API v2.0 | 판매·구매 송장, 통화, 지급기일, 잔액 | 테넌트와 Entra OAuth 권한 | 거래·예정 현금흐름 원천 | fail-closed 매퍼 구현, 실제 테넌트 연결 대기 |
+| SAP S/4HANA Cloud OData API | AR/AP 개방항목 | 고객 시스템 통신 설정과 권한 | 거래·잔액·실현 현금흐름 원천 | fail-closed 매퍼 구현, 실제 시스템 연결 대기 |
 | 은행 기업 API/브로커 API | 실시간 또는 지연 호가, 거래 가능 조건 | 법인 계약과 별도 권한 | 최종 실행 가격 | 공급자 계약 후 추가 |
 
 공공기관의 “실시간 업데이트” 표시는 API가 현재 고시값을 돌려준다는 뜻이지
@@ -101,6 +101,28 @@ ERP 전용 커넥터는 아래 계약으로 변환한 엔드포인트만 제공�
 어댑터는 파싱된 `TradeCase`와 기초잔액을 반환하고 원문 전체를 스냅샷으로 보존한다.
 계산 계층은 네트워크 어댑터를 import하지 않고 스냅샷을 읽는 기존 원칙을 유지한다.
 
+### ERP 공급자별 매퍼
+
+`BusinessCentralInvoiceMapper`와 `SapReceivablePayableMapper`는 공급자 응답을 위 표준
+거래피드로 변환하는 결정론 객체다. 공급자 필드는 핵심 도메인이나 데이터셋 레지스트리에
+노출하지 않으며, 생성 결과는 기존 `ERP_TRADE_FEED_V1` 계약으로 다시 검증한다.
+
+Business Central은 다음 정책을 적용한다.
+
+- 판매송장은 `Open` 상태와 공식 `remainingAmount`를 요구한다.
+- 구매송장의 `totalAmountIncludingTax`는 미결제잔액이 아니다. 고객별 커넥터가 원장과
+  대조해 제공하는 `tradeflowRemainingAmount`가 없으면 실패한다.
+- 판매·구매 응답의 모든 OData 페이지가 수집된 뒤 매퍼를 호출해야 한다.
+
+SAP는 범용 Journal Entry Item이 아니라 Receivable Payable Item 투영을 사용한다.
+고객 또는 공급자 중 하나의 계정 역할, `RblPyblItemIsCleared`,
+`RblPyblItemIsObsolete`, `AmountInTransactionCurrency`, `TransactionCurrency`와
+`NetDueDate`를 명시적으로 요구한다.
+
+두 매퍼 모두 결제방식을 추정하지 않는다. 공급자 확장 필드 또는 검토된 고객별 기본
+정책이 필요하다. JSON 파서는 금액을 `Decimal`로 유지해야 하며 binary float가 전달되면
+거부한다. 부분 OData 페이지, 중복 ID, 미래 수정시각과 증명할 수 없는 상태도 실패한다.
+
 ### `BizinfoSupportAdapter`
 
 - 기업마당 공식 API의 지원사업 목록을 JSON으로 수집한다.
@@ -148,8 +170,9 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 ## 다음 연결 순서
 
 1. 실제 사용 ERP와 원장 필드 소유자를 확정한다.
-2. 샌드박스 읽기 전용 자격증명을 발급하고 판매·구매 양쪽의 증분 수집 기준을 정한다.
-3. ERP 응답을 표준 거래피드로 변환하는 공급자별 매퍼를 추가한다.
+2. 샌드박스 읽기 전용 자격증명을 발급하고 판매·구매 양쪽의 증분 수집·페이지 순회
+   기준을 정한다.
+3. 구현된 공급자별 매퍼를 샌드박스 응답 fixture와 대조하고 고객별 확장 필드를 확정한다.
 4. 한국수출입은행 다통화 기준환율 어댑터를 추가하고 ECOS와 출처 역할을 분리한다.
 5. 제휴 은행이 정해지면 호가의 유효시간·bid/ask·수수료를 포함한 실행가격 어댑터를
    별도 계약으로 추가한다.
@@ -161,4 +184,5 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 - [Business Central REST API 개요](https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/webservices/api-overview)
 - [Business Central 판매 송장 리소스](https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_salesinvoice)
 - [Business Central 구매 송장 리소스](https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_purchaseinvoice)
-- [SAP Journal Entry Item Read API](https://help.sap.com/docs/SAP_S4HANA_CLOUD/b978f98fc5884ff2aeb10c8fdeb8a43b/8aa29c6ac8234f9a9b975b3900aa002d.html)
+- [SAP Receivable Payable Item](https://help.sap.com/docs/SAP_S4HANA_CLOUD/c0c54048d35849128be8e872df5bea6d/139895f571ce4417b9bd3b01eb3323f7.html)
+- [SAP C1 released CDS view catalog](https://help.sap.com/docs/SAP_S4HANA_CLOUD/c0c54048d35849128be8e872df5bea6d/95c4b490537a415e834076e07abccb1c.html)
