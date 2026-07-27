@@ -28,6 +28,7 @@ last-reviewed: 2026-07-27
 | [ADR-0015](0015-snapshot-analysis-service-boundary.md) | proposed | 검증된 스냅샷 기반 분석 서비스 경계 |
 | [ADR-0016](0016-fail-closed-erp-provider-mapping.md) | proposed | ERP 공급자 응답의 fail-closed 매핑 |
 | [ADR-0017](0017-evidence-bound-ksure-country-policy.md) | proposed | K-SURE 국별인수방침의 스냅샷 기반 fact 파생 |
+| [ADR-0018](0018-versioned-application-document-catalog.md) | proposed | 버전형 신청서류 카탈로그와 실행계획 계약 |
 
 ## 운영 규칙
 

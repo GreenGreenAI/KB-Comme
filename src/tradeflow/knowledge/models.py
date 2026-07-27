@@ -81,6 +81,7 @@ class KnowledgeRule:
     production_ready: bool = False
     source_claim_ids: tuple[str, ...] = ()
     candidate_outcome: dict[str, Any] = field(default_factory=dict)
+    document_set_ids: tuple[str, ...] = ()
 
     def effective_on(self, target_date: date) -> bool:
         return not (

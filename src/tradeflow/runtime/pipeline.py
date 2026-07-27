@@ -350,6 +350,10 @@ class TradeFlowPipeline:
                     steps=tuple(procedure["steps"]),
                     source_ids=tuple(procedure["source_ids"]),
                     source_claim_ids=tuple(procedure["source_claim_ids"]),
+                    document_set_ids=tuple(procedure["document_set_ids"]),
+                    document_requirements=tuple(
+                        procedure["document_requirements"]
+                    ),
                 )
             )
         return self._merge_actions(actions)
@@ -421,6 +425,15 @@ class TradeFlowPipeline:
                     dict.fromkeys(
                         (*existing.source_claim_ids, *action.source_claim_ids)
                     )
+                ),
+                document_set_ids=tuple(
+                    dict.fromkeys(
+                        (*existing.document_set_ids, *action.document_set_ids)
+                    )
+                ),
+                document_requirements=_merge_document_requirements(
+                    existing.document_requirements,
+                    action.document_requirements,
                 ),
             )
         return tuple(merged)
@@ -517,3 +530,17 @@ def _unique_items(items):
         if item not in unique:
             unique.append(item)
     return tuple(unique)
+
+
+def _merge_document_requirements(*groups):
+    merged = {}
+    for group in groups:
+        for requirement in group:
+            existing = merged.get(requirement.requirement_id)
+            if existing is not None and existing != requirement:
+                raise ValueError(
+                    "conflicting document requirement: "
+                    f"{requirement.requirement_id}"
+                )
+            merged[requirement.requirement_id] = requirement
+    return tuple(merged.values())

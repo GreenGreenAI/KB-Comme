@@ -29,7 +29,7 @@ last-reviewed: 2026-07-27
 | `inputs` | 정규화된 사실 | 아니요 |
 | `exposures` | 도구가 계산한 수치 | 아니요 |
 | `decisions` | 규칙 판정, source/claim ID와 구조화된 후보 결과 | 아니요 |
-| `actions` | 적용 규칙의 기관·행동·기한·미충족요건·필요문서·절차·근거 | 아니요 |
+| `actions` | 적용 규칙의 기관·행동·기한·미충족요건·필요문서 세트·절차·근거 | 아니요 |
 | `evidence` | 판정과 계산의 근거 | 아니요 |
 | `review_required`, `review_reasons` | 사람 검토 게이트 | 아니요 |
 
@@ -68,8 +68,21 @@ LLM 출력은 `SynthesisResult`로 구조화한다. 설명문은 비권위적이
 - 같은 케이스·기관·행동·시점·기한의 실행계획은 하나로 통합한다.
 - 통합 결과의 `rule_ids`, 미충족요건, 문서, 절차, source/claim ID는
   최초 등장 순서로 모두 보존한다.
-- 판정 분류·통합을 추가한 schema는 `1.3`이며, 현재 계약은 K-SURE 상품
-  ID를 실행계획에 보존하는 `1.4`이다.
+- 판정 분류·통합을 추가한 schema는 `1.3`, K-SURE 상품 ID를 보존한 계약은
+  `1.4`이다. 현재 `1.5`는 `document_set_ids`와 필수·조건부·택일
+  `document_requirements`를 실행계획에 보존한다.
+
+## 신청서류 계약
+
+- 규칙은 자유 문자열 `required_documents`와 버전형 `document_set_ids`를 동시에
+  사용할 수 없다.
+- `required_documents`에는 모든 케이스에 필요한 서류만 평탄화한다.
+- `conditional`은 적용 조건 설명을, `one_of`는 두 개 이상의 선택지와 선택에
+  필요한 `selector_field`를 반드시 가진다.
+- 신청서류 세트의 source/claim ID는 자격 규칙의 근거와 합쳐져 판정과 실행계획에
+  보존되며, stale 또는 확인 불가 출처를 정상 서류 안내로 승격하지 않는다.
+- LLM은 서류 그룹을 설명할 수 있지만 조건부 서류를 필수로 바꾸거나 택일 서류를
+  임의로 선택할 수 없다.
 
 ## K-SURE 케이스 계약
 

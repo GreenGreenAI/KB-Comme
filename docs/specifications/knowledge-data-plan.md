@@ -34,7 +34,8 @@ MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재
   → extracts: 조항/화면 위치별 검증된 사실과 임계값
   → exception_catalogs: 조문별 예외 전체 목록·증빙·자동화 수준
   → fact_catalog: 규칙 입력 필드·형식·단위·증거
-  → rulepacks: 조건·출처·필요서류·절차
+  → document_catalogs: 상품·단계별 필수·조건부·택일 신청서류
+  → rulepacks: 조건·출처·서류세트 참조·절차
   → RuleDecision / DecisionPacket: 실행 결과와 근거
 ```
 
@@ -72,7 +73,7 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 ## 다음 수집 배치
 
 1. 기업마당 공고 상세 조건의 근거 추출과 역할 B 검토
-2. K-SURE 상품별 신청서류의 버전 추적과 국별인수방침 내부 API 변경 감시
+2. K-SURE 신청서류 catalog의 상대 역할 검토와 상품·단계 범위 확장
 3. 거래·계정 원장의 완료일·기장일·결산일에서 상호계산 기한 fact를 생성하는
    결정론 파생기
 4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 증거 인터페이스
@@ -85,3 +86,8 @@ K-SURE 국별인수방침은 K-Sight 원문을 48시간 freshness gate가 있는
 수집하고, ISO 국가코드별 정상·조건부·인수제한 상태 객체로 변환한다. 거래의
 상대국가가 catalog에 없으면 제한 없음으로 추정하지 않으며, exact snapshot hash를
 attestation evidence에 포함해 `counterparty.country_restricted` fact를 생성한다.
+
+K-SURE 환변동보험 일반형 수출, 단기수출보험 선적후 개별, 수출신용보증 선적전의
+신청서류는 2026-07-27 기준 공식 자료실을 별도 catalog로 관리한다. 거래유형별
+청약서는 `one_of`, 상장 여부·창구청약·추가요구 서류는 `conditional`로 보존하며,
+규칙과 실행계획은 정확한 document set/source/claim ID를 가진다.

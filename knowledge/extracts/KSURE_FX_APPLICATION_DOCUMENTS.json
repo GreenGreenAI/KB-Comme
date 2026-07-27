@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_FX_APPLICATION_DOCUMENTS",
+  "retrieved_at": "2026-07-27T19:00:00+09:00",
+  "document": {
+    "title": "환변동보험 신청서류",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-fx/cntnts/i-520/web.do"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_FX_GENERAL_EXPORT_APPLICATION_DOCUMENTS",
+      "locator": "인수한도 책정시(공통), 청약서, 창구청약시 고객보호를 위한 추가서류",
+      "topic": "application_documents",
+      "normalized_summary": "일반형 수출 환변동보험의 인수한도 신청, 고객정보 동의, 일반형 청약 및 창구청약 조건부 서류를 구분한다.",
+      "automation_level": "deterministic_catalog_with_case_selector"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 환위험관리 지원센터 신청서류 화면의 단계·기업형태·청약방식별 목록 확인",
+    "limitations": [
+      "법인·개인기업과 서명 방식에 따른 부속 증빙은 실제 신청 전 재확인한다.",
+      "옵션형과 사후 변경·조기결제 서류는 일반형 수출 후보의 기본 세트에서 제외한다."
+    ]
+  }
+}

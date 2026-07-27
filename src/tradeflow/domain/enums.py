@@ -70,6 +70,14 @@ class CountryPolicyStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+class DocumentRequirementKind(StrEnum):
+    """How a document group applies to an action."""
+
+    REQUIRED = "required"
+    CONDITIONAL = "conditional"
+    ONE_OF = "one_of"
+
+
 class HedgeMeasureCategory(StrEnum):
     """A contracted product and a way of restructuring trade behave differently.
 

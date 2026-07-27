@@ -93,6 +93,20 @@ python scripts/check_sources.py
 `INSUFFICIENT_INFORMATION`이 반환된다. 규칙은 공식 출처 확인, 정답 사례와 상대
 담당자 리뷰를 마친 뒤에만 `production_ready`로 전환한다.
 
+## Application document catalogs
+
+`document_catalogs/`는 상품·신청단계별 공식 서류를 버전형 세트로 관리한다. 규칙은
+자유 문자열을 복사하지 않고 `document_set_ids`로 세트를 참조한다.
+
+- `required`: 모든 해당 케이스에 필요한 서류
+- `conditional`: 명시된 조건이 성립할 때만 필요한 서류
+- `one_of`: `selector_field`의 확인 결과에 따라 둘 이상의 서류 중 하나를 선택
+
+`required_documents`에는 `required` 문서만 투영한다. 조건부·택일 문서는 구조를
+유지한 채 `DecisionPacket.actions[].document_requirements`로 전달하며, LLM이
+조건을 추정하거나 모든 선택지를 필수로 표현해서는 안 된다. 신청서류 source와
+claim은 자격 규칙의 근거 계보에 합쳐져 최신성 검사를 받는다.
+
 ## 승격 절차
 
 1. 역할 A가 공식 원문과 구조화 extract를 교차 확인한다.

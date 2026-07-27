@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_SHORT_TERM_POSTSHIP_COMMON_DOCUMENTS",
+  "retrieved_at": "2026-07-27T19:00:00+09:00",
+  "document": {
+    "title": "단기수출보험(선적후 공통) 기타서류",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-kr/bbs/i-336/detail.do?ntt_sn=88"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_SHORT_TERM_POSTSHIP_LIFECYCLE_FORMS",
+      "locator": "기타서류",
+      "topic": "application_documents",
+      "normalized_summary": "수출·결제 통지, 내용·결제조건 변경, 실적증명, 청구권 양도와 상사현황표 등 선적후 공통 업무 서식을 제공한다.",
+      "automation_level": "conditional_by_lifecycle_event"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 신청서류 자료실의 선적후 공통 기타서류 목록 확인",
+    "limitations": ["각 서식은 해당 사후 업무가 발생한 경우에만 적용한다."]
+  }
+}

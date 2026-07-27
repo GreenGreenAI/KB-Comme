@@ -4,6 +4,7 @@
   "as_of": "2026-07-27",
   "status": "draft",
   "notice": "공식 공개정보 기반 후보 탐색 규칙입니다. K-SURE의 인수·보증 승인을 의미하지 않습니다.",
+  "document_catalogs": ["../document_catalogs/ksure_application_documents.json"],
   "rules": [
     {
       "rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE",
@@ -57,11 +58,7 @@
       },
       "effective_from": null,
       "effective_to": null,
-      "required_documents": [
-        "기업규모 확인자료",
-        "K-SURE 신용·이용제한 확인자료",
-        "수출계약서 또는 수출실적 증빙"
-      ],
+      "document_set_ids": ["KSURE_FX_GENERAL_EXPORT_APPLICATION_V1"],
       "procedure_steps": [
         "상품 유형과 통화 확인",
         "공통 이용제한 사유 확인",
@@ -131,12 +128,7 @@
       },
       "effective_from": null,
       "effective_to": null,
-      "required_documents": [
-        "수출계약서",
-        "수출자 K-SURE 신용등급",
-        "수입자 K-SURE 신용등급",
-        "국별인수방침 확인자료"
-      ],
+      "document_set_ids": ["KSURE_SHORT_TERM_POSTSHIP_INDIVIDUAL_APPLICATION_V1"],
       "procedure_steps": [
         "수출자·수입자 신용등급 확인",
         "국별인수방침 확인",
@@ -196,12 +188,7 @@
       },
       "effective_from": null,
       "effective_to": null,
-      "required_documents": [
-        "수출신용보증 청약서",
-        "상사현황표",
-        "금융기관거래상황확인서",
-        "수출실적확인서"
-      ],
+      "document_set_ids": ["KSURE_PRESHIPMENT_GUARANTEE_NEW_OR_INCREASE_V1"],
       "procedure_steps": [
         "K-SURE 및 금융기관 사전 상담",
         "보증신청서류 준비",

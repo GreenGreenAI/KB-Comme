@@ -15,7 +15,12 @@ from enum import Enum
 from typing import Any, Mapping
 
 from tradeflow.contracts.evidence import EvidenceDescriptor
-from tradeflow.domain.enums import DecisionCategory, DecisionStatus, EvidenceRole
+from tradeflow.domain.enums import (
+    DecisionCategory,
+    DecisionStatus,
+    DocumentRequirementKind,
+    EvidenceRole,
+)
 from tradeflow.domain.models import (
     AnalysisResult,
     CurrencyExposure,
@@ -69,6 +74,21 @@ class PacketDecision:
 
 
 @dataclass(frozen=True)
+class PacketDocument:
+    document_id: str
+    title: str
+
+
+@dataclass(frozen=True)
+class PacketDocumentRequirement:
+    requirement_id: str
+    kind: DocumentRequirementKind
+    documents: tuple[PacketDocument, ...]
+    condition_description: str | None
+    selector_field: str | None
+
+
+@dataclass(frozen=True)
 class PacketAction:
     subject_id: str | None
     rule_ids: tuple[str, ...]
@@ -79,6 +99,8 @@ class PacketAction:
     deadline: date | None
     requirements: tuple[PacketRequirement, ...]
     required_documents: tuple[str, ...]
+    document_set_ids: tuple[str, ...]
+    document_requirements: tuple[PacketDocumentRequirement, ...]
     steps: tuple[str, ...]
     source_ids: tuple[str, ...]
     source_claim_ids: tuple[str, ...]
@@ -129,7 +151,7 @@ class DecisionPacket:
             packet_id=(
                 f"decision:{result.program_id}:{as_of.isoformat()}:{fingerprint[:16]}"
             ),
-            schema_version="1.4",
+            schema_version="1.5",
             program_id=result.program_id,
             as_of=as_of,
             inputs=tuple(
@@ -325,6 +347,20 @@ def _freeze_action(action: RecommendedAction) -> PacketAction:
             for item in action.requirements
         ),
         required_documents=action.required_documents,
+        document_set_ids=action.document_set_ids,
+        document_requirements=tuple(
+            PacketDocumentRequirement(
+                requirement_id=requirement.requirement_id,
+                kind=requirement.kind,
+                documents=tuple(
+                    PacketDocument(document.document_id, document.title)
+                    for document in requirement.documents
+                ),
+                condition_description=requirement.condition_description,
+                selector_field=requirement.selector_field,
+            )
+            for requirement in action.document_requirements
+        ),
         steps=action.steps,
         source_ids=action.source_ids,
         source_claim_ids=action.source_claim_ids,

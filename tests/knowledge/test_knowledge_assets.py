@@ -4,7 +4,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 from tradeflow.domain.dataset_registry import DatasetRegistry, StorageScope
-from tradeflow.domain.enums import DecisionStatus, Freshness
+from tradeflow.domain.enums import (
+    DecisionStatus,
+    DocumentRequirementKind,
+    Freshness,
+)
 from tradeflow.domain.snapshot_file import content_hash
 from tradeflow.knowledge.repository import KnowledgeRepository
 
@@ -188,6 +192,44 @@ class KnowledgeAssetIntegrityTests(unittest.TestCase):
                     if path.name != "demo_trade_support.json":
                         self.assertTrue(rule.source_claim_ids)
                         self.assertTrue(rule.candidate_outcome)
+
+    def test_ksure_rules_resolve_versioned_document_sets(self) -> None:
+        path = KNOWLEDGE_ROOT / "rulepacks" / "ksure_mvp_candidates.json"
+        raw = _json(path)
+        repository = KnowledgeRepository.from_json(REGISTRY_PATH, path)
+
+        self.assertEqual(4, len(repository.document_sets))
+        for item in raw["rules"]:
+            with self.subTest(rule_id=item["rule_id"]):
+                self.assertNotIn("required_documents", item)
+                self.assertEqual(1, len(item["document_set_ids"]))
+                procedure = repository.procedure_for(item["rule_id"])
+                self.assertEqual(
+                    item["document_set_ids"],
+                    procedure["document_set_ids"],
+                )
+                self.assertTrue(procedure["document_requirements"])
+
+        short_term = repository.document_sets[
+            "KSURE_SHORT_TERM_POSTSHIP_INDIVIDUAL_APPLICATION_V1"
+        ]
+        self.assertEqual((), short_term.universally_required_titles)
+        self.assertEqual(
+            DocumentRequirementKind.ONE_OF,
+            short_term.requirements[0].kind,
+        )
+        self.assertEqual(3, len(short_term.requirements[0].documents))
+
+        preshipment = repository.document_sets[
+            "KSURE_PRESHIPMENT_GUARANTEE_NEW_OR_INCREASE_V1"
+        ]
+        self.assertEqual(
+            {
+                DocumentRequirementKind.REQUIRED,
+                DocumentRequirementKind.CONDITIONAL,
+            },
+            {item.kind for item in preshipment.requirements},
+        )
 
 
 class CuratedRuleSafetyTests(unittest.TestCase):

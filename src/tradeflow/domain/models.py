@@ -9,6 +9,7 @@ from tradeflow.domain.enums import (
     AvailabilityStatus,
     DecisionCategory,
     DecisionStatus,
+    DocumentRequirementKind,
     FinancialInstrumentKind,
     HedgeMeasureCategory,
     HedgeStrategyKind,
@@ -250,6 +251,49 @@ class RuleDecision:
 
 
 @dataclass(frozen=True)
+class DocumentOption:
+    """One official form or supporting document in a requirement group."""
+
+    document_id: str
+    title: str
+
+    def __post_init__(self) -> None:
+        if not self.document_id or not self.title:
+            raise ValueError("document_id and title must not be empty")
+
+
+@dataclass(frozen=True)
+class DocumentRequirementGroup:
+    """Preserve required, conditional and mutually exclusive documents."""
+
+    requirement_id: str
+    kind: DocumentRequirementKind
+    documents: tuple[DocumentOption, ...]
+    condition_description: str | None = None
+    selector_field: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.requirement_id:
+            raise ValueError("document requirement_id must not be empty")
+        if not self.documents:
+            raise ValueError(f"{self.requirement_id}: documents must not be empty")
+        ids = [item.document_id for item in self.documents]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"{self.requirement_id}: duplicate document_id")
+        if self.kind is DocumentRequirementKind.ONE_OF:
+            if len(self.documents) < 2:
+                raise ValueError(f"{self.requirement_id}: one_of needs two options")
+            if not self.selector_field:
+                raise ValueError(f"{self.requirement_id}: one_of needs selector_field")
+        if self.kind is DocumentRequirementKind.CONDITIONAL and not (
+            self.condition_description
+        ):
+            raise ValueError(
+                f"{self.requirement_id}: conditional needs condition_description"
+            )
+
+
+@dataclass(frozen=True)
 class RecommendedAction:
     """A deterministic procedure projected from an applicable rule."""
 
@@ -265,6 +309,8 @@ class RecommendedAction:
     steps: tuple[str, ...]
     source_ids: tuple[str, ...]
     source_claim_ids: tuple[str, ...]
+    document_set_ids: tuple[str, ...] = ()
+    document_requirements: tuple[DocumentRequirementGroup, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.rule_ids:
@@ -273,6 +319,11 @@ class RecommendedAction:
             raise ValueError("action rule_ids must not contain duplicates")
         if len(set(self.product_ids)) != len(self.product_ids):
             raise ValueError("action product_ids must not contain duplicates")
+        if len(set(self.document_set_ids)) != len(self.document_set_ids):
+            raise ValueError("action document_set_ids must not contain duplicates")
+        requirement_ids = [item.requirement_id for item in self.document_requirements]
+        if len(set(requirement_ids)) != len(requirement_ids):
+            raise ValueError("action document requirements must not contain duplicates")
         if not self.action:
             raise ValueError("action name must not be empty")
 

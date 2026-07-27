@@ -183,7 +183,7 @@ class AnalysisServiceTests(unittest.TestCase):
         encoded = json.dumps(document, ensure_ascii=False, sort_keys=True)
 
         self.assertEqual(first.packet_id, second.packet_id)
-        self.assertEqual("1.4", document["schema_version"])
+        self.assertEqual("1.5", document["schema_version"])
         self.assertEqual("100", document["exposures"][0]["opening_balance"])
         self.assertEqual("1000.25", document["exposures"][0]["total_inflow"])
         self.assertEqual(1, len(document["decisions"]))

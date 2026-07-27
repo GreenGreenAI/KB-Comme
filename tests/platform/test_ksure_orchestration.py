@@ -23,6 +23,7 @@ from tradeflow.knowledge.facts import (
 from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
+from tradeflow.runtime.analysis_service import decision_packet_document
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -140,7 +141,7 @@ class KsureOrchestrationTests(unittest.TestCase):
     def test_complete_case_reaches_three_products_and_action_plans(self) -> None:
         packet = self._packet()
 
-        self.assertEqual("1.4", packet.schema_version)
+        self.assertEqual("1.5", packet.schema_version)
         self.assertEqual(3, len(packet.decisions))
         for decision in packet.decisions:
             self.assertEqual(
@@ -164,8 +165,44 @@ class KsureOrchestrationTests(unittest.TestCase):
             },
             products,
         )
-        self.assertTrue(all(action.required_documents for action in packet.actions))
+        self.assertTrue(all(action.document_set_ids for action in packet.actions))
+        self.assertTrue(all(action.document_requirements for action in packet.actions))
         self.assertTrue(all(action.steps for action in packet.actions))
+
+        short_term = next(
+            action
+            for action in packet.actions
+            if "ksure_short_term_export_postshipment_individual"
+            in action.product_ids
+        )
+        self.assertEqual((), short_term.required_documents)
+        trade_form = short_term.document_requirements[0]
+        self.assertEqual("one_of", trade_form.kind.value)
+        self.assertEqual("trade.transaction_type", trade_form.selector_field)
+        self.assertEqual(3, len(trade_form.documents))
+        self.assertIn(
+            "KSURE_SHORT_TERM_POSTSHIP_APPLICATION_DOCUMENTS",
+            short_term.source_ids,
+        )
+        self.assertIn(
+            "KSURE_SHORT_TERM_POSTSHIP_APPLICATION_FORMS",
+            short_term.source_claim_ids,
+        )
+        document = decision_packet_document(packet)
+        serialized = next(
+            action
+            for action in document["actions"]
+            if "ksure_short_term_export_postshipment_individual"
+            in action["product_ids"]
+        )
+        self.assertEqual(
+            "one_of",
+            serialized["document_requirements"][0]["kind"],
+        )
+        self.assertEqual(
+            "trade.transaction_type",
+            serialized["document_requirements"][0]["selector_field"],
+        )
 
     def test_country_policy_snapshot_supplies_restriction_fact_end_to_end(self) -> None:
         profile = self._profile(

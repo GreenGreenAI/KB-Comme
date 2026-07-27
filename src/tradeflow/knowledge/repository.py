@@ -14,6 +14,7 @@ from tradeflow.domain.enums import (
 )
 from tradeflow.domain.models import DecisionRequirement, RuleDecision
 from tradeflow.knowledge.conditions import evaluate_condition
+from tradeflow.knowledge.documents import ApplicationDocumentSet, DocumentCatalog
 from tradeflow.knowledge.models import (
     Condition,
     ConditionFailureEffect,
@@ -27,15 +28,41 @@ class KnowledgeRepository:
         self,
         sources: Iterable[SourceRecord] = (),
         rules: Iterable[KnowledgeRule] = (),
+        document_sets: Iterable[ApplicationDocumentSet] = (),
     ) -> None:
         sources = tuple(sources)
         rules = tuple(rules)
+        document_sets = tuple(document_sets)
         self.sources = {source.source_id: source for source in sources}
         self.rules = {rule.rule_id: rule for rule in rules}
+        self.document_sets = {
+            item.document_set_id: item for item in document_sets
+        }
         if len(self.sources) != len(sources):
             raise ValueError("knowledge sources contain duplicate source_id values")
         if len(self.rules) != len(rules):
             raise ValueError("knowledge rules contain duplicate rule_id values")
+        if len(self.document_sets) != len(document_sets):
+            raise ValueError("knowledge contains duplicate document_set_id values")
+        for rule in rules:
+            if rule.required_documents and rule.document_set_ids:
+                raise ValueError(
+                    f"{rule.rule_id}: use inline required_documents or "
+                    "document_set_ids, not both"
+                )
+            for document_set_id in rule.document_set_ids:
+                if document_set_id not in self.document_sets:
+                    raise ValueError(
+                        f"{rule.rule_id}: unknown document_set_id "
+                        f"{document_set_id}"
+                    )
+                document_set = self.document_sets[document_set_id]
+                product_id = rule.candidate_outcome.get("product_id")
+                if product_id != document_set.product_id:
+                    raise ValueError(
+                        f"{rule.rule_id}: product_id does not match "
+                        f"{document_set_id}"
+                    )
 
     @classmethod
     def from_json(cls, source_path: Path, rule_path: Path) -> "KnowledgeRepository":
@@ -49,12 +76,21 @@ class KnowledgeRepository:
     ) -> "KnowledgeRepository":
         source_data = json.loads(source_path.read_text(encoding="utf-8"))
         sources = [_parse_source(item) for item in source_data["sources"]]
-        rules = [
-            _parse_rule(item)
-            for path in rule_paths
-            for item in json.loads(path.read_text(encoding="utf-8"))["rules"]
-        ]
-        return cls(sources, rules)
+        rules: list[KnowledgeRule] = []
+        document_sets: list[ApplicationDocumentSet] = []
+        loaded_catalogs: set[Path] = set()
+        for path in rule_paths:
+            rule_data = json.loads(path.read_text(encoding="utf-8"))
+            rules.extend(_parse_rule(item) for item in rule_data["rules"])
+            for relative_path in rule_data.get("document_catalogs", []):
+                catalog_path = (path.parent / relative_path).resolve()
+                if catalog_path in loaded_catalogs:
+                    continue
+                loaded_catalogs.add(catalog_path)
+                document_sets.extend(
+                    DocumentCatalog.from_json(catalog_path).document_sets.values()
+                )
+        return cls(sources, rules, document_sets)
 
     def evaluate(
         self,
@@ -71,13 +107,40 @@ class KnowledgeRepository:
             if rule.topic != topic or not rule.effective_on(as_of):
                 continue
 
-            missing_sources = [sid for sid in rule.source_ids if sid not in self.sources]
+            document_sets = tuple(
+                self.document_sets[item] for item in rule.document_set_ids
+            )
+            source_ids = tuple(
+                dict.fromkeys(
+                    (
+                        *rule.source_ids,
+                        *(
+                            source_id
+                            for document_set in document_sets
+                            for source_id in document_set.source_ids
+                        ),
+                    )
+                )
+            )
+            source_claim_ids = tuple(
+                dict.fromkeys(
+                    (
+                        *rule.source_claim_ids,
+                        *(
+                            claim_id
+                            for document_set in document_sets
+                            for claim_id in document_set.source_claim_ids
+                        ),
+                    )
+                )
+            )
+            missing_sources = [sid for sid in source_ids if sid not in self.sources]
             source_statuses = {
                 sid: self.sources[sid].status_on(
                     as_of,
                     freshness=freshness_by_source.get(sid),
                 )
-                for sid in rule.source_ids
+                for sid in source_ids
                 if sid in self.sources
             }
             results = [evaluate_condition(condition, facts) for condition in rule.conditions]
@@ -129,7 +192,7 @@ class KnowledgeRepository:
                     missing_fields=tuple(
                         result.condition.field for result in uncertain
                     ),
-                    source_ids=rule.source_ids,
+                    source_ids=source_ids,
                     requirements=tuple(
                         DecisionRequirement(
                             field=result.condition.field,
@@ -141,7 +204,7 @@ class KnowledgeRepository:
                         for result in conditional
                         if status is DecisionStatus.CONDITIONALLY_ELIGIBLE
                     ),
-                    source_claim_ids=rule.source_claim_ids,
+                    source_claim_ids=source_claim_ids,
                     candidate_outcome=rule.candidate_outcome,
                     subject_id=subject_id,
                     matched=matched,
@@ -158,13 +221,55 @@ class KnowledgeRepository:
         rule = self.rules.get(rule_id)
         if not rule:
             return None
+        document_sets = tuple(
+            self.document_sets[item] for item in rule.document_set_ids
+        )
         return {
             "rule_id": rule.rule_id,
             "title": rule.title,
-            "required_documents": list(rule.required_documents),
+            "required_documents": list(
+                dict.fromkeys(
+                    (
+                        *rule.required_documents,
+                        *(
+                            title
+                            for document_set in document_sets
+                            for title in document_set.universally_required_titles
+                        ),
+                    )
+                )
+            ),
+            "document_set_ids": list(rule.document_set_ids),
+            "document_requirements": [
+                requirement
+                for document_set in document_sets
+                for requirement in document_set.requirements
+            ],
             "steps": list(rule.procedure_steps),
-            "source_ids": list(rule.source_ids),
-            "source_claim_ids": list(rule.source_claim_ids),
+            "source_ids": list(
+                dict.fromkeys(
+                    (
+                        *rule.source_ids,
+                        *(
+                            source_id
+                            for document_set in document_sets
+                            for source_id in document_set.source_ids
+                        ),
+                    )
+                )
+            ),
+            "source_claim_ids": list(
+                dict.fromkeys(
+                    (
+                        *rule.source_claim_ids,
+                        *(
+                            claim_id
+                            for document_set in document_sets
+                            for claim_id in document_set.source_claim_ids
+                        ),
+                    )
+                )
+            ),
             "candidate_outcome": dict(rule.candidate_outcome),
         }
 
@@ -222,6 +327,7 @@ def _parse_rule(item: dict[str, Any]) -> KnowledgeRule:
         production_ready=bool(item.get("production_ready", False)),
         source_claim_ids=tuple(item.get("source_claim_ids", [])),
         candidate_outcome=dict(item.get("candidate_outcome", {})),
+        document_set_ids=tuple(item.get("document_set_ids", [])),
     )
 
 

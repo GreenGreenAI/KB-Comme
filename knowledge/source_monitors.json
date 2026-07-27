@@ -107,6 +107,46 @@
         "조건부 인수국",
         "인수제한국"
       ]
+    },
+    {
+      "source_id": "KSURE_FX_APPLICATION_DOCUMENTS",
+      "url": "https://www.ksure.or.kr/rh-fx/cntnts/i-520/web.do",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "인수한도신청서 및 헤지수요조사표(일반형)",
+        "일반형선물환 청약서",
+        "내용 확인 및 추가위험고지문(공통)"
+      ]
+    },
+    {
+      "source_id": "KSURE_SHORT_TERM_POSTSHIP_APPLICATION_DOCUMENTS",
+      "url": "https://www.ksure.or.kr/rh-kr/bbs/i-336/detail.do?ntt_sn=93",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "청약서(일반/위탁가공)",
+        "청약서(중계무역)",
+        "청약서(재판매)"
+      ]
+    },
+    {
+      "source_id": "KSURE_SHORT_TERM_POSTSHIP_COMMON_DOCUMENTS",
+      "url": "https://www.ksure.or.kr/rh-kr/bbs/i-336/detail.do?ntt_sn=88",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "수출통지서(개별)",
+        "결제통지서",
+        "보험금 청구권 양도 신청서"
+      ]
+    },
+    {
+      "source_id": "KSURE_PRESHIPMENT_APPLICATION_DOCUMENTS",
+      "url": "https://www.ksure.or.kr/rh-kr/bbs/i-336/detail.do?ntt_sn=110",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "수출신용보증 청약서",
+        "주주현황표(비상장기업용)",
+        "단기지급능력검토표"
+      ]
     }
   ]
 }
