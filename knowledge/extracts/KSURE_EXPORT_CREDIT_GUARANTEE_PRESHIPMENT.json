@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "수출신용보증(선적전) 제도개요",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-kr/cntnts/i-166/web.do"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_PRESHIPMENT_TARGET",
+      "locator": "제도개요",
+      "topic": "trade_support",
+      "normalized_summary": "중소·중견기업이 수출물품의 제조·가공·조달 자금을 금융기관에서 대출받을 때 K-SURE가 연대보증하는 제도다.",
+      "company_sizes": ["small", "mid_sized"]
+    },
+    {
+      "claim_id": "KSURE_PRESHIPMENT_FINANCING_TYPES",
+      "locator": "보증대상",
+      "topic": "trade_support",
+      "normalized_summary": "무역금융, 인정 수출자금, 무역어음 인수, 수출용원자재 수입신용장 및 기타 인정 수출진흥 자금이 보증대상 후보에 포함된다.",
+      "allowed_values": [
+        "trade_finance",
+        "recognized_export_finance",
+        "trade_bill_acceptance",
+        "export_material_import_lc",
+        "recognized_export_promotion_fund"
+      ]
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 공식 제도개요와 보증대상 확인",
+    "limitations": [
+      "공식 페이지도 정보의 완전성을 보장하지 않는다고 명시한다.",
+      "신용평가와 보증심사 결과를 자동 판정할 수 없다."
+    ]
+  }
+}

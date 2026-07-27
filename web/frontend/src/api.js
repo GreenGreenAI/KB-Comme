@@ -6,7 +6,13 @@ export async function analyze(body) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`서버가 ${response.status}로 응답했습니다. 잠시 후 다시 시도해 주세요.`);
+    const payload = await response.json().catch(() => null);
+    const detail = payload?.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail?.reason ?? `서버가 ${response.status}로 응답했습니다.`;
+    throw new Error(message);
   }
   return response.json();
 }

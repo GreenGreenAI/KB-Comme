@@ -22,6 +22,15 @@ class DecisionStatus(StrEnum):
     SOURCE_EXPIRED = "source_expired"
 
 
+class DecisionCategory(StrEnum):
+    CANDIDATE = "candidate"
+    EXCLUDED = "excluded"
+    MISSING_INFORMATION = "missing_information"
+    EXPERT_REVIEW = "expert_review"
+    SOURCE_UNUSABLE = "source_unusable"
+    URGENT_ACTION = "urgent_action"
+
+
 class RuleType(StrEnum):
     ELIGIBILITY = "eligibility"
     REQUIREMENT = "requirement"
@@ -40,16 +49,40 @@ class EvidenceRole(StrEnum):
     MARKET_DATA = "market_data"
 
 
+class EvidenceSubjectKind(StrEnum):
+    """The business object an operational evidence record may attest."""
+
+    COMPANY = "company"
+    CASE = "case"
+
+
 class SourceStatus(StrEnum):
     ACTIVE = "active"
     EXPIRED = "expired"
     FUTURE = "future"
     UNVERIFIED = "unverified"
+    FRESHNESS_UNKNOWN = "freshness_unknown"
+    STALE = "stale"
 
 
 class Freshness(StrEnum):
     FRESH = "fresh"
     STALE = "stale"
+
+
+class CountryPolicyStatus(StrEnum):
+    NORMAL = "normal"
+    CONDITIONAL = "conditional"
+    RESTRICTED = "restricted"
+    UNKNOWN = "unknown"
+
+
+class DocumentRequirementKind(StrEnum):
+    """How a document group applies to an action."""
+
+    REQUIRED = "required"
+    CONDITIONAL = "conditional"
+    ONE_OF = "one_of"
 
 
 class HedgeMeasureCategory(StrEnum):

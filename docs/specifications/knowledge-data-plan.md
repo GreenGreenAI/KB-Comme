@@ -1,0 +1,100 @@
+---
+status: proposed
+owner: knowledge-domain
+reviewers: platform-runtime
+last-reviewed: 2026-07-27
+---
+
+# 지식 데이터 수집·구조화 계획
+
+## 목적
+
+MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재현 가능한 규칙으로
+변환한다. 이 데이터는 승인·가입·법률 판단을 확정하지 않고, 근거가 있는 후보와
+사람이 확인해야 할 항목을 만든다.
+
+## 우선순위
+
+| 순위 | 영역 | 공식 출처 | 현재 산출물 | 상태 |
+|---|---|---|---|---|
+| P0 | 외국환 신고·보고 | 국가법령정보센터, 한국은행 | 제5장 예외 catalog와 신고 후보 규칙 | draft |
+| P0 | 환변동보험 | K-SURE | 일반형 수출 후보 규칙 | draft |
+| P0 | 단기수출보험 | K-SURE | 선적후 개별보험 후보 규칙 | draft |
+| P0 | 수출신용보증 | K-SURE | 선적전 보증 후보 규칙 | draft |
+| P1 | 지원사업 탐색 | 기업마당 API와 개별 공고 | 일일 API 스냅샷·정규화 객체 | 상세 조건 규칙화 대기 |
+| P1 | 국별인수방침 | K-SURE K-Sight | 일일 비공개 스냅샷·typed catalog·수입자 국가 제한 fact | 구현, 상대 역할 검토 대기 |
+| P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | typed evidence·비공개 snapshot feed·tenant-safe provider·FactAssembler 연결 | 기관별 실제 connector/인증 연동 대기 |
+
+## 데이터 계층
+
+```text
+공식 원문
+  → source_monitors: HTTP 상태·문서 식별 표지·응답 지문
+  → source_registry: 신원·효력·최신성·이용조건
+  → extracts: 조항/화면 위치별 검증된 사실과 임계값
+  → exception_catalogs: 조문별 예외 전체 목록·증빙·자동화 수준
+  → fact_catalog: 규칙 입력 필드·형식·단위·증거
+  → document_catalogs: 상품·단계별 필수·조건부·택일 신청서류
+  → rulepacks: 조건·출처·서류세트 참조·절차
+  → EligibilityEvidenceProvider: 운영 응답의 주체·시각·해시·fact 정규화
+  → EligibilityEvidenceAssembler: trusted/fresh 증거만 케이스 assertion으로 결합
+  → RuleDecision / DecisionPacket: 실행 결과와 근거
+```
+
+원문 URL 하나만 규칙에 직접 연결하지 않는다. 변할 수 있는 웹 안내는 extract와
+canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
+각 규칙은 `source_ids`뿐 아니라 실제 사용한 `source_claim_ids`를 보존하고,
+`candidate_outcome`에 후보 종류·담당 기관·행동을 구조화한다. 이 값은
+`RuleDecision`과 `DecisionPacket`까지 손실 없이 전달한다.
+
+원문 감시는 이용·재배포 조건이 확인되기 전까지 HTML 본문을 저장하지 않고
+메타데이터, 응답 지문과 사람이 검토한 문서 식별 표지만 기록한다. 동적 HTML의
+응답 지문은 변경 조사 단서일 뿐 extract의 버전 해시를 대신하지 않는다.
+
+## 자동화 경계
+
+- HTML/API 수집, 변경 감지, 필드 정규화 후보 생성은 자동화할 수 있다.
+- 숫자 임계값, 예외, 효력일과 기관의 권한은 역할 A가 원문과 대조한다.
+- 예외는 포괄 boolean이 아니라 조문 번호 기반 enum으로 기록하며 `none`은 전체
+  예외 대조를 마친 경우에만 사용한다.
+- 규칙 실행과 경계값 비교는 결정론 코드가 담당한다.
+- LLM은 원문에서 extract 초안을 만들거나 결과를 설명할 수 있지만 규칙을 자동
+  승인하거나 누락된 사실을 추정하지 않는다.
+
+## 품질 게이트
+
+규칙을 운영 상태로 승격하려면 다음을 모두 만족해야 한다.
+
+1. 공식 출처와 원문 위치가 등록되어 있다.
+2. 추출본 해시와 기준일을 재현할 수 있다.
+3. 규칙 field가 fact catalog에 존재하고 증거 취득 경로가 있다.
+4. 임계값의 아래·동일·위 경계 테스트가 있다.
+5. 누락·만료·stale 출처가 확정 후보로 승격되지 않는다.
+6. 역할 B와 관련 도메인 전문가의 검토가 완료된다.
+
+이 조건은 `knowledge/validation_suites`의 rule별 true/false/missing 정답 사례와
+`knowledge/reviews/rulepack_promotion.json`의 역할별 승인·artifact hash로 검증한다.
+규칙 검증 완료와 결과의 사람 검토 필요 여부는 독립적이며, 보험·신고 후보는
+`review_policy=always_expert`를 사용한다.
+
+## 다음 수집 배치
+
+1. 기업마당 공고 상세 조건의 근거 추출과 역할 B 검토
+2. K-SURE 신청서류 catalog의 상대 역할 검토와 상품·단계 범위 확장
+3. 거래·계정 원장의 완료일·기장일·결산일에서 상호계산 기한 fact를 생성하는
+   결정론 파생기
+4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 실제 provider 어댑터·인증 연동
+
+거래피드의 스냅샷 수집·정규화와 근거 결합형 `FactAssembler`, 케이스별
+`trade_support_case`·`fx_compliance` 실행은 완료했다. 현재 수직 기준은 양자간
+상호계산계정 개설 신고 검토이며, 규칙은 상대 역할 검토 전까지 draft 상태를 유지한다.
+
+K-SURE 국별인수방침은 K-Sight 원문을 48시간 freshness gate가 있는 비공개 스냅샷으로
+수집하고, ISO 국가코드별 정상·조건부·인수제한 상태 객체로 변환한다. 거래의
+상대국가가 catalog에 없으면 제한 없음으로 추정하지 않으며, exact snapshot hash를
+attestation evidence에 포함해 `counterparty.country_restricted` fact를 생성한다.
+
+K-SURE 환변동보험 일반형 수출, 단기수출보험 선적후 개별, 수출신용보증 선적전의
+신청서류는 2026-07-27 기준 공식 자료실을 별도 catalog로 관리한다. 거래유형별
+청약서는 `one_of`, 상장 여부·창구청약·추가요구 서류는 `conditional`로 보존하며,
+규칙과 실행계획은 정확한 document set/source/claim ID를 가진다.

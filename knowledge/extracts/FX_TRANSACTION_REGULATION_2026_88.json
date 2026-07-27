@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0",
+  "source_id": "FX_TRANSACTION_REGULATION_2026_88",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "외국환거래규정",
+    "issuer": "재정경제부",
+    "instrument": "재정경제부고시 제2026-88호",
+    "effective_from": "2026-07-06",
+    "official_url": "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000281984&chrClsCd=010201"
+  },
+  "claims": [
+    {
+      "claim_id": "FXR_ARTICLE_5_4",
+      "locator": "제5-4조",
+      "topic": "netting_payment_method",
+      "normalized_summary": "상계에 의한 지급 등의 신고·보고 및 예외 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_4_EXCEPTION_SET",
+      "locator": "제5-4조제1항제1호부터 제15호",
+      "topic": "netting_payment_method",
+      "normalized_summary": "현행 조문은 상계 신고예외 15개 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 15,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_5",
+      "locator": "제5-5조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산계정의 개설과 폐쇄는 지정거래외국환은행에 신고해야 하며 폐쇄계정 잔액은 제5-7조제3항 절차를 따른다.",
+      "authority": "designated_foreign_exchange_bank",
+      "action": "file",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_6",
+      "locator": "제5-6조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산계정에는 상대방과의 채권·채무만 기장할 수 있고 수출입은 완료 후, 그 밖의 거래는 채권·채무 확정 후 30일 이내에 기장해야 한다.",
+      "thresholds": {
+        "entry_days": {
+          "operator": "lte",
+          "value": 30,
+          "unit": "day"
+        }
+      },
+      "automation_level": "deterministic_with_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_7",
+      "locator": "제5-7조",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산은 원칙적으로 월 단위 결산주기를 사용하고, 결산 종료 후 3개월 이내 지정거래외국환은행 신고 후 잔액을 지급·수령하며, 요구 보고서 제출과 장부·증빙 5년 보관이 필요하다.",
+      "thresholds": {
+        "balance_settlement_months": {
+          "operator": "lte",
+          "value": 3,
+          "unit": "calendar_month"
+        },
+        "record_retention_years": {
+          "operator": "gte",
+          "value": 5,
+          "unit": "year"
+        }
+      },
+      "automation_level": "deterministic_with_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_8",
+      "locator": "제5-8조",
+      "topic": "extended_payment_period",
+      "normalized_summary": "일정 기간을 초과하는 수출입대금 지급·수령의 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_8_EXCEPTION_SET",
+      "locator": "제5-8조제1항 단서",
+      "topic": "extended_payment_period",
+      "normalized_summary": "선박·철도차량·항공기·대외무역법상 산업설비의 수출입은 기간초과 지급 신고예외다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 4,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_10",
+      "locator": "제5-10조",
+      "topic": "third_party_payment",
+      "normalized_summary": "제3자 지급·수령의 신고예외와 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_10_EXCEPTION_SET",
+      "locator": "제5-10조제1항제1호부터 제32호",
+      "topic": "third_party_payment",
+      "normalized_summary": "현행 조문은 제3자 지급 신고예외 32개 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 32,
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_11",
+      "locator": "제5-11조",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "외국환은행을 통하지 않는 지급·수령의 신고예외와 한국은행 신고 기준을 규율한다.",
+      "automation_level": "candidate_only"
+    },
+    {
+      "claim_id": "FXR_ARTICLE_5_11_EXCEPTION_SET",
+      "locator": "제5-11조제1항 본문 및 제1호부터 제13호",
+      "topic": "payment_outside_fx_bank",
+      "normalized_summary": "현행 조문은 비은행 수령과 외국환은행을 통하지 않는 지급의 예외 유형을 열거한다.",
+      "exception_catalog": "knowledge/exception_catalogs/fx_chapter5.json",
+      "exception_count": 14,
+      "automation_level": "requires_transaction_evidence"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "국가법령정보센터 현행 행정규칙의 시행일과 발령번호를 현행행정규칙 검색 결과와 교차 확인",
+    "limitations": [
+      "실제 신고 판단에는 예외 조항과 거래 사실관계 확인이 필요하다.",
+      "자동 확정 판정이 아니라 신고 검토 후보 생성에만 사용한다."
+    ]
+  }
+}

@@ -19,7 +19,7 @@ domain
          ▲
 runtime ─┴── contracts + knowledge
 
-integration ─→ data/snapshots/*.json ─→ tools, knowledge
+integration ─→ 공개/비공개 snapshot store ─→ tools, knowledge
    (리프)              (파일)
 ```
 

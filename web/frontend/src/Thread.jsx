@@ -80,13 +80,8 @@ function AgentTurn({ turn, live, onSlot, first }) {
   const result = turn.result;
   const market = result.market_scenario;
   const hedge = result.hedge_analysis;
-  const net = result.cashflow_analysis?.net_exposure?.[0]?.amount;
-  const swing =
-    market && net
-      ? Math.round(
-          Number(net) * (Number(market.band_lower) - Number(market.spot_rate)),
-        )
-      : null;
+  const swing = market?.adverse_cashflow_amount ?? null;
+  const hedgeInputs = result.required_inputs?.hedge ?? [];
 
   return (
     <div className="turn agent">
@@ -100,6 +95,8 @@ function AgentTurn({ turn, live, onSlot, first }) {
                 exposure: "순노출·자금공백 산출",
                 market_scenario: "변동성 추정 — 최근 60영업일",
                 hedge: "헤지비율 산출",
+                support: "지원제도 규칙 판정",
+                compliance: "신고의무 규칙 판정",
               }[name]
             }
           </span>
@@ -115,10 +112,15 @@ function AgentTurn({ turn, live, onSlot, first }) {
         <p>
           계산했습니다.{" "}
           <strong>
-            결제일까지 환율이 {won(market.band_lower)}원까지 내려갈 수 있고
+            결제일까지 불리한 환율이 {won(market.adverse_rate)}원일 수 있고
           </strong>
           , 그러면 받는 금액이 지금보다{" "}
-          <strong>{won(Math.abs(swing))}원 {swing < 0 ? "적어집니다" : "많아집니다"}.</strong>
+          <strong>
+            {won(swing)}원{" "}
+            {market.adverse_cashflow_direction === "decrease"
+              ? "적어집니다"
+              : "많아집니다"}.
+          </strong>
         </p>
       ) : hedge ? (
         <p>
@@ -130,14 +132,18 @@ function AgentTurn({ turn, live, onSlot, first }) {
         <p>다시 계산했습니다. 오른쪽에서 결과를 확인하실 수 있어요.</p>
       )}
 
-      {!hedge && (
+      {!hedge && hedgeInputs.length > 0 && (
         <>
           <p>
-            영업이익을 알려주시면 손익분기 환율과 필요한 헤지 비율까지 계산해
-            드릴게요.
+            기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
+            입력하지 않은 하한을 임의로 만들지 않습니다.
           </p>
           {live && <ProfitInput onSlot={onSlot} />}
         </>
+      )}
+
+      {!hedge && hedgeInputs.length === 0 && result.workers.skipped.hedge && (
+        <p>{result.workers.skipped.hedge}</p>
       )}
 
       {hedge?.status === "HEDGE_INSUFFICIENT" && (
@@ -193,31 +199,33 @@ function SlotInput({ missing, onSlot }) {
 }
 
 function ProfitInput({ onSlot }) {
-  const [value, setValue] = useState("");
+  const [baseline, setBaseline] = useState("");
+  const [floor, setFloor] = useState("");
   const submit = () =>
-    value &&
+    baseline &&
+    floor &&
     onSlot({
-      profile: { baseline_profit: value, profit_floor: String(Math.round(Number(value.replace(/,/g, "")) * 0.67)) },
+      profile: { baseline_profit: baseline, profit_floor: floor },
     });
 
   return (
-    <>
-      <div className="slotline">
-        <input
-          inputMode="decimal"
-          value={value}
-          placeholder="영업이익 (원)"
-          aria-label="기준 영업이익"
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-        <button type="button" onClick={submit}>계산</button>
-      </div>
-      <div className="quick">
-        <button type="button" onClick={() => onSlot({ profile: {} })}>
-          잘 모르겠어요
-        </button>
-      </div>
-    </>
+    <div className="slotline">
+      <input
+        inputMode="decimal"
+        value={baseline}
+        placeholder="기준 영업이익 (원)"
+        aria-label="기준 영업이익"
+        onChange={(e) => setBaseline(e.target.value)}
+      />
+      <input
+        inputMode="decimal"
+        value={floor}
+        placeholder="목표 손익 하한 (원)"
+        aria-label="목표 손익 하한"
+        onChange={(e) => setFloor(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+      />
+      <button type="button" onClick={submit}>계산</button>
+    </div>
   );
 }

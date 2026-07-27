@@ -1,13 +1,13 @@
 ---
-status: proposed
+status: accepted
 owner: platform-runtime
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-07-27
 ---
 
 # ADR-0003: 스냅샷 계약의 위치와 integration 리프
 
-- 상태: 제안 (역할 A 승인 대기)
+- 상태: 승인
 - 날짜: 2026-07-26
 - 관련: ADR-0001, MVP 아키텍처 정의서 §6.1, §6.2, §9.1, §10
 
@@ -90,6 +90,17 @@ integration/  (리프 — 어떤 모듈도 import 하지 않는다)
 
 ECOS만 자동 수집한다. 백테스트 커버리지(§5.2)에 과거 시계열이 필요하고 그 확보
 기간이 역할 B의 리드타임을 지배하기 때문이다.
+
+### 4. 데이터 분류에 따라 저장 위치를 분리한다
+
+위 결정의 “커밋된 파일”은 ECOS처럼 재배포 가능한 공개 기준데이터에만 적용한다.
+고객 거래·ERP 원장·잔액은 같은 스냅샷 봉투와 무결성 계약을 사용하되 Git에 커밋하지
+않고, 로컬에서는 제외된 `data/runtime/`, 운영에서는 암호화된 비공개 저장소에 둔다.
+
+두 저장소 모두 소비 시 source/version/time/hash, 경로 identity, 스키마와 최신성을
+검증한다. 고객 스냅샷의 원문을 결과에 복제하지 않고 `SnapshotRef`만
+`TradeProgram`과 `DecisionPacket` 근거로 전달한다. 이 구분은 파일 기반 데이터 의존
+결정을 유지하면서 보안 원칙의 “고객 데이터 비커밋”을 만족한다.
 
 ## 결과
 

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "source_id": "FX_TRANSACTION_DECREE_2026_04_28",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "외국환거래법 시행령",
+    "issuer": "대한민국",
+    "instrument": "대통령령 제36280호",
+    "effective_from": "2026-04-28",
+    "official_url": "https://www.law.go.kr/LSW/lsLinkProc.do?datClsCd=010102&gubun=admRul&joNo=003000000&lsId=22029&lsNm=%EC%99%B8%EA%B5%AD%ED%99%98%EA%B1%B0%EB%9E%98%EB%B2%95%EC%8B%9C%ED%96%89%EB%A0%B9&mode=10"
+  },
+  "claims": [
+    {
+      "claim_id": "FXD_ARTICLE_30",
+      "locator": "제30조(지급 또는 수령 방법의 신고)",
+      "topic": "payment_method_reporting",
+      "normalized_summary": "법 제16조 신고서류와 사후보고·신고예외가 가능한 거래 범위를 고시에 위임한다.",
+      "automation_level": "delegation_basis_only"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "국가법령정보센터 현행 법령의 시행일·대통령령 번호와 제30조 확인",
+    "limitations": [
+      "구체 임계값과 신고기관은 현행 외국환거래규정과 공식 업무 안내를 함께 확인해야 한다."
+    ]
+  }
+}

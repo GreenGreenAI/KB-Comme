@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "source_id": "BOK_FX_MUTUAL_ACCOUNT_FAQ",
+  "retrieved_at": "2026-07-27T09:57:11+09:00",
+  "document": {
+    "title": "외환거래별 신고 FAQ - 상계와 상호계산의 차이점",
+    "issuer": "한국은행",
+    "official_url": "https://www.bok.or.kr/portal/bbs/B0000267/list.do?menuNo=200796&pageIndex=9"
+  },
+  "claims": [
+    {
+      "claim_id": "BOK_MUTUAL_ACCOUNT_DEFINITION",
+      "locator": "질문: 상계와 상호계산의 차이점은 무엇입니까?",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산은 거주자와 비거주자 사이의 지속적인 거래에서 향후 발생할 채권·채무를 정기적으로 차액 정산하는 방식이다.",
+      "automation_level": "requires_transaction_evidence"
+    },
+    {
+      "claim_id": "BOK_MUTUAL_ACCOUNT_BANK_FILING",
+      "locator": "질문: 상계와 상호계산의 차이점은 무엇입니까?",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "상호계산은 지정거래외국환은행 신고 사항으로 안내된다.",
+      "authority": "designated_foreign_exchange_bank",
+      "action": "file"
+    },
+    {
+      "claim_id": "BOK_MUTUAL_ACCOUNT_MULTILATERAL_EXCLUSION",
+      "locator": "질문: 상계와 상호계산의 차이점은 무엇입니까?",
+      "topic": "mutual_account_payment",
+      "normalized_summary": "다자간 거래는 상호계산으로 차액 정산할 수 없고 한국은행 상계 신고 대상으로 안내된다.",
+      "automation_level": "expert_confirmation_required"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "한국은행 공식 외환거래별 신고 FAQ의 상계·상호계산 문답 확인",
+    "limitations": [
+      "FAQ는 현행 규정 원문을 대체하지 않는다.",
+      "계정 개설·폐쇄와 개별 거래의 적법성은 지정거래외국환은행 확인이 필요하다."
+    ]
+  }
+}

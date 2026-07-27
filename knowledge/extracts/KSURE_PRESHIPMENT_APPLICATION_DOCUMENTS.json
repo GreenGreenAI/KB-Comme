@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_PRESHIPMENT_APPLICATION_DOCUMENTS",
+  "retrieved_at": "2026-07-27T19:00:00+09:00",
+  "document": {
+    "title": "수출신용보증(선적전) 신규 또는 증액 신청서류",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-kr/bbs/i-336/detail.do?ntt_sn=110"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_PRESHIPMENT_NEW_OR_INCREASE_DOCUMENTS",
+      "locator": "신청서류 비상장기업용, 상장기업용, 추가서류",
+      "topic": "application_documents",
+      "normalized_summary": "신규·증액 신청의 공통 서류와 비상장기업용 주주현황표, 추가 단기지급능력검토표를 구분한다.",
+      "automation_level": "deterministic_catalog_with_conditional_documents"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 신청서류 자료실의 신규·증액 제출서류와 추가서류 확인",
+    "limitations": [
+      "상장 여부와 추가서류 요구 여부는 신청 케이스에서 확인한다.",
+      "보증기간 연장·조건변경·재약정 서류는 이 세트에 포함하지 않는다."
+    ]
+  }
+}

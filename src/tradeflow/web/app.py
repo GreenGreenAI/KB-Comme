@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -59,22 +59,60 @@ class AnalyzeRequest(BaseModel):
     as_of: str | None = None
 
 
-def _money(raw: str | None) -> Decimal | None:
+def _money(raw: str | None, field_name: str) -> Decimal | None:
     if raw is None or str(raw).strip() == "":
         return None
     try:
-        return Decimal(str(raw).replace(",", "").strip())
+        value = Decimal(str(raw).replace(",", "").strip())
     except InvalidOperation:
-        return None
+        raise HTTPException(
+            status_code=422,
+            detail={"field": field_name, "reason": "유효한 숫자를 입력해 주세요"},
+        ) from None
+    if not value.is_finite():
+        raise HTTPException(
+            status_code=422,
+            detail={"field": field_name, "reason": "유한한 숫자를 입력해 주세요"},
+        )
+    return value
+
+
+def _analysis_date(raw: str | None) -> date:
+    if raw is None or not raw.strip():
+        return date.today()
+    try:
+        value = date.fromisoformat(raw)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "as_of", "reason": "ISO 날짜를 입력해 주세요"},
+        ) from None
+    if value > date.today():
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "as_of", "reason": "미래 날짜는 사용할 수 없습니다"},
+        )
+    return value
 
 
 @app.post("/api/analyze")
 def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
     """Either the questions still blocking an answer, or the answer."""
-    as_of = date.fromisoformat(request.as_of) if request.as_of else date.today()
+    as_of = _analysis_date(request.as_of)
+    opening_balance = _money(request.opening_balance_usd, "opening_balance_usd")
+    baseline_profit = _money(request.baseline_profit, "baseline_profit")
+    profit_floor = _money(request.profit_floor, "profit_floor")
+    if profit_floor is not None and baseline_profit is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": "baseline_profit",
+                "reason": "목표 손익 하한과 함께 기준 영업이익을 입력해 주세요",
+            },
+        )
     balances = (
-        {"USD": request.opening_balance_usd}
-        if request.opening_balance_usd
+        {"USD": str(opening_balance)}
+        if opening_balance is not None
         else None
     )
 
@@ -112,8 +150,8 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
     analysis = analyze(
         reading.program,
         snapshot_root=SNAPSHOT_ROOT,
-        baseline_profit=_money(request.baseline_profit),
-        profit_floor=_money(request.profit_floor),
+        baseline_profit=baseline_profit,
+        profit_floor=profit_floor,
     )
     return {
         "status": "ready",

@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "catalog_id": "KSURE_APPLICATION_DOCUMENTS",
+  "as_of": "2026-07-27",
+  "status": "draft",
+  "document_sets": [
+    {
+      "document_set_id": "KSURE_FX_GENERAL_EXPORT_APPLICATION_V1",
+      "product_id": "ksure_fx_insurance_general_export",
+      "stage": "limit_and_application",
+      "version": "2026-07-27",
+      "effective_from": null,
+      "effective_to": null,
+      "status": "draft",
+      "source_ids": ["KSURE_FX_APPLICATION_DOCUMENTS"],
+      "source_claim_ids": ["KSURE_FX_GENERAL_EXPORT_APPLICATION_DOCUMENTS"],
+      "requirements": [
+        {
+          "requirement_id": "KSURE_FX_GENERAL_EXPORT_CORE",
+          "kind": "required",
+          "documents": [
+            {"document_id": "KSURE_FX_GENERAL_LIMIT_APPLICATION", "title": "인수한도신청서 및 헤지수요조사표(일반형)"},
+            {"document_id": "KSURE_FX_AGREEMENT", "title": "환변동보험약정서"},
+            {"document_id": "KSURE_FX_SHAREHOLDER_STATUS", "title": "주주현황표(일반형)"},
+            {"document_id": "KSURE_FX_DERIVATIVE_HISTORY", "title": "외환파생상품 거래내역 확인서"},
+            {"document_id": "KSURE_FX_EXPORT_PLAN", "title": "수출 계획서(환변동보험 청약용)"},
+            {"document_id": "KSURE_FX_GENERAL_FORWARD_APPLICATION", "title": "일반형선물환 청약서"}
+          ]
+        },
+        {
+          "requirement_id": "KSURE_FX_CUSTOMER_INFORMATION_CONSENT",
+          "kind": "one_of",
+          "selector_field": "company.legal_form",
+          "condition_description": "법인기업 또는 개인기업 형태에 맞는 동의서를 선택하고, 공식 안내의 인감·신분·사업자등록 증빙을 함께 확인한다.",
+          "documents": [
+            {"document_id": "KSURE_FX_CONSENT_CORPORATE", "title": "고객정보 수집·이용·제공·조회 동의서(법인기업)"},
+            {"document_id": "KSURE_FX_CONSENT_SOLE_PROPRIETOR", "title": "고객정보 수집·이용·제공·조회 동의서(개인기업)"}
+          ]
+        },
+        {
+          "requirement_id": "KSURE_FX_COUNTER_APPLICATION_NOTICE",
+          "kind": "conditional",
+          "condition_description": "창구에서 청약하는 경우 제출한다.",
+          "documents": [
+            {"document_id": "KSURE_FX_ADDITIONAL_RISK_NOTICE", "title": "내용 확인 및 추가위험고지문(공통)"}
+          ]
+        }
+      ]
+    },
+    {
+      "document_set_id": "KSURE_SHORT_TERM_POSTSHIP_INDIVIDUAL_APPLICATION_V1",
+      "product_id": "ksure_short_term_export_postshipment_individual",
+      "stage": "application",
+      "version": "2026-07-27",
+      "effective_from": null,
+      "effective_to": null,
+      "status": "draft",
+      "source_ids": ["KSURE_SHORT_TERM_POSTSHIP_APPLICATION_DOCUMENTS"],
+      "source_claim_ids": ["KSURE_SHORT_TERM_POSTSHIP_APPLICATION_FORMS"],
+      "requirements": [
+        {
+          "requirement_id": "KSURE_SHORT_TERM_POSTSHIP_TRADE_FORM",
+          "kind": "one_of",
+          "selector_field": "trade.transaction_type",
+          "condition_description": "일반·위탁가공, 중계무역, 재판매 중 실제 거래 유형에 맞는 청약서를 선택한다.",
+          "documents": [
+            {"document_id": "KSURE_SHORT_TERM_APPLICATION_GENERAL_PROCESSING", "title": "청약서(일반/위탁가공)"},
+            {"document_id": "KSURE_SHORT_TERM_APPLICATION_INTERMEDIARY", "title": "청약서(중계무역)"},
+            {"document_id": "KSURE_SHORT_TERM_APPLICATION_RESALE", "title": "청약서(재판매)"}
+          ]
+        }
+      ]
+    },
+    {
+      "document_set_id": "KSURE_SHORT_TERM_POSTSHIP_COMMON_LIFECYCLE_V1",
+      "product_id": "ksure_short_term_export_postshipment_individual",
+      "stage": "post_application_lifecycle",
+      "version": "2026-07-27",
+      "effective_from": null,
+      "effective_to": null,
+      "status": "draft",
+      "source_ids": ["KSURE_SHORT_TERM_POSTSHIP_COMMON_DOCUMENTS"],
+      "source_claim_ids": ["KSURE_SHORT_TERM_POSTSHIP_LIFECYCLE_FORMS"],
+      "requirements": [
+        {
+          "requirement_id": "KSURE_SHORT_TERM_POSTSHIP_LIFECYCLE_EVENT",
+          "kind": "conditional",
+          "condition_description": "수출통지, 결제통지, 내용·결제조건 변경, 실적증명 또는 청구권 양도 등 해당 사후 업무가 발생한 경우 그 업무에 맞는 서식을 선택한다.",
+          "documents": [
+            {"document_id": "KSURE_SHORT_TERM_EXPORT_NOTICE_INDIVIDUAL", "title": "수출통지서(개별)"},
+            {"document_id": "KSURE_SHORT_TERM_SETTLEMENT_NOTICE", "title": "결제통지서"},
+            {"document_id": "KSURE_SHORT_TERM_EXPORT_NOTICE_CHANGE", "title": "수출통지 내용변경 승인신청서"},
+            {"document_id": "KSURE_SHORT_TERM_PAYMENT_TERMS_CHANGE", "title": "결제조건 변경신청서"},
+            {"document_id": "KSURE_SHORT_TERM_EXPORT_PERFORMANCE_CERTIFICATE", "title": "수출거래실적증명서"},
+            {"document_id": "KSURE_SHORT_TERM_CLAIM_ASSIGNMENT", "title": "보험금 청구권 양도 신청서"},
+            {"document_id": "KSURE_SHORT_TERM_COMPANY_STATUS", "title": "상사현황표"}
+          ]
+        }
+      ]
+    },
+    {
+      "document_set_id": "KSURE_PRESHIPMENT_GUARANTEE_NEW_OR_INCREASE_V1",
+      "product_id": "ksure_export_credit_guarantee_preshipment",
+      "stage": "new_or_limit_increase_application",
+      "version": "2026-07-27",
+      "effective_from": null,
+      "effective_to": null,
+      "status": "draft",
+      "source_ids": ["KSURE_PRESHIPMENT_APPLICATION_DOCUMENTS"],
+      "source_claim_ids": ["KSURE_PRESHIPMENT_NEW_OR_INCREASE_DOCUMENTS"],
+      "requirements": [
+        {
+          "requirement_id": "KSURE_PRESHIPMENT_CORE_APPLICATION",
+          "kind": "required",
+          "documents": [
+            {"document_id": "KSURE_PRESHIPMENT_APPLICATION", "title": "수출신용보증 청약서"},
+            {"document_id": "KSURE_PRESHIPMENT_COMPANY_STATUS", "title": "상사현황표"},
+            {"document_id": "KSURE_PRESHIPMENT_BANK_STATUS", "title": "금융기관거래상황확인서"},
+            {"document_id": "KSURE_PRESHIPMENT_EXPORT_PERFORMANCE", "title": "수출실적확인서"},
+            {"document_id": "KSURE_PRESHIPMENT_CUSTOMER_CONSENT", "title": "고객정보 수집·이용·제공·조회 동의서"}
+          ]
+        },
+        {
+          "requirement_id": "KSURE_PRESHIPMENT_UNLISTED_SHAREHOLDERS",
+          "kind": "conditional",
+          "condition_description": "비상장기업인 경우 제출한다.",
+          "documents": [
+            {"document_id": "KSURE_PRESHIPMENT_SHAREHOLDER_STATUS", "title": "주주현황표(비상장기업용)"}
+          ]
+        },
+        {
+          "requirement_id": "KSURE_PRESHIPMENT_ADDITIONAL_SOLVENCY",
+          "kind": "conditional",
+          "condition_description": "K-SURE가 추가서류를 요구하는 경우 제출한다.",
+          "documents": [
+            {"document_id": "KSURE_PRESHIPMENT_SHORT_TERM_SOLVENCY", "title": "단기지급능력검토표"}
+          ]
+        }
+      ]
+    }
+  ]
+}

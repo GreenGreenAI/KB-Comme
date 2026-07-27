@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "단기수출보험(선적후) 이용요건",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-kr/cntnts/i-118/web.do"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_SHORT_TERM_EXPORTER",
+      "locator": "이용요건 / 수출자",
+      "topic": "trade_support",
+      "normalized_summary": "국내에 주소를 둔 수출기업으로 공사 수출자 신용등급 F급 이상이어야 한다.",
+      "minimum_grade": "F"
+    },
+    {
+      "claim_id": "KSURE_SHORT_TERM_IMPORTER",
+      "locator": "이용요건 / 수입자",
+      "topic": "trade_support",
+      "normalized_summary": "수입자는 공사 국별인수방침 인수제한국에 소재하지 않고 공사 수입자 신용등급 F급 이상이어야 한다.",
+      "minimum_grade": "F"
+    },
+    {
+      "claim_id": "KSURE_SHORT_TERM_INDIVIDUAL_TERM",
+      "locator": "운영방식 / 개별보험",
+      "topic": "trade_support",
+      "normalized_summary": "개별보험은 결제기간 2년 이내 거래를 대상으로 안내한다.",
+      "maximum_payment_term_days": 730
+    },
+    {
+      "claim_id": "KSURE_SHORT_TERM_COMPREHENSIVE_TERM",
+      "locator": "운영방식 / 포괄보험",
+      "topic": "trade_support",
+      "normalized_summary": "포괄보험은 결제기간 180일 이내 거래를 대상으로 안내한다.",
+      "maximum_payment_term_days": 180
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 공식 상품 이용요건 확인",
+    "limitations": [
+      "국별인수방침과 공사 신용등급은 별도 최신 데이터가 필요하다.",
+      "보험 인수 확정이 아니라 후보 판정에만 사용한다."
+    ]
+  }
+}

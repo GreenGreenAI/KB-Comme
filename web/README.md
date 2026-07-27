@@ -87,7 +87,7 @@ curl -s localhost:8000/api/health
 
 curl -s localhost:8000/api/analyze \
   -H 'Content-Type: application/json' \
-  -d '{"utterance":"10월 24일에 수출대금 10만 달러 받아요","baseline_profit":"6000000"}'
+  -d '{"utterance":"10월 24일에 수출대금 10만 달러 받아요"}'
 ```
 
 응답은 `status`가 `needs_input`이면 되물을 질문을, `ready`면 §7 응답 계약을
@@ -96,6 +96,7 @@ curl -s localhost:8000/api/analyze \
 ## 아직 없는 것
 
 - **LLM 합성** — `summary`는 비어 있고 에이전트 문구는 규칙 기반입니다
-- **인증** — 네비의 로그인·프로필은 화면만 있고 실제 인증은 없습니다
-- **지원제도·신고의무 판정** — 역할 A가 작업 중이며, 연결 전까지 패널에
-  "연결 예정"으로 표시됩니다
+- **인증·저장** — 실제 인증과 분석 저장 기능이 없어 UI에도 데모로 표시합니다
+- **헤지 상품 가격 어댑터** — 역할 A 규칙은 지원제도·신고의무 후보를
+  `DecisionPacket`으로 반환하지만, 이용 가능성과 가격이 검증된 상품이
+  들어오기 전까지 헤지 비율 계산은 fail-closed로 중단합니다

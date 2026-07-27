@@ -16,9 +16,10 @@ import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
 
@@ -159,6 +160,42 @@ def collect(
         payload=payload,
     )
     return write_snapshot(root, envelope)
+
+
+@dataclass(frozen=True)
+class EcosFxAdapter:
+    """Official daily USD/KRW reference-rate adapter.
+
+    The class form gives orchestration code a provider-shaped boundary while
+    the existing functions remain available for scripts and tests. Credentials
+    are resolved only when a request is made and never become snapshot data.
+    """
+
+    api_key: str | None = field(default=None, repr=False)
+    source_id: str = SOURCE_ID
+    adapter_key: ClassVar[str] = "ecos_fx"
+
+    def fetch(self, start: str, end: str) -> dict[str, Any]:
+        return fetch_rates(start, end, api_key=self.api_key or load_api_key())
+
+    def collect(
+        self,
+        root: Path | str,
+        start: str,
+        end: str,
+        *,
+        retrieved_at: datetime | None = None,
+    ) -> Path:
+        payload = self.fetch(start, end)
+        moment = observed_at(payload)
+        envelope = build_envelope(
+            source_id=self.source_id,
+            version=moment.date().isoformat(),
+            observed_at=moment,
+            retrieved_at=retrieved_at or datetime.now(KST),
+            payload=payload,
+        )
+        return write_snapshot(root, envelope)
 
 
 def main(argv: list[str] | None = None) -> int:

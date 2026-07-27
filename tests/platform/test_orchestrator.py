@@ -14,6 +14,12 @@ from pathlib import Path
 from tradeflow.agent.intake import intake
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
+from tradeflow.domain.enums import (
+    AvailabilityStatus,
+    FinancialInstrumentKind,
+    HedgeMeasureCategory,
+)
+from tradeflow.domain.models import HedgeMeasure
 from tradeflow.domain.snapshot_file import content_hash
 
 KST = timezone(timedelta(hours=9))
@@ -30,6 +36,18 @@ def _program():
     return intake(
         CASES, opening_balances={"USD": "20000"}, as_of=AS_OF
     ).program
+
+
+def _available_measure() -> HedgeMeasure:
+    return HedgeMeasure(
+        "TEST_KSURE_FX",
+        HedgeMeasureCategory.FINANCIAL_INSTRUMENT,
+        FinancialInstrumentKind.KSURE_FX_INSURANCE,
+        AvailabilityStatus.AVAILABLE,
+        contract_rate=Decimal("1400"),
+        cost_rate=Decimal("0.004"),
+        source_ids=("TEST_VERIFIED_PRICING",),
+    )
 
 
 def _snapshot_root(directory: Path, *, observed: str = "2026-07-24") -> Path:
@@ -131,26 +149,58 @@ class RoutingTests(unittest.TestCase):
             snapshot_root=self.root,
             baseline_profit=Decimal("6000000"),
             profit_floor=Decimal("4000000"),
+            hedge_measures=(_available_measure(),),
             as_of=NOW,
         )
 
         self.assertEqual(
-            ["exposure", "market_scenario", "hedge"], analysis.report.completed
+            ["exposure", "support", "compliance", "market_scenario", "hedge"],
+            analysis.report.completed,
         )
 
     def test_hedge_needs_a_baseline_profit_and_says_so(self) -> None:
-        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+        analysis = analyze(
+            _program(),
+            snapshot_root=self.root,
+            hedge_measures=(_available_measure(),),
+            as_of=NOW,
+        )
 
         self.assertIsNone(analysis.hedge)
         self.assertIn("영업이익", analysis.report.skipped["hedge"])
 
-    def test_unwired_knowledge_workers_are_declared_missing(self) -> None:
-        """§5.4 and §5.5 are the knowledge owner's; their absence is stated."""
+    def test_profit_floor_must_be_explicit(self) -> None:
+        analysis = analyze(
+            _program(),
+            snapshot_root=self.root,
+            baseline_profit=Decimal("6000000"),
+            hedge_measures=(_available_measure(),),
+            as_of=NOW,
+        )
+
+        self.assertIsNone(analysis.hedge)
+        self.assertEqual(("profit_floor",), analysis.required_inputs)
+        self.assertIn("손익 하한", analysis.report.skipped["hedge"])
+
+    def test_role_a_workers_return_a_decision_packet(self) -> None:
         analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
 
-        self.assertIn("support", analysis.report.skipped)
-        self.assertIn("compliance", analysis.report.skipped)
+        self.assertIn("support", analysis.report.completed)
+        self.assertIn("compliance", analysis.report.completed)
+        self.assertIsNotNone(analysis.decision_packet)
         self.assertTrue(analysis.review_required)
+
+    def test_hedge_is_not_fabricated_without_verified_availability(self) -> None:
+        analysis = analyze(
+            _program(),
+            snapshot_root=self.root,
+            baseline_profit=Decimal("6000000"),
+            profit_floor=Decimal("4000000"),
+            as_of=NOW,
+        )
+
+        self.assertIsNone(analysis.hedge)
+        self.assertIn("검증된 이용 가능", analysis.report.skipped["hedge"])
 
     def test_response_reports_the_snapshot_it_used(self) -> None:
         analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
@@ -161,6 +211,11 @@ class RoutingTests(unittest.TestCase):
         )
         self.assertTrue(
             any(item["role"] == "market_data" for item in response["evidence"])
+        )
+        self.assertEqual(analysis.decision_packet.packet_id, response["packet_id"])
+        self.assertEqual(
+            str(analysis.adverse_cashflow_amount),
+            response["market_scenario"]["adverse_cashflow_amount"],
         )
 
     def test_summary_is_left_for_synthesis_to_write(self) -> None:

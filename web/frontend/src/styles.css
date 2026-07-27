@@ -64,8 +64,8 @@
     font-family: var(--mono); font-size: .75rem; font-style: normal;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
-  .nav nav a { text-decoration: none; color: inherit; }
-  .nav nav a.on { color: var(--accent); font-weight: 600; }
+  .nav nav span { color: inherit; }
+  .nav nav span.on { color: var(--accent); font-weight: 600; }
   .nav-cta {
     border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
     border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;

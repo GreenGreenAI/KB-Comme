@@ -16,6 +16,7 @@ from decimal import Decimal
 from typing import Any
 
 from tradeflow.agent.orchestrator import Analysis
+from tradeflow.runtime.analysis_service import decision_packet_document
 
 FORMULA_VERSION = "exposure.v1+scenario.v1+hedge.v1"
 
@@ -32,6 +33,18 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
         "spot_rate": str(band.spot_rate),
         "band_lower": str(band.lower),
         "band_upper": str(band.upper),
+        "adverse_rate": str(
+            band.lower
+            if analysis.cashflow["net_exposure"][0]["amount"] > 0
+            else band.upper
+        ),
+        "adverse_cashflow_change": _decimal(
+            analysis.adverse_cashflow_change
+        ),
+        "adverse_cashflow_amount": _decimal(
+            analysis.adverse_cashflow_amount
+        ),
+        "adverse_cashflow_direction": analysis.adverse_cashflow_direction,
         "volatility_annualized": band.volatility.annualized,
         "horizon_business_days": band.horizon_business_days,
         "confidence_level": band.confidence_level,
@@ -41,6 +54,70 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
         "unit": band.unit,
         "rounding": band.rounding,
         "drift": "0 고정",
+    }
+
+
+def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
+    packet = analysis.decision_packet
+    if packet is None:
+        return {
+            "decision_packet": None,
+            "risk_findings": [],
+            "filing_obligations": [],
+            "support_candidates": [],
+            "excluded_candidates": [],
+            "required_documents": [],
+            "next_actions": [],
+        }
+
+    document = decision_packet_document(packet)
+    support_candidates = []
+    excluded_candidates = []
+    risk_findings = []
+    for decision in document["decisions"]:
+        outcome = decision["candidate_outcome"]
+        projected = {
+            "subject_id": decision["subject_id"],
+            "rule_id": decision["rule_id"],
+            "title": decision["title"],
+            "status": decision["status"],
+            "matched": decision["matched"],
+            "reasons": decision["reasons"],
+            "missing_fields": decision["missing_fields"],
+            "source_ids": decision["source_ids"],
+            "outcome": outcome,
+        }
+        if outcome.get("kind") == "support_candidate":
+            (
+                excluded_candidates
+                if decision["matched"] is False
+                else support_candidates
+            ).append(projected)
+        elif decision["matched"] is not False:
+            risk_findings.append(projected)
+
+    actions = document["actions"]
+    filing_obligations = [
+        action
+        for action in actions
+        if action.get("authority") is not None
+        and not action.get("product_ids")
+    ]
+    required_documents = list(
+        dict.fromkeys(
+            document_title
+            for action in actions
+            for document_title in action["required_documents"]
+        )
+    )
+    return {
+        "decision_packet": document,
+        "risk_findings": risk_findings,
+        "filing_obligations": filing_obligations,
+        "support_candidates": support_candidates,
+        "excluded_candidates": excluded_candidates,
+        "required_documents": required_documents,
+        "next_actions": actions,
     }
 
 
@@ -98,8 +175,14 @@ def _evidence(analysis: Analysis) -> list[dict[str, Any]]:
 
 def build_response(analysis: Analysis) -> dict[str, Any]:
     """Project the analysis onto the response contract, summary left blank."""
+    knowledge = _knowledge_projection(analysis)
     return {
         "summary": "",
+        "packet_id": (
+            analysis.decision_packet.packet_id
+            if analysis.decision_packet is not None
+            else None
+        ),
         "trade_timeline": [
             {
                 "case_id": case.case_id,
@@ -120,12 +203,7 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
         },
         "market_scenario": _market_scenario(analysis),
         "hedge_analysis": _hedge_analysis(analysis),
-        "risk_findings": [],
-        "filing_obligations": [],
-        "support_candidates": [],
-        "excluded_candidates": [],
-        "required_documents": [],
-        "next_actions": [],
+        **knowledge,
         "missing_information": list(analysis.report.missing_information()),
         "evidence": _evidence(analysis),
         "review_required": analysis.review_required,
@@ -135,11 +213,16 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
         },
+        "required_inputs": {"hedge": list(analysis.required_inputs)},
         "calculation_versions": {
             "snapshot_version": (
                 analysis.snapshot.version if analysis.snapshot else None
             ),
             "formula_version": FORMULA_VERSION,
-            "rule_version": None,
+            "rule_version": (
+                analysis.decision_packet.schema_version
+                if analysis.decision_packet is not None
+                else None
+            ),
         },
     }

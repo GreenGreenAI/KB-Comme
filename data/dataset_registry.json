@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.2",
+  "datasets": [
+    {
+      "dataset_id": "ECOS_USD_KRW_DAILY",
+      "source_id": "ECOS_USD_KRW",
+      "kind": "fx_series",
+      "adapter_key": "ecos_fx",
+      "parser_key": "ecos_usd_krw_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "committed_public",
+      "storage_root": "data/snapshots",
+      "freshness": {
+        "max_observation_age_seconds": 604800,
+        "max_retrieval_age_seconds": null
+      }
+    },
+    {
+      "dataset_id": "ERP_TRADE_FEED_V1",
+      "source_id": "ERP_TRADE_FEED",
+      "kind": "trade_feed",
+      "adapter_key": "json_trade_feed",
+      "parser_key": "trade_feed_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 3600,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 86400,
+        "max_retrieval_age_seconds": 86400
+      }
+    },
+    {
+      "dataset_id": "KOREAEXIM_REFERENCE_FX_DAILY",
+      "source_id": "KOREAEXIM_REFERENCE_FX",
+      "kind": "reference_fx_catalog",
+      "adapter_key": "koreaexim_reference_fx",
+      "parser_key": "koreaexim_reference_fx_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "committed_public",
+      "storage_root": "data/snapshots",
+      "freshness": {
+        "max_observation_age_seconds": 604800,
+        "max_retrieval_age_seconds": 604800
+      }
+    },
+    {
+      "dataset_id": "BIZINFO_SUPPORT_PROGRAMS_DAILY",
+      "source_id": "BIZINFO_SUPPORT_API",
+      "kind": "support_program_catalog",
+      "adapter_key": "bizinfo_support",
+      "parser_key": "bizinfo_support_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "committed_public",
+      "storage_root": "data/snapshots",
+      "freshness": {
+        "max_observation_age_seconds": 172800,
+        "max_retrieval_age_seconds": 172800
+      }
+    },
+    {
+      "dataset_id": "KSURE_COUNTRY_POLICY_DAILY",
+      "source_id": "KSURE_COUNTRY_POLICY_API",
+      "kind": "country_policy_catalog",
+      "adapter_key": "ksure_country_policy",
+      "parser_key": "ksure_country_policy_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 172800,
+        "max_retrieval_age_seconds": 172800
+      }
+    },
+    {
+      "dataset_id": "COMPANY_QUALIFICATION_EVIDENCE_V1",
+      "source_id": "COMPANY_QUALIFICATION_FEED",
+      "kind": "eligibility_evidence",
+      "adapter_key": "company_qualification_json",
+      "provider_key": "company_qualification",
+      "parser_key": "eligibility_evidence_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 86400,
+        "max_retrieval_age_seconds": 86400
+      }
+    },
+    {
+      "dataset_id": "KSURE_CREDIT_EVIDENCE_V1",
+      "source_id": "KSURE_CREDIT_FEED",
+      "kind": "eligibility_evidence",
+      "adapter_key": "ksure_credit_json",
+      "provider_key": "ksure_credit",
+      "parser_key": "eligibility_evidence_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 86400,
+        "max_retrieval_age_seconds": 86400
+      }
+    }
+  ]
+}

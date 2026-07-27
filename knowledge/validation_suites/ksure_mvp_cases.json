@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "KSURE_MVP_GOLDEN_CASES_V1",
+  "pack_id": "KSURE_MVP_CANDIDATES",
+  "as_of": "2026-07-27",
+  "boundary_checks": [
+    {
+      "rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE",
+      "field": "trade.payment_term_days",
+      "operator": "lte",
+      "expected_threshold": "730",
+      "samples": [
+        {"value": 729, "passed": true},
+        {"value": 730, "passed": true},
+        {"value": 731, "passed": false}
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "KSURE_MISSING_ALL",
+      "topic": "trade_support_case",
+      "facts": {},
+      "expectations": [
+        {
+          "rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": ["company.is_domestic", "company.size", "company.credit_issue_free", "trade.direction", "trade.currency"]
+        },
+        {
+          "rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": ["company.is_domestic", "company.ksure_exporter_grade", "counterparty.ksure_importer_grade", "counterparty.country_restricted", "trade.direction", "trade.payment_term_days"]
+        },
+        {
+          "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": ["company.size", "trade.direction", "financing.purpose", "financing.has_bank_consultation"]
+        }
+      ]
+    },
+    {
+      "case_id": "KSURE_COMPLETE_EXPORT_AT_TERM_BOUNDARY",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.is_domestic": true,
+        "company.size": "small",
+        "company.credit_issue_free": true,
+        "company.ksure_exporter_grade": "F",
+        "counterparty.ksure_importer_grade": "F",
+        "counterparty.country_restricted": false,
+        "trade.direction": "export",
+        "trade.currency": "USD",
+        "trade.payment_term_days": 730,
+        "financing.purpose": "trade_finance",
+        "financing.has_bank_consultation": true
+      },
+      "expectations": [
+        {"rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE", "matched": true, "status": "expert_confirmation_required"},
+        {"rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE", "matched": true, "status": "expert_confirmation_required"},
+        {"rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE", "matched": true, "status": "expert_confirmation_required"}
+      ]
+    },
+    {
+      "case_id": "KSURE_IMPORT_REJECTS_EXPORT_PRODUCTS",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.is_domestic": true,
+        "company.size": "small",
+        "company.credit_issue_free": true,
+        "company.ksure_exporter_grade": "A",
+        "counterparty.ksure_importer_grade": "A",
+        "counterparty.country_restricted": false,
+        "trade.direction": "import",
+        "trade.currency": "USD",
+        "trade.payment_term_days": 180,
+        "financing.purpose": "trade_finance",
+        "financing.has_bank_consultation": true
+      },
+      "expectations": [
+        {"rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE", "matched": false, "status": "not_eligible"},
+        {"rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE", "matched": false, "status": "not_eligible"},
+        {"rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE", "matched": false, "status": "not_eligible"}
+      ]
+    },
+    {
+      "case_id": "KSURE_TERM_DAY_731_REJECTED",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.is_domestic": true,
+        "company.ksure_exporter_grade": "A",
+        "counterparty.ksure_importer_grade": "A",
+        "counterparty.country_restricted": false,
+        "trade.direction": "export",
+        "trade.payment_term_days": 731
+      },
+      "expectations": [
+        {"rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE", "matched": false, "status": "not_eligible"}
+      ]
+    },
+    {
+      "case_id": "KSURE_RESTRICTED_COUNTRY_REJECTED",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.is_domestic": true,
+        "company.ksure_exporter_grade": "A",
+        "counterparty.ksure_importer_grade": "A",
+        "counterparty.country_restricted": true,
+        "trade.direction": "export",
+        "trade.payment_term_days": 180
+      },
+      "expectations": [
+        {"rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE", "matched": false, "status": "not_eligible"}
+      ]
+    },
+    {
+      "case_id": "KSURE_BANK_CONSULTATION_IS_REMEDIABLE",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.size": "mid_sized",
+        "trade.direction": "export",
+        "financing.purpose": "recognized_export_finance",
+        "financing.has_bank_consultation": false
+      },
+      "expectations": [
+        {"rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE", "matched": true, "status": "conditionally_eligible"}
+      ]
+    },
+    {
+      "case_id": "KSURE_UNSUPPORTED_FX_CURRENCY_REJECTED",
+      "topic": "trade_support_case",
+      "facts": {
+        "company.is_domestic": true,
+        "company.size": "small",
+        "company.credit_issue_free": true,
+        "trade.direction": "export",
+        "trade.currency": "GBP"
+      },
+      "expectations": [
+        {"rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE", "matched": false, "status": "not_eligible"}
+      ]
+    }
+  ]
+}

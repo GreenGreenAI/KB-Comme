@@ -17,6 +17,8 @@ def validate_evidence_contract(
     """Validate typed evidence coverage without semantic keyword guessing."""
     available: dict[str, set[str]] = {}
     for descriptor in descriptors:
+        if descriptor.payload.get("usability") in {"stale", "rejected"}:
+            continue
         available.setdefault(descriptor.role.value, set()).update(
             normalize_identifier(value) for value in descriptor.identifiers
         )

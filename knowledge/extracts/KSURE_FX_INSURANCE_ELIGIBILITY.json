@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "source_id": "KSURE_FX_INSURANCE_ELIGIBILITY",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "환변동보험(공통) 이용요건",
+    "issuer": "한국무역보험공사",
+    "official_url": "https://www.ksure.or.kr/rh-fx/cntnts/i-514/web.do"
+  },
+  "claims": [
+    {
+      "claim_id": "KSURE_FX_EXPORT_CURRENCIES",
+      "locator": "이용요건(수출 기준)",
+      "topic": "trade_support",
+      "normalized_summary": "일반형 수출 환변동보험 대상통화는 USD, JPY, EUR, CNY다.",
+      "allowed_values": ["USD", "JPY", "EUR", "CNY"]
+    },
+    {
+      "claim_id": "KSURE_FX_TARGET_COMPANIES",
+      "locator": "이용대상 기업 및 이용제한 기업(공통)",
+      "topic": "trade_support",
+      "normalized_summary": "신용상 문제점이 없는 국내 중소·중견기업을 대상으로 한다.",
+      "company_sizes": ["small", "mid_sized"]
+    },
+    {
+      "claim_id": "KSURE_FX_COMMON_RESTRICTIONS",
+      "locator": "이용대상 기업 및 이용제한 기업(공통)",
+      "topic": "trade_support",
+      "normalized_summary": "신용불량, 보험료·보증료 연체, 휴폐업, 국세·지방세 체납 등 공식 안내의 제한 사유를 확인해야 한다.",
+      "automation_level": "requires_authoritative_company_fact"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "K-SURE 환위험관리 지원센터 공식 이용요건 확인",
+    "limitations": [
+      "상품 유형과 수출·수입 방향에 따라 대상통화 및 추가요건이 다르다.",
+      "공사 심사와 상담을 대신하지 않으며 후보 판정에만 사용한다."
+    ]
+  }
+}

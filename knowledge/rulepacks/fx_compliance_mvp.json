@@ -1,0 +1,750 @@
+{
+  "schema_version": "1.3",
+  "pack_id": "FX_COMPLIANCE_MVP",
+  "as_of": "2026-07-27",
+  "status": "draft",
+  "notice": "외국환 신고·보고 검토 후보를 만드는 규칙입니다. 법률 자문이나 신고기관의 확정 판단을 대체하지 않습니다.",
+  "rules": [
+    {
+      "rule_id": "FX_BILATERAL_NETTING_BANK_REPORT_CANDIDATE",
+      "title": "양자간 상계 외국환은행 보고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_netting",
+          "operator": "eq",
+          "value": true,
+          "description": "거주자와 비거주자 간 채권·채무 상계"
+        },
+        {
+          "field": "payment.netting.party_count",
+          "operator": "eq",
+          "value": 2,
+          "description": "양자간 상계"
+        },
+        {
+          "field": "payment.netting.uses_center",
+          "operator": "eq",
+          "value": false,
+          "description": "다국적기업 상계센터를 경유하지 않음"
+        },
+        {
+          "field": "payment.netting.smaller_claim_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "일방 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.netting.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "그 밖의 신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
+        "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
+        "BOK_BILATERAL_NETTING_REPORT"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "foreign_exchange_bank",
+        "action": "report",
+        "timing": "confirm_with_authority"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "상계 합의서",
+        "채권·채무 발생 증빙",
+        "상계금액 산출표",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "지정거래외국환은행에 보고 대상과 시점 확인",
+        "관계 증빙 보관 요건 확인"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MULTILATERAL_NETTING_BOK_FILING_CANDIDATE",
+      "title": "다자간 상계 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_netting",
+          "operator": "eq",
+          "value": true,
+          "description": "거주자와 비거주자 간 채권·채무 상계"
+        },
+        {
+          "field": "payment.netting.party_count",
+          "operator": "gt",
+          "value": 2,
+          "description": "다자간 상계"
+        },
+        {
+          "field": "payment.netting.smaller_claim_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "일방 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.netting.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
+        "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
+        "BOK_MULTILATERAL_NETTING_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "상계 계약서",
+        "당사자별 채권·채무 명세",
+        "상계금액 산출표",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "한국은행 외환심사 담당부서에 사전 확인",
+        "신고서와 관계서류 제출"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_NETTING_CENTER_BOK_FILING_CANDIDATE",
+      "title": "상계센터 경유 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_netting",
+          "operator": "eq",
+          "value": true,
+          "description": "거주자와 비거주자 간 채권·채무 상계"
+        },
+        {
+          "field": "payment.netting.uses_center",
+          "operator": "eq",
+          "value": true,
+          "description": "다국적기업 상계센터 경유"
+        },
+        {
+          "field": "payment.netting.smaller_claim_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "일방 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.netting.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_4",
+        "FXR_ARTICLE_5_4_EXCEPTION_SET",
+        "BOK_NETTING_EXCEPTION_5000",
+        "BOK_NETTING_EXCEPTION_CATEGORIES",
+        "BOK_MULTILATERAL_NETTING_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "상계센터 계약서",
+        "참여 당사자 명세",
+        "당사자별 채권·채무 명세",
+        "상계금액 산출표",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "한국은행 외환심사 담당부서에 상계센터 구조 확인",
+        "지급 전 신고서와 관계서류 제출"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_EXPORT_ADVANCE_RECEIPT_BOK_FILING_CANDIDATE",
+      "title": "장기 수출선수금 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "trade.contract_amount_usd",
+          "operator": "gt",
+          "value": 100000,
+          "description": "계약 건당 미화 10만달러 초과"
+        },
+        {
+          "field": "trade.days_before_shipment",
+          "operator": "gt",
+          "value": 365,
+          "description": "선적 전 1년 초과 수령"
+        },
+        {
+          "field": "trade.extended_payment_exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "선박·철도차량·항공기·산업설비 예외가 아님"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_8",
+        "FXR_ARTICLE_5_8_EXCEPTION_SET",
+        "BOK_EXPORT_ADVANCE_RECEIPT"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "수출계약서",
+        "대금 수령 증빙",
+        "선적 예정일 증빙",
+        "계약금액 환산 근거"
+      ],
+      "procedure_steps": [
+        "한국은행 신고예외 및 사후신고 가능 사유 확인",
+        "필요 시 한국은행 신고"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_IMPORT_ADVANCE_PAYMENT_BOK_FILING_CANDIDATE",
+      "title": "장기 수입선급금 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "import",
+          "description": "수입 거래"
+        },
+        {
+          "field": "trade.contract_amount_usd",
+          "operator": "gt",
+          "value": 100000,
+          "description": "계약 건당 미화 10만달러 초과"
+        },
+        {
+          "field": "trade.days_before_receipt",
+          "operator": "gt",
+          "value": 365,
+          "description": "선적서류 또는 물품 수령 전 1년 초과 지급"
+        },
+        {
+          "field": "trade.extended_payment_exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "선박·철도차량·항공기·산업설비 예외가 아님"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_8",
+        "FXR_ARTICLE_5_8_EXCEPTION_SET",
+        "BOK_IMPORT_ADVANCE_PAYMENT"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "수입계약서",
+        "대금 지급 증빙",
+        "선적서류 또는 물품 수령 예정일 증빙",
+        "계약금액 환산 근거"
+      ],
+      "procedure_steps": [
+        "한국은행 신고예외 및 사후신고 가능 사유 확인",
+        "필요 시 한국은행 신고"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_THIRD_PARTY_PAYMENT_BANK_FILING_CANDIDATE",
+      "title": "제3자 지급 외국환은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_third_party",
+          "operator": "eq",
+          "value": true,
+          "description": "원인거래 당사자가 아닌 자와 지급 또는 수령"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "gt",
+          "value": 5000,
+          "description": "제3자 지급 금액 미화 5천달러 초과"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "lte",
+          "value": 10000,
+          "description": "제3자 지급 금액 미화 1만달러 이하"
+        },
+        {
+          "field": "payment.third_party.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "그 밖의 신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_10",
+        "FXR_ARTICLE_5_10_EXCEPTION_SET",
+        "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_EXCEPTION_CATEGORIES",
+        "BOK_THIRD_PARTY_BANK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "foreign_exchange_bank",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급·수령 당사자 관계 자료",
+        "금액 산출 근거",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "외국환은행에 신고예외 및 신고 대상 확인",
+        "필요 시 지급 전 신고"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_THIRD_PARTY_PAYMENT_BOK_FILING_CANDIDATE",
+      "title": "제3자 지급 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.is_third_party",
+          "operator": "eq",
+          "value": true,
+          "description": "원인거래 당사자가 아닌 자와 지급 또는 수령"
+        },
+        {
+          "field": "payment.third_party.amount_usd",
+          "operator": "gt",
+          "value": 10000,
+          "description": "제3자 지급 금액 미화 1만달러 초과"
+        },
+        {
+          "field": "payment.third_party.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "신고예외가 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_10",
+        "FXR_ARTICLE_5_10_EXCEPTION_SET",
+        "BOK_THIRD_PARTY_EXCEPTION_5000",
+        "BOK_THIRD_PARTY_EXCEPTION_CATEGORIES",
+        "BOK_THIRD_PARTY_BOK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급·수령 당사자 관계 자료",
+        "금액 산출 근거",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "한국은행에 신고예외 및 신고 대상 확인",
+        "필요 시 지급 전 신고"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_NONBANK_PAYMENT_BOK_FILING_CANDIDATE",
+      "title": "외국환은행을 통하지 않는 지급 한국은행 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {
+          "field": "payment.uses_foreign_exchange_bank",
+          "operator": "eq",
+          "value": false,
+          "description": "외국환은행을 통하지 않는 결제"
+        },
+        {
+          "field": "payment.direction",
+          "operator": "eq",
+          "value": "pay",
+          "description": "거주자가 지급하려는 거래"
+        },
+        {
+          "field": "payment.nonbank.exception_category",
+          "operator": "eq",
+          "value": "none",
+          "description": "제5-11조 신고예외·확인·세관신고 사항이 확인되지 않음"
+        }
+      ],
+      "source_ids": [
+        "FX_TRANSACTION_ACT_2026_01_02",
+        "FX_TRANSACTION_DECREE_2026_04_28",
+        "FX_TRANSACTION_REGULATION_2026_88",
+        "BOK_FX_REPORTING_GUIDE"
+      ],
+      "source_claim_ids": [
+        "FXA_ARTICLE_16",
+        "FXD_ARTICLE_30",
+        "FXR_ARTICLE_5_11",
+        "FXR_ARTICLE_5_11_EXCEPTION_SET",
+        "BOK_NONBANK_PAYMENT_EXCEPTIONS",
+        "BOK_NONBANK_PAYMENT_BOK_FILING"
+      ],
+      "candidate_outcome": {
+        "kind": "filing_review",
+        "authority": "bank_of_korea",
+        "action": "file",
+        "timing": "confirm_before_execution"
+      },
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": [
+        "원인거래 계약서",
+        "지급수단 취득·보유 증빙",
+        "결제경로 자료",
+        "외국환은행 확인 또는 세관 신고필증",
+        "신고예외 검토자료"
+      ],
+      "procedure_steps": [
+        "제5-11조 신고예외와 다른 기관 확인·신고 사항 대조",
+        "해당하지 않으면 지급 전 한국은행 신고 검토"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_OPENING_BANK_FILING_CANDIDATE",
+      "title": "상호계산계정 개설 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "향후 채권·채무를 상호계산계정으로 정기 차액결제"},
+        {"field": "payment.mutual_account.party_count", "operator": "eq", "value": 2, "description": "양자간 상호계산"},
+        {"field": "payment.mutual_account.opening_filing_completed", "operator": "eq", "value": false, "description": "지정거래외국환은행 개설 신고 미완료"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_5", "BOK_MUTUAL_ACCOUNT_DEFINITION", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "filing_review", "authority": "designated_foreign_exchange_bank", "action": "file_mutual_account_opening", "timing": "before_use"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["별지 제5-2호 상호계산신고서", "상호계산 계약서", "반복 거래 및 당사자 증빙"],
+      "procedure_steps": ["지정거래외국환은행에 상호계산 구조 확인", "계정 사용 전 개설 신고"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_CLOSURE_BANK_FILING_CANDIDATE",
+      "title": "상호계산계정 폐쇄 신고 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.closure_planned", "operator": "eq", "value": true, "description": "계정 폐쇄 예정"},
+        {"field": "payment.mutual_account.closure_filing_completed", "operator": "eq", "value": false, "description": "지정거래외국환은행 폐쇄 신고 미완료"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_5", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "filing_review", "authority": "designated_foreign_exchange_bank", "action": "file_mutual_account_closure", "timing": "before_closure"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["상호계산계정 폐쇄 신고자료", "폐쇄일 기준 대차기잔액 명세"],
+      "procedure_steps": ["지정거래외국환은행에 폐쇄 신고", "폐쇄잔액에 제5-7조제3항 절차 적용"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_MULTILATERAL_RECLASSIFICATION_CANDIDATE",
+      "title": "다자간 상호계산 구조 재분류 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산 방식 사용 예정"},
+        {"field": "payment.mutual_account.party_count", "operator": "gt", "value": 2, "description": "셋 이상 당사자 참여"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_4", "FXR_ARTICLE_5_5", "BOK_MUTUAL_ACCOUNT_MULTILATERAL_EXCLUSION"],
+      "candidate_outcome": {"kind": "structure_review", "authority": "bank_of_korea", "action": "reclassify_as_multilateral_netting", "timing": "before_execution"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["참여 당사자 목록", "당사자별 채권·채무 흐름", "상계센터 계약"],
+      "procedure_steps": ["상호계산 적용 중단", "한국은행 다자간 상계 신고 대상 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_ENTRY_SCOPE_REVIEW_CANDIDATE",
+      "title": "상호계산 기장대상 위반 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.entry_scope_valid", "operator": "eq", "value": false, "description": "상대방 채권·채무 또는 별도 신고 요건 미충족"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_6", "BOK_MUTUAL_ACCOUNT_DEFINITION"],
+      "candidate_outcome": {"kind": "compliance_review", "authority": "designated_foreign_exchange_bank", "action": "correct_entry_scope", "timing": "before_entry"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["기장대상 채권·채무 원인자료", "별도 지급·자본거래 신고필증"],
+      "procedure_steps": ["부적격 기장 항목 분리", "별도 신고 의무 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_ENTRY_DEADLINE_BREACH_CANDIDATE",
+      "title": "상호계산 30일 기장기한 초과 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.entry_deadline_breached", "operator": "eq", "value": true, "description": "수출입 완료 또는 채권·채무 확정 후 30일 초과"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_6", "BOK_MUTUAL_ACCOUNT_DEFINITION"],
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "report_and_remediate_entry_delay", "timing": "immediate", "deadline_key": "entry"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["수출입 완료일 또는 채권·채무 확정일 증빙", "실제 기장일", "지연 사유서"],
+      "procedure_steps": ["결정론적 30일 기한 계산 검증", "지정거래외국환은행에 보완 절차 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_CYCLE_REVIEW_CANDIDATE",
+      "title": "상호계산 결산주기 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.settlement_cycle_category", "operator": "eq", "value": "noncompliant", "description": "월 단위 또는 회계기간 내 필요 주기에 해당하지 않음"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_DEFINITION"],
+      "candidate_outcome": {"kind": "compliance_review", "authority": "designated_foreign_exchange_bank", "action": "correct_settlement_cycle", "timing": "before_next_closing"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["회계기간", "상호계산 결산주기 정책", "예외 주기 필요성 자료"],
+      "procedure_steps": ["결산주기를 월 단위로 조정하거나 회계기간 내 대체 주기 근거 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_BALANCE_CALCULATION_REVIEW_CANDIDATE",
+      "title": "상호계산 결산잔액 계산 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.balance_calculation_valid", "operator": "eq", "value": false, "description": "상대방별 대차기잔액 합산 방식 미충족"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_DEFINITION"],
+      "candidate_outcome": {"kind": "calculation_review", "authority": "designated_foreign_exchange_bank", "action": "recalculate_balance", "timing": "before_filing"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["상대방별 계정원장", "대차기잔액 합산표"],
+      "procedure_steps": ["상대방별 대차기잔액을 다시 합산", "계산 결과를 신고자료와 대조"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_BALANCE_FILING_OVERDUE_CANDIDATE",
+      "title": "상호계산 결산잔액 신고기한 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.balance_filing_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 신고 기한 초과"},
+        {"field": "payment.mutual_account.balance_filing_completed", "operator": "eq", "value": false, "description": "결산잔액 신고 미완료"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "file_balance_settlement", "timing": "immediate", "deadline_key": "balance_filing"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["결산보고서", "상대방별 대차기잔액", "결산기간 종료일 증빙"],
+      "procedure_steps": ["3개월 달력기한 검증", "잔액 지급·수령 전 신고 여부 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_BALANCE_SETTLEMENT_OVERDUE_CANDIDATE",
+      "title": "상호계산 결산잔액 지급기한 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.balance_settlement_deadline_breached", "operator": "eq", "value": true, "description": "결산기간 종료 후 3개월 지급·수령 기한 초과"},
+        {"field": "payment.mutual_account.balance_settlement_completed", "operator": "eq", "value": false, "description": "결산잔액 지급·수령 미완료"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "deadline_breach_review", "authority": "designated_foreign_exchange_bank", "action": "settle_balance", "timing": "immediate", "deadline_key": "balance_settlement"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["결산잔액 산출표", "신고필증", "지급·수령 증빙"],
+      "procedure_steps": ["상대방별 잔액 합산 검증", "지정거래외국환은행과 지연 해소 절차 확인"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_REPORT_OVERDUE_CANDIDATE",
+      "title": "상호계산 보고서 미제출 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.required_report_due", "operator": "eq", "value": true, "description": "지정거래외국환은행 요구 보고서 제출기한 도래"},
+        {"field": "payment.mutual_account.required_report_submitted", "operator": "eq", "value": false, "description": "요구 보고서 미제출"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "reporting_gap", "authority": "designated_foreign_exchange_bank", "action": "submit_required_report", "timing": "immediate"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["결산보고서", "지정거래외국환은행 요구 보고서", "제출이력"],
+      "procedure_steps": ["미제출 보고서 확인", "지정거래외국환은행에 제출"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "FX_MUTUAL_ACCOUNT_RETENTION_GAP_CANDIDATE",
+      "title": "상호계산 장부·증빙 보관기간 검토",
+      "topic": "fx_compliance",
+      "rule_type": "procedure",
+      "conditions": [
+        {"field": "payment.uses_mutual_account", "operator": "eq", "value": true, "description": "상호계산계정 사용"},
+        {"field": "payment.mutual_account.records_retention_years", "operator": "lt", "value": 5, "description": "장부·관계증빙 보관정책이 5년 미만"}
+      ],
+      "source_ids": ["FX_TRANSACTION_ACT_2026_01_02", "FX_TRANSACTION_DECREE_2026_04_28", "FX_TRANSACTION_REGULATION_2026_88", "BOK_FX_MUTUAL_ACCOUNT_FAQ"],
+      "source_claim_ids": ["FXA_ARTICLE_16", "FXD_ARTICLE_30", "FXR_ARTICLE_5_7", "BOK_MUTUAL_ACCOUNT_BANK_FILING"],
+      "candidate_outcome": {"kind": "recordkeeping_gap", "authority": "designated_foreign_exchange_bank", "action": "extend_retention_policy", "timing": "immediate"},
+      "effective_from": "2026-07-06",
+      "effective_to": null,
+      "required_documents": ["문서보존 정책", "상호계산 장부", "관계증빙 목록"],
+      "procedure_steps": ["보관기간을 최소 5년으로 수정", "누락 자료 복구 가능성 검토"],
+      "review_policy": "always_expert",
+      "production_ready": false
+    }
+  ]
+}

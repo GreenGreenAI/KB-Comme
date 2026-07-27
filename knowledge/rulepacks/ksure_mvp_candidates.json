@@ -1,0 +1,203 @@
+{
+  "schema_version": "1.2",
+  "pack_id": "KSURE_MVP_CANDIDATES",
+  "as_of": "2026-07-27",
+  "status": "draft",
+  "notice": "공식 공개정보 기반 후보 탐색 규칙입니다. K-SURE의 인수·보증 승인을 의미하지 않습니다.",
+  "document_catalogs": ["../document_catalogs/ksure_application_documents.json"],
+  "rules": [
+    {
+      "rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE",
+      "title": "K-SURE 일반형 수출 환변동보험 후보",
+      "topic": "trade_support_case",
+      "rule_type": "eligibility",
+      "conditions": [
+        {
+          "field": "company.is_domestic",
+          "operator": "eq",
+          "value": true,
+          "description": "국내에 주소를 둔 기업"
+        },
+        {
+          "field": "company.size",
+          "operator": "in",
+          "value": ["small", "mid_sized"],
+          "description": "중소·중견기업"
+        },
+        {
+          "field": "company.credit_issue_free",
+          "operator": "eq",
+          "value": true,
+          "description": "공식 안내의 공통 이용제한 사유 없음"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "trade.currency",
+          "operator": "in",
+          "value": ["USD", "JPY", "EUR", "CNY"],
+          "description": "일반형 수출 대상통화"
+        }
+      ],
+      "source_ids": ["KSURE_FX_INSURANCE_ELIGIBILITY"],
+      "source_claim_ids": [
+        "KSURE_FX_EXPORT_CURRENCIES",
+        "KSURE_FX_TARGET_COMPANIES",
+        "KSURE_FX_COMMON_RESTRICTIONS"
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_fx_insurance_general_export",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_application"
+      },
+      "effective_from": null,
+      "effective_to": null,
+      "document_set_ids": ["KSURE_FX_GENERAL_EXPORT_APPLICATION_V1"],
+      "procedure_steps": [
+        "상품 유형과 통화 확인",
+        "공통 이용제한 사유 확인",
+        "K-SURE 인수한도 상담 및 신청"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE",
+      "title": "K-SURE 단기수출보험(선적후·개별) 후보",
+      "topic": "trade_support_case",
+      "rule_type": "eligibility",
+      "conditions": [
+        {
+          "field": "company.is_domestic",
+          "operator": "eq",
+          "value": true,
+          "description": "국내에 주소를 둔 수출기업"
+        },
+        {
+          "field": "company.ksure_exporter_grade",
+          "operator": "in",
+          "value": ["A", "B", "C", "D", "E", "F"],
+          "description": "K-SURE 수출자 신용등급 F급 이상"
+        },
+        {
+          "field": "counterparty.ksure_importer_grade",
+          "operator": "in",
+          "value": ["A", "B", "C", "D", "E", "F"],
+          "description": "K-SURE 수입자 신용등급 F급 이상"
+        },
+        {
+          "field": "counterparty.country_restricted",
+          "operator": "eq",
+          "value": false,
+          "description": "국별인수방침 인수제한국 소재가 아님"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "trade.payment_term_days",
+          "operator": "lte",
+          "value": 730,
+          "description": "개별보험 결제기간 2년 이내"
+        }
+      ],
+      "source_ids": [
+        "KSURE_SHORT_TERM_EXPORT_POSTSHIP",
+        "KSURE_COUNTRY_POLICY_API"
+      ],
+      "source_claim_ids": [
+        "KSURE_SHORT_TERM_EXPORTER",
+        "KSURE_SHORT_TERM_IMPORTER",
+        "KSURE_SHORT_TERM_INDIVIDUAL_TERM",
+        "KSURE_COUNTRY_POLICY_RESTRICTION_MAPPING"
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_short_term_export_postshipment_individual",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_shipment_or_credit_limit_request"
+      },
+      "effective_from": null,
+      "effective_to": null,
+      "document_set_ids": ["KSURE_SHORT_TERM_POSTSHIP_INDIVIDUAL_APPLICATION_V1"],
+      "procedure_steps": [
+        "수출자·수입자 신용등급 확인",
+        "국별인수방침 확인",
+        "거래별 인수한도 및 보험료 확인"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    },
+    {
+      "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+      "title": "K-SURE 수출신용보증(선적전) 후보",
+      "topic": "trade_support_case",
+      "rule_type": "eligibility",
+      "conditions": [
+        {
+          "field": "company.size",
+          "operator": "in",
+          "value": ["small", "mid_sized"],
+          "description": "중소·중견기업"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "financing.purpose",
+          "operator": "in",
+          "value": [
+            "trade_finance",
+            "recognized_export_finance",
+            "trade_bill_acceptance",
+            "export_material_import_lc",
+            "recognized_export_promotion_fund"
+          ],
+          "description": "공식 안내의 보증대상 자금"
+        },
+        {
+          "field": "financing.has_bank_consultation",
+          "operator": "eq",
+          "value": true,
+          "description": "취급 금융기관 사전 상담",
+          "failure_effect": "conditional"
+        }
+      ],
+      "source_ids": ["KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT"],
+      "source_claim_ids": [
+        "KSURE_PRESHIPMENT_TARGET",
+        "KSURE_PRESHIPMENT_FINANCING_TYPES"
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_export_credit_guarantee_preshipment",
+        "authority": "ksure_and_financial_institution",
+        "action": "consult_and_apply_for_preshipment_guarantee",
+        "timing": "before_financing_application"
+      },
+      "effective_from": null,
+      "effective_to": null,
+      "document_set_ids": ["KSURE_PRESHIPMENT_GUARANTEE_NEW_OR_INCREASE_V1"],
+      "procedure_steps": [
+        "K-SURE 및 금융기관 사전 상담",
+        "보증신청서류 준비",
+        "K-SURE 신용평가 및 보증심사"
+      ],
+      "review_policy": "always_expert",
+      "production_ready": false
+    }
+  ]
+}

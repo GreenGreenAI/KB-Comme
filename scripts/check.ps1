@@ -13,6 +13,9 @@ try {
     python scripts/check_docs.py
     if ($LASTEXITCODE -ne 0) { throw "Documentation checks failed." }
 
+    python scripts/check_rulepacks.py
+    if ($LASTEXITCODE -ne 0) { throw "Rulepack readiness checks failed." }
+
     Write-Host "TradeFlow checks passed."
 }
 finally {

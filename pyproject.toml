@@ -16,7 +16,12 @@ dependencies = []
 analysis = ["jupyter", "matplotlib"]
 # Web application only. domain/tools/knowledge stay dependency-free so CI runs
 # the calculation and rule tests without installing anything or holding a key.
-app = ["fastapi", "uvicorn[standard]", "anthropic"]
+app = [
+    "fastapi==0.135.2",
+    "pydantic==2.12.4",
+    "uvicorn[standard]",
+    "anthropic",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

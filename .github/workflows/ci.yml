@@ -13,11 +13,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install application dependencies
+        run: python -m pip install -e '.[app]'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
       - name: Run tests
         env:
           PYTHONPATH: src
-        run: python -W error::DeprecationWarning -m unittest discover -s tests -v
+        run: python -W error::DeprecationWarning -m unittest discover -s tests -t . -v
+      - name: Build frontend
+        working-directory: web/frontend
+        run: |
+          npm ci
+          npm run build
       - name: Compile
         run: python -m compileall -q src tests examples
       - name: Check documentation
         run: python scripts/check_docs.py
+      - name: Check rulepack readiness
+        env:
+          PYTHONPATH: src
+        run: python scripts/check_rulepacks.py

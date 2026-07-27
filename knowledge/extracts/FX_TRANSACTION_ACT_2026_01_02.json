@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_id": "FX_TRANSACTION_ACT_2026_01_02",
+  "retrieved_at": "2026-07-27T01:14:46+09:00",
+  "document": {
+    "title": "외국환거래법",
+    "issuer": "대한민국",
+    "instrument": "법률 제21065호",
+    "effective_from": "2026-01-02",
+    "official_url": "https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=001525&lsRvsGubun=all"
+  },
+  "claims": [
+    {
+      "claim_id": "FXA_ARTICLE_16",
+      "locator": "제16조(지급 또는 수령의 방법의 신고)",
+      "topic": "payment_method_reporting",
+      "normalized_summary": "상계, 일정 기간 초과 결제, 제3자 지급·수령 등은 대통령령에 따라 지급 또는 수령 방법의 사전신고 대상이 될 수 있고, 소액·통상 거래는 사후보고 또는 신고예외가 될 수 있다.",
+      "automation_level": "legal_basis_only"
+    }
+  ],
+  "verification": {
+    "verified_by": "knowledge-domain",
+    "verified_on": "2026-07-27",
+    "method": "국가법령정보센터 현행 법령의 시행일·법률번호와 제16조 확인",
+    "limitations": [
+      "구체적인 보고·신고·예외는 시행령과 외국환거래규정을 함께 적용해야 한다.",
+      "2026-12-03 시행 예정 개정과 현재 시행 조문을 구분해야 한다."
+    ]
+  }
+}

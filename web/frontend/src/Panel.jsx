@@ -7,13 +7,14 @@ export default function Panel({ result, pending, facts }) {
   const cash = result?.cashflow_analysis;
   const market = result?.market_scenario;
   const hedge = result?.hedge_analysis;
+  const completed = result?.workers?.completed ?? [];
 
   const sections = [
     Boolean(cash),
     Boolean(market),
     Boolean(hedge),
-    false, // 지원제도 — 역할 A
-    false, // 규제 — 역할 A
+    completed.includes("support"),
+    completed.includes("compliance"),
   ];
   const done = sections.filter(Boolean).length;
 
@@ -50,35 +51,13 @@ export default function Panel({ result, pending, facts }) {
 
       {cash && <Cashflow cash={cash} />}
       {market && <Market market={market} hedge={hedge} />}
-      <Hedge hedge={hedge} />
-
-      <section className="sec locked">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">지원제도</p>
-            <h3>쓸 수 있는 제도가 있나?</h3>
-          </div>
-          <span className="state need">입력 필요</span>
-        </div>
-        <p className="unlock">
-          <b>담보·신용 여력</b>과 <b>수입자 소재국</b>을 알려주시면 자격을
-          판정합니다. 안 되는 제도는 이유와 함께 알려드립니다.
-        </p>
-      </section>
-
-      <section className="sec locked">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">규제</p>
-            <h3>해야 할 신고가 있나?</h3>
-          </div>
-          <span className="state soon">연결 예정</span>
-        </div>
-        <p className="unlock">
-          외국환거래법상 신고의무 판정은 아직 연결되지 않았습니다. 빠진 항목은
-          빈칸으로 두지 않고 그대로 표시합니다.
-        </p>
-      </section>
+      <Hedge
+        hedge={hedge}
+        reason={result?.workers?.skipped?.hedge}
+        requiredInputs={result?.required_inputs?.hedge ?? []}
+      />
+      <Support result={result} />
+      <Compliance result={result} />
 
       {result && <Evidence result={result} />}
     </aside>
@@ -156,7 +135,8 @@ function Market({ market, hedge }) {
   const be = hedge?.breakeven_rate ? Number(hedge.breakeven_rate) : null;
 
   const values = [lower, upper, spot, ...(be ? [be] : [])];
-  const pad = (Math.max(...values) - Math.min(...values)) * 0.12;
+  const spread = Math.max(...values) - Math.min(...values);
+  const pad = spread === 0 ? Math.max(Math.abs(spot) * 0.01, 1) : spread * 0.12;
   const min = Math.min(...values) - pad;
   const max = Math.max(...values) + pad;
   const at = (v) => ((v - min) / (max - min)) * 100;
@@ -220,7 +200,7 @@ function Market({ market, hedge }) {
   );
 }
 
-function Hedge({ hedge }) {
+function Hedge({ hedge, reason, requiredInputs }) {
   if (!hedge) {
     return (
       <section className="sec locked">
@@ -229,11 +209,13 @@ function Hedge({ hedge }) {
             <p className="eyebrow">손익 · 헤지</p>
             <h3>얼마나 헤지하면 되나?</h3>
           </div>
-          <span className="state need">입력 필요</span>
+          <span className="state need">
+            {requiredInputs.length > 0 ? "입력 필요" : "검토 필요"}
+          </span>
         </div>
         <p className="unlock">
-          <b>기준 영업이익</b>을 알려주시면 손익분기 환율, 적자 전환 확률, 헤지
-          비율 0% / 필요한 만큼 / 100%의 손익 비교를 계산합니다.
+          {reason ??
+            "검증된 헤지 수단과 가격 정보가 준비되면 손익 비교를 계산합니다."}
         </p>
       </section>
     );
@@ -319,6 +301,69 @@ function Hedge({ hedge }) {
         {pct(hedge.confidence_level, 0)} 분위수) · <b>제약</b> 헤지비율 0~100% ·{" "}
         <b>반올림</b> {hedge.profit_rounding}
       </p>
+    </section>
+  );
+}
+
+function Support({ result }) {
+  const candidates = result?.support_candidates ?? [];
+  const excluded = result?.excluded_candidates ?? [];
+  const completed = result?.workers?.completed?.includes("support");
+
+  return (
+    <section className={`sec ${completed ? "" : "locked"}`}>
+      <div className="sec-head">
+        <div>
+          <p className="eyebrow">지원제도</p>
+          <h3>쓸 수 있는 제도가 있나?</h3>
+        </div>
+        <span className={`state ${completed ? "done" : "need"}`}>
+          {completed ? "규칙 판정 완료" : "대기 중"}
+        </span>
+      </div>
+      {completed ? (
+        <>
+          <p className="unlock">
+            후보 {candidates.length}건 · 제외 {excluded.length}건. 초안 규칙이나
+            근거가 부족한 결과는 전문가 확인 대상으로 유지합니다.
+          </p>
+          {candidates.map((candidate) => (
+            <p className="basis" key={`${candidate.subject_id}:${candidate.rule_id}`}>
+              <b>{candidate.title}</b> · {candidate.status}
+            </p>
+          ))}
+        </>
+      ) : (
+        <p className="unlock">거래 정보가 준비되면 역할 A 규칙으로 판정합니다.</p>
+      )}
+    </section>
+  );
+}
+
+function Compliance({ result }) {
+  const findings = result?.risk_findings ?? [];
+  const obligations = result?.filing_obligations ?? [];
+  const completed = result?.workers?.completed?.includes("compliance");
+
+  return (
+    <section className={`sec ${completed ? "" : "locked"}`}>
+      <div className="sec-head">
+        <div>
+          <p className="eyebrow">규제</p>
+          <h3>해야 할 신고가 있나?</h3>
+        </div>
+        <span className={`state ${completed ? "done" : "need"}`}>
+          {completed ? "규칙 판정 완료" : "대기 중"}
+        </span>
+      </div>
+      {completed ? (
+        <p className="unlock">
+          검토 항목 {findings.length}건 · 실행 의무 후보 {obligations.length}건.
+          정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.
+        </p>
+      ) : (
+        <p className="unlock">거래 정보가 준비되면 역할 A 규칙으로 판정합니다.</p>
+      )}
     </section>
   );
 }

@@ -1,14 +1,19 @@
 # 스냅샷 저장소
 
-수집기(`src/tradeflow/integration/`)가 외부 출처에서 받아온 원본을 이 디렉터리에
-버전별 파일로 기록합니다. 계산 도구와 지식 규칙은 외부 API가 아니라 **이 파일만**
-읽습니다.
+수집기(`src/tradeflow/integration/`)가 **공개 기준데이터** 출처에서 받아온 원본을
+이 디렉터리에 버전별 파일로 기록합니다. 계산 도구와 지식 규칙은 외부 API가 아니라
+**이 파일만** 읽습니다.
 
-파일을 저장소에 커밋하는 이유는 셋입니다.
+공개 기준데이터 파일을 저장소에 커밋하는 이유는 셋입니다.
 
 - 정의서 §9.1 "과거 스냅샷으로 동일 결과를 재현할 수 있다"가 CI에서 그대로 검증됩니다
 - 외부 API 장애 시에도 마지막 정상 스냅샷으로 동작합니다 (정의서 §10)
 - 테스트가 네트워크 없이 실행됩니다
+
+고객 거래·ERP 원장·잔액은 이 디렉터리에 저장하거나 Git에 커밋하지 않습니다.
+그 데이터는 `.gitignore`로 차단된 `data/runtime/` 또는 운영 환경의 암호화된 비공개
+저장소에 보관합니다. 공개 스냅샷과 고객 스냅샷은 봉투 형식은 같지만 저장 위치,
+접근권한, 보존·삭제 정책이 다릅니다.
 
 ## 경로 규칙
 
@@ -80,6 +85,37 @@ PYTHONPATH=src python -m tradeflow.integration.ecos 20160101 20260724
 
 전체 기간을 반복 수집하면 겹치는 스냅샷이 쌓입니다(10년치 1건이 약 1.2MB).
 최초 1회만 장기간을 받고, 이후에는 최근 구간만 수집하십시오.
+
+### `KOREAEXIM_REFERENCE_FX`
+
+한국수출입은행 환율 정보 Open API의 AP01 다통화 기준환율입니다. 신규 공식 도메인
+`oapi.koreaexim.go.kr`만 사용하고 인증키는 snapshot에 저장하지 않습니다. 응답은
+요청 `search_date`와 함께 schema 1.0 wrapper에 보존하며, `result`가 성공인 전체 행을
+`ReferenceFxCatalog`로 검증합니다.
+
+이 값은 기준·분석용이며 은행이 기업에 제시한 실행 가능 호가가 아닙니다. `JPY(100)`
+같은 고시단위를 임의로 버리지 않고 raw 단위와 배수를 함께 보존합니다.
+
+## 소비 규칙
+
+### `BIZINFO_SUPPORT_API`
+
+기업마당 지원사업 목록은 `BIZINFO_API_KEY` 인증키로 수집하고 원문 JSON을 공통
+스냅샷 봉투에 저장합니다. 인증키는 파일이나 레지스트리에 기록하지 않습니다.
+
+스냅샷은 `BizinfoSupportV1Parser`를 통해 `SupportProgramCatalog`로 읽습니다. 이
+객체는 지원사업 탐색 후보이며, 목록 데이터만으로 기업의 자격이나 추천 여부를
+확정하지 않습니다. 상세 공고의 조건이 근거 규칙으로 검토되기 전에는 최종 판단에
+사용할 수 없습니다.
+
+- `latest_snapshot_path`는 파일명 정렬이 아니라 `observed_at` 기준으로 최신본을 고른다.
+- `read_snapshot`은 해시와 경로의 source/version 일치를 검증한다.
+- 거래피드는 `read_trade_feed_snapshot`, ECOS는 `read_ecos_usd_krw_snapshot`으로
+  스키마를 검증한 뒤 사용한다.
+- 소비자는 작업별 `FreshnessPolicy`를 반드시 전달하며, SLA를 넘긴 데이터는
+  `StaleDatasetError`로 중단한다.
+- 거래 스냅샷의 source/version/hash는 `TradeProgram.input_snapshots`를 거쳐
+  `DecisionPacket` 근거까지 전달한다.
 
 ## 주의
 

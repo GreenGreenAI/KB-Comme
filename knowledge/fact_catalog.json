@@ -1,0 +1,376 @@
+{
+  "schema_version": "1.0",
+  "facts": [
+    {
+      "field": "company.is_sme",
+      "type": "boolean",
+      "description": "기존 프로그램 수준 규칙과 호환되는 중소기업 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.is_domestic",
+      "type": "boolean",
+      "description": "기업이 대한민국에 주소를 둔 국내 기업인지 여부",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "company.size",
+      "type": "enum",
+      "allowed_values": ["small", "mid_sized", "large"],
+      "description": "공식 확인 자료에 따른 기업규모",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.credit_issue_free",
+      "type": "boolean",
+      "description": "K-SURE가 열거한 신용상 제한 사유가 없음을 공식 자료로 확인했는지 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "company.ksure_exporter_grade",
+      "type": "enum",
+      "allowed_values": ["A", "B", "C", "D", "E", "F", "G", "R", "UNKNOWN"],
+      "description": "K-SURE 수출자 신용등급",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "counterparty.ksure_importer_grade",
+      "type": "enum",
+      "allowed_values": ["A", "B", "C", "D", "E", "F", "G", "R", "UNKNOWN"],
+      "description": "K-SURE 수입자 신용등급",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "counterparty.country_restricted",
+      "type": "boolean",
+      "description": "현재 K-SURE 국별인수방침상 인수제한국 소재 여부",
+      "evidence_role": "support_eligibility"
+    },
+    {
+      "field": "trade.direction",
+      "type": "enum",
+      "allowed_values": ["export", "import"],
+      "description": "개별 거래의 수출입 방향",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.currency",
+      "type": "string",
+      "description": "개별 거래 결제통화 ISO 4217 코드",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.contract_amount_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "신고 기준 적용을 위해 공식 기준환율로 환산한 계약 건별 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.payment_term_days",
+      "type": "integer",
+      "unit": "day",
+      "description": "선적 또는 일람 후 결제까지의 일수",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "trade.days_before_shipment",
+      "type": "integer",
+      "unit": "day",
+      "description": "수출대금 수령일부터 예정 선적일까지의 일수",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.days_before_receipt",
+      "type": "integer",
+      "unit": "day",
+      "description": "수입대금 지급일부터 선적서류 또는 물품 수령일까지의 일수",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "trade.extended_payment_exception_category",
+      "type": "enum",
+      "allowed_values": [
+        "article_5_8_vessel",
+        "article_5_8_rail_vehicle",
+        "article_5_8_aircraft",
+        "article_5_8_industrial_facility",
+        "none",
+        "unknown"
+      ],
+      "description": "증빙으로 확인한 제5-8조 기간초과 지급 신고예외 유형",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "financing.purpose",
+      "type": "enum",
+      "allowed_values": [
+        "trade_finance",
+        "recognized_export_finance",
+        "trade_bill_acceptance",
+        "export_material_import_lc",
+        "recognized_export_promotion_fund",
+        "other"
+      ],
+      "description": "선적전 수출신용보증을 검토하는 금융 목적",
+      "evidence_role": "user_trade"
+    },
+    {
+      "field": "financing.has_bank_consultation",
+      "type": "boolean",
+      "description": "취급 금융기관과 보증부 대출 가능성을 상담했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.is_netting",
+      "type": "boolean",
+      "description": "거주자와 비거주자 간 채권·채무를 상계해 차액만 결제하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.party_count",
+      "type": "integer",
+      "description": "상계에 참여하는 당사자 수",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.uses_center",
+      "type": "boolean",
+      "description": "다국적기업의 상계센터를 경유하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.netting.smaller_claim_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "상계하는 채권과 채무 중 작은 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.netting.exception_category",
+      "type": "enum",
+      "allowed_values": [
+        "article_5_4_1",
+        "article_5_4_2",
+        "article_5_4_3",
+        "article_5_4_4",
+        "article_5_4_5",
+        "article_5_4_6",
+        "article_5_4_7",
+        "article_5_4_8",
+        "article_5_4_9",
+        "article_5_4_10",
+        "article_5_4_11",
+        "article_5_4_12",
+        "article_5_4_13",
+        "article_5_4_14",
+        "article_5_4_15",
+        "none",
+        "unknown"
+      ],
+      "description": "증빙으로 확인한 외국환거래규정상 상계 신고예외 유형",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.is_third_party",
+      "type": "boolean",
+      "description": "원인거래의 당사자가 아닌 자와 지급 또는 수령하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.third_party.amount_usd",
+      "type": "decimal",
+      "unit": "USD",
+      "description": "제3자와 지급 또는 수령하려는 금액",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.third_party.exception_category",
+      "type": "enum",
+      "allowed_values": [
+        "article_5_10_1",
+        "article_5_10_2",
+        "article_5_10_3",
+        "article_5_10_4",
+        "article_5_10_5",
+        "article_5_10_6",
+        "article_5_10_7",
+        "article_5_10_8",
+        "article_5_10_9",
+        "article_5_10_10",
+        "article_5_10_11",
+        "article_5_10_12",
+        "article_5_10_13",
+        "article_5_10_14",
+        "article_5_10_15",
+        "article_5_10_16",
+        "article_5_10_17",
+        "article_5_10_18",
+        "article_5_10_19",
+        "article_5_10_20",
+        "article_5_10_21",
+        "article_5_10_22",
+        "article_5_10_23",
+        "article_5_10_24",
+        "article_5_10_25",
+        "article_5_10_26",
+        "article_5_10_27",
+        "article_5_10_28",
+        "article_5_10_29",
+        "article_5_10_30",
+        "article_5_10_31",
+        "article_5_10_32",
+        "none",
+        "unknown"
+      ],
+      "description": "증빙으로 확인한 제5-10조 제3자 지급 신고예외 유형",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.uses_foreign_exchange_bank",
+      "type": "boolean",
+      "description": "지급 또는 수령이 외국환은행을 통하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.direction",
+      "type": "enum",
+      "allowed_values": ["pay", "receive"],
+      "description": "거주자 관점의 지급 또는 수령 방향",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.nonbank.exception_category",
+      "type": "enum",
+      "allowed_values": [
+        "article_5_11_receipt",
+        "article_5_11_1",
+        "article_5_11_2",
+        "article_5_11_3",
+        "article_5_11_4",
+        "article_5_11_5",
+        "article_5_11_6",
+        "article_5_11_7",
+        "article_5_11_8",
+        "article_5_11_9",
+        "article_5_11_10",
+        "article_5_11_11",
+        "article_5_11_12",
+        "article_5_11_13",
+        "none",
+        "unknown"
+      ],
+      "description": "증빙으로 확인한 제5-11조 비은행 지급 신고예외 유형",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.uses_mutual_account",
+      "type": "boolean",
+      "description": "지속적인 양자 거래의 향후 채권·채무를 상호계산계정으로 정기 차액결제하는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.party_count",
+      "type": "integer",
+      "description": "상호계산에 참여하는 당사자 수",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.opening_filing_completed",
+      "type": "boolean",
+      "description": "계정 개설 전 지정거래외국환은행에 상호계산신고서를 제출했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.closure_planned",
+      "type": "boolean",
+      "description": "상호계산계정을 폐쇄하려는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.closure_filing_completed",
+      "type": "boolean",
+      "description": "계정 폐쇄 신고를 지정거래외국환은행에 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.entry_scope_valid",
+      "type": "boolean",
+      "description": "기장 항목이 상호계산 상대방과의 채권·채무이며 별도 신고 의무를 이행했는지 여부",
+      "evidence_role": "compliance"
+    },
+    {
+      "field": "payment.mutual_account.entry_deadline_breached",
+      "type": "boolean",
+      "description": "수출입 완료일 또는 기타 채권·채무 확정일부터 30일 기장기한을 초과했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.settlement_cycle_category",
+      "type": "enum",
+      "allowed_values": [
+        "monthly",
+        "alternate_within_accounting_period",
+        "noncompliant",
+        "unknown"
+      ],
+      "description": "회계기간 범위 내에서 정한 상호계산 결산주기",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.balance_calculation_valid",
+      "type": "boolean",
+      "description": "상대방별 대차기잔액을 합산해 결산잔액을 계산했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_filing_deadline_breached",
+      "type": "boolean",
+      "description": "결산기간 종료일부터 3개월의 신고·지급 기한을 초과했는지 여부",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_settlement_deadline_breached",
+      "type": "boolean",
+      "description": "Balance settlement exceeded the three-calendar-month deadline.",
+      "evidence_role": "calculation"
+    },
+    {
+      "field": "payment.mutual_account.balance_filing_completed",
+      "type": "boolean",
+      "description": "결산잔액 지급·수령 전 지정거래외국환은행 신고를 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.balance_settlement_completed",
+      "type": "boolean",
+      "description": "결산기간 종료 후 3개월 이내 잔액 지급·수령을 완료했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.required_report_due",
+      "type": "boolean",
+      "description": "지정거래외국환은행이 정한 결산보고서 등 보고서의 제출기한이 도래했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.required_report_submitted",
+      "type": "boolean",
+      "description": "지정거래외국환은행이 요구한 보고서를 제출했는지 여부",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "payment.mutual_account.records_retention_years",
+      "type": "integer",
+      "unit": "year",
+      "description": "장부 및 관계 증빙에 적용한 보관기간",
+      "evidence_role": "procedure"
+    },
+    {
+      "field": "program.has_export",
+      "type": "boolean",
+      "description": "프로그램에 수출 거래가 하나 이상 존재하는지 여부",
+      "evidence_role": "user_trade"
+    }
+  ]
+}
