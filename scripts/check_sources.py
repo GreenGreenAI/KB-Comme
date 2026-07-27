@@ -6,15 +6,21 @@ import argparse
 import json
 from pathlib import Path
 
+from datetime import UTC, datetime
+
+from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
 from tradeflow.integration.source_monitor import (
-    fetch_and_check,
+    check_all,
     parse_monitor_specs,
     report_json,
+    verification_payload,
 )
+from tradeflow.tools.source_freshness import SOURCE_ID
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = PROJECT_ROOT / "knowledge" / "source_monitors.json"
+DEFAULT_SNAPSHOT_ROOT = PROJECT_ROOT / "data" / "snapshots"
 
 
 def main() -> int:
@@ -22,6 +28,12 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--source-id", action="append", default=[])
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="persist the run as a snapshot the runtime can read",
+    )
+    parser.add_argument("--snapshot-root", type=Path, default=DEFAULT_SNAPSHOT_ROOT)
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -34,7 +46,27 @@ def main() -> int:
             parser.error("unknown source IDs: " + ", ".join(sorted(unknown)))
         specs = tuple(item for item in specs if item.source_id in selected)
 
-    results = tuple(fetch_and_check(spec) for spec in specs)
+    results = check_all(specs)
+
+    if args.write:
+        if selected:
+            parser.error(
+                "--write requires the full manifest: a partial run would "
+                "record the unchecked sources as if they had no verdict"
+            )
+        now = datetime.now(UTC)
+        path = write_snapshot(
+            args.snapshot_root,
+            build_envelope(
+                source_id=SOURCE_ID,
+                version=now.date().isoformat(),
+                observed_at=now,
+                retrieved_at=now,
+                payload=verification_payload(results),
+            ),
+        )
+        print(f"wrote {path}")
+
     if args.json:
         print(report_json(results))
     else:

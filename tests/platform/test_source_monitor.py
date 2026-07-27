@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tradeflow.integration.source_monitor import (
     SourceMonitorSpec,
+    check_all,
     fetch_and_check,
     parse_monitor_specs,
 )
@@ -34,6 +35,61 @@ class _Response:
 
     def geturl(self) -> str:
         return "https://official.example/rule"
+
+
+class CheckAllTests(unittest.TestCase):
+    """One dead host must not decide the freshness of the other fourteen.
+
+    `www.koreaexim.go.kr` serves an incomplete certificate chain today, and
+    before isolation that single failure aborted the whole run — leaving no
+    verification at all, which makes every rule fail closed.
+    """
+
+    def _specs(self) -> tuple[SourceMonitorSpec, ...]:
+        return tuple(
+            SourceMonitorSpec(
+                name,
+                f"https://official.example/{name}",
+                ("rule text",),
+                "metadata_and_fingerprint_only",
+            )
+            for name in ("A", "DEAD", "C")
+        )
+
+    def test_a_failing_source_becomes_a_recorded_result(self) -> None:
+        def opener(request, **_kwargs):
+            if "DEAD" in request.full_url:
+                raise OSError("certificate verify failed")
+            return _Response(b"<html><body>rule text</body></html>")
+
+        results = check_all(
+            self._specs(),
+            opener=opener,
+            now=lambda: datetime(2026, 7, 27, tzinfo=UTC),
+        )
+
+        by_id = {item.source_id: item for item in results}
+        self.assertEqual(3, len(results))
+        self.assertEqual("verified", by_id["A"].status)
+        self.assertEqual("verified", by_id["C"].status)
+        self.assertEqual("unreachable", by_id["DEAD"].status)
+        self.assertIn("certificate verify failed", by_id["DEAD"].error)
+
+    def test_an_unreachable_source_never_claims_a_fingerprint(self) -> None:
+        """An empty hash must not look like a body we actually read."""
+
+        def opener(request, **_kwargs):
+            raise OSError("boom")
+
+        (result,) = check_all(
+            self._specs()[1:2],
+            opener=opener,
+            now=lambda: datetime(2026, 7, 27, tzinfo=UTC),
+        )
+
+        self.assertEqual("", result.response_sha256)
+        self.assertEqual(0, result.http_status)
+        self.assertEqual((), result.missing_markers)
 
 
 class SourceMonitorTests(unittest.TestCase):
