@@ -23,7 +23,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: src
-        run: python -W error::DeprecationWarning -m unittest discover -s tests -v
+        run: python -W error::DeprecationWarning -m unittest discover -s tests -t . -v
       - name: Build frontend
         working-directory: web/frontend
         run: |
