@@ -31,6 +31,23 @@ class EvidenceContractTests(unittest.TestCase):
         )
         self.assertTrue(result["satisfied"])
 
+    def test_stale_or_rejected_descriptor_does_not_satisfy_coverage(self) -> None:
+        for usability in ("stale", "rejected"):
+            with self.subTest(usability=usability):
+                result = validate_evidence_contract(
+                    [EvidenceRequirement(EvidenceRole.SUPPORT_ELIGIBILITY)],
+                    [
+                        EvidenceDescriptor(
+                            f"eligibility:{usability}",
+                            EvidenceRole.SUPPORT_ELIGIBILITY,
+                            ("CASE-001",),
+                            payload={"usability": usability},
+                        )
+                    ],
+                )
+                self.assertFalse(result["satisfied"])
+                self.assertEqual(["support_eligibility"], result["missing"])
+
 
 if __name__ == "__main__":
     unittest.main()

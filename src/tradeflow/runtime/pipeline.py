@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime, time
 from typing import Mapping
 
@@ -7,6 +8,7 @@ from tradeflow.contracts.interfaces import ExposureService, KnowledgeService
 from tradeflow.domain.enums import DecisionStatus, EvidenceRole, Freshness
 from tradeflow.domain.models import AnalysisResult, RecommendedAction, TradeProgram
 from tradeflow.knowledge.evidence import validate_evidence_contract
+from tradeflow.knowledge.eligibility_evidence import EligibilityFactInput
 from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactBundle
 from tradeflow.knowledge.mutual_account import (
     MutualAccountTimeline,
@@ -160,6 +162,37 @@ class TradeFlowPipeline:
         )
         return result
 
+    def analyze_cases_with_eligibility(
+        self,
+        program: TradeProgram,
+        *,
+        eligibility: EligibilityFactInput,
+        assertions_by_case: Mapping[str, tuple[FactAssertion, ...]] | None = None,
+        evidence: tuple[EvidenceDescriptor, ...] = (),
+        source_freshness: Mapping[str, Freshness] | None = None,
+        mutual_account_timelines: Mapping[str, MutualAccountTimeline] | None = None,
+    ) -> AnalysisResult:
+        """Run case rules with provider-built eligibility evidence.
+
+        Stale provider records remain in the audit evidence but cannot attest a
+        fact and are ignored by evidence coverage.
+        """
+        result, _ = self._analyze_cases(
+            program,
+            assertions_by_case=self._merge_eligibility_assertions(
+                eligibility,
+                assertions_by_case or {},
+            ),
+            evidence=(
+                *evidence,
+                *eligibility.evidence,
+                *eligibility.unusable_evidence,
+            ),
+            source_freshness=source_freshness,
+            mutual_account_timelines=mutual_account_timelines,
+        )
+        return self._apply_eligibility_review(result, eligibility)
+
     def analyze_case_packet(
         self,
         program: TradeProgram,
@@ -187,6 +220,93 @@ class TradeFlowPipeline:
             result,
             as_of=program.as_of,
             inputs=inputs,
+        )
+
+    def analyze_case_packet_with_eligibility(
+        self,
+        program: TradeProgram,
+        *,
+        eligibility: EligibilityFactInput,
+        assertions_by_case: Mapping[str, tuple[FactAssertion, ...]] | None = None,
+        evidence: tuple[EvidenceDescriptor, ...] = (),
+        source_freshness: Mapping[str, Freshness] | None = None,
+        mutual_account_timelines: Mapping[str, MutualAccountTimeline] | None = None,
+    ) -> DecisionPacket:
+        merged_assertions = self._merge_eligibility_assertions(
+            eligibility,
+            assertions_by_case or {},
+        )
+        result, bundles = self._analyze_cases(
+            program,
+            assertions_by_case=merged_assertions,
+            evidence=(
+                *evidence,
+                *eligibility.evidence,
+                *eligibility.unusable_evidence,
+            ),
+            source_freshness=source_freshness,
+            mutual_account_timelines=mutual_account_timelines,
+        )
+        result = self._apply_eligibility_review(result, eligibility)
+        return DecisionPacket.from_analysis(
+            result,
+            as_of=program.as_of,
+            inputs={
+                "program": self._program_facts(program),
+                "cases": {
+                    bundle.case_id: dict(bundle.facts)
+                    for bundle in bundles
+                },
+                "eligibility_evidence": {
+                    "stale_evidence_ids": list(eligibility.stale_evidence_ids),
+                    "missing_fields_by_case": {
+                        case_id: list(fields)
+                        for case_id, fields in eligibility.missing_fields_by_case.items()
+                    },
+                },
+            },
+        )
+
+    @staticmethod
+    def _merge_eligibility_assertions(
+        eligibility: EligibilityFactInput,
+        additional: Mapping[str, tuple[FactAssertion, ...]],
+    ) -> dict[str, tuple[FactAssertion, ...]]:
+        case_ids = set(eligibility.assertions_by_case) | set(additional)
+        return {
+            case_id: (
+                *eligibility.assertions_by_case.get(case_id, ()),
+                *additional.get(case_id, ()),
+            )
+            for case_id in case_ids
+        }
+
+    @staticmethod
+    def _apply_eligibility_review(
+        result: AnalysisResult,
+        eligibility: EligibilityFactInput,
+    ) -> AnalysisResult:
+        reasons = list(result.review_reasons)
+        has_missing = False
+        for case_id, fields in eligibility.missing_fields_by_case.items():
+            if not fields:
+                continue
+            has_missing = True
+            reasons.append(
+                f"{case_id}: missing eligibility evidence: {', '.join(fields)}"
+            )
+        if has_missing and eligibility.stale_evidence_ids:
+            reasons.append(
+                "stale eligibility evidence: "
+                + ", ".join(eligibility.stale_evidence_ids)
+            )
+        deduplicated = tuple(dict.fromkeys(reasons))
+        if deduplicated == result.review_reasons:
+            return result
+        return replace(
+            result,
+            review_required=bool(deduplicated),
+            review_reasons=deduplicated,
         )
 
     def _analyze_cases(

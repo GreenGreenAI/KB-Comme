@@ -23,7 +23,7 @@ MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재
 | P0 | 수출신용보증 | K-SURE | 선적전 보증 후보 규칙 | draft |
 | P1 | 지원사업 탐색 | 기업마당 API와 개별 공고 | 일일 API 스냅샷·정규화 객체 | 상세 조건 규칙화 대기 |
 | P1 | 국별인수방침 | K-SURE K-Sight | 일일 비공개 스냅샷·typed catalog·수입자 국가 제한 fact | 구현, 상대 역할 검토 대기 |
-| P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | 증거 연결 | 외부 연동 대기 |
+| P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | 회사/케이스 범위 typed evidence·provider registry·FactAssembler 연결 | 실제 provider 연동 대기 |
 
 ## 데이터 계층
 
@@ -36,6 +36,8 @@ MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재
   → fact_catalog: 규칙 입력 필드·형식·단위·증거
   → document_catalogs: 상품·단계별 필수·조건부·택일 신청서류
   → rulepacks: 조건·출처·서류세트 참조·절차
+  → EligibilityEvidenceProvider: 운영 응답의 주체·시각·해시·fact 정규화
+  → EligibilityEvidenceAssembler: trusted/fresh 증거만 케이스 assertion으로 결합
   → RuleDecision / DecisionPacket: 실행 결과와 근거
 ```
 
@@ -81,7 +83,7 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 2. K-SURE 신청서류 catalog의 상대 역할 검토와 상품·단계 범위 확장
 3. 거래·계정 원장의 완료일·기장일·결산일에서 상호계산 기한 fact를 생성하는
    결정론 파생기
-4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 증거 인터페이스
+4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 실제 provider 어댑터·인증 연동
 
 거래피드의 스냅샷 수집·정규화와 근거 결합형 `FactAssembler`, 케이스별
 `trade_support_case`·`fx_compliance` 실행은 완료했다. 현재 수직 기준은 양자간

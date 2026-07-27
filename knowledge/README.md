@@ -135,3 +135,22 @@ draft 규칙팩은 pending 승인과 `production_ready=false`를 blocker로 보�
 
 현재 `ksure_mvp_candidates.json`과 `fx_compliance_mvp.json`은 공식 공개정보를
 구조화한 초안이며 자동 확정 판정에 사용하지 않는다.
+
+## 운영 자격 증거
+
+기업 자격과 K-SURE 신용등급은 호출자가 boolean이나 등급 문자열만 주입하지 않는다.
+`EligibilityEvidenceProvider`가 회사 또는 거래 케이스에 귀속된
+`EligibilityEvidenceRecord`를 반환하고, 각 record에는 다음 provenance가 필요하다.
+
+- provider key와 신뢰된 source ID
+- 관측·취득·유효기한의 timezone-aware 시각
+- 원 응답 또는 문서의 canonical SHA-256
+- fact catalog에 등록된 명시적 사실
+
+`EligibilityEvidenceAssembler`는 회사 범위 사실을 해당 회사의 모든 케이스에
+투영하고, 수입자 등급처럼 거래 상대방에 속한 사실은 지정 케이스에만 연결한다.
+동일 사실을 뒷받침하는 복수 증거는 evidence ID를 모두 보존하지만, 유효한 증거끼리
+값이 충돌하면 우선순위를 추정하지 않고 실패한다. stale 증거는
+`unusable_evidence`에 감사용으로 남기되 assertion과 evidence coverage에서는
+제외한다. 결과인 `EligibilityFactInput`은
+`TradeFlowPipeline.analyze_case_packet_with_eligibility`에 직접 전달한다.

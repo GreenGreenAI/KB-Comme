@@ -1,6 +1,15 @@
 """Versioned source, rule and evidence layer."""
 
 from tradeflow.knowledge.evidence import validate_evidence_contract
+from tradeflow.knowledge.eligibility_evidence import (
+    CompanyQualificationEvidence,
+    EligibilityEvidenceAssembler,
+    EligibilityEvidenceProvider,
+    EligibilityFactInput,
+    EligibilityProviderRegistry,
+    EvidenceMetadata,
+    KsureCreditEvidence,
+)
 from tradeflow.knowledge.mutual_account import (
     MutualAccountTimeline,
     derive_mutual_account_timeline,
@@ -10,7 +19,14 @@ from tradeflow.knowledge.repository import KnowledgeRepository
 
 __all__ = [
     "KnowledgeRepository",
+    "CompanyQualificationEvidence",
+    "EligibilityEvidenceAssembler",
+    "EligibilityEvidenceProvider",
+    "EligibilityFactInput",
+    "EligibilityProviderRegistry",
+    "EvidenceMetadata",
     "KsureCaseProfile",
+    "KsureCreditEvidence",
     "MutualAccountTimeline",
     "derive_mutual_account_timeline",
     "validate_evidence_contract",

@@ -20,6 +20,15 @@ from tradeflow.knowledge.facts import (
     FactCatalog,
     FactContractError,
 )
+from tradeflow.knowledge.eligibility_evidence import (
+    CompanyQualificationEvidence,
+    EligibilityEvidenceAssembler,
+    EligibilityEvidenceRecord,
+    EvidenceMetadata,
+    EvidenceSubjectKind,
+    KsureCreditEvidence,
+    KsureCreditSubject,
+)
 from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
@@ -203,6 +212,139 @@ class KsureOrchestrationTests(unittest.TestCase):
             "trade.transaction_type",
             serialized["document_requirements"][0]["selector_field"],
         )
+
+    def test_provider_evidence_enters_the_real_case_pipeline(self) -> None:
+        def meta(evidence_id: str, source_id: str, digit: str) -> EvidenceMetadata:
+            return EvidenceMetadata(
+                evidence_id=evidence_id,
+                source_id=source_id,
+                observed_at=datetime(2026, 7, 27, 8, tzinfo=UTC),
+                retrieved_at=datetime(2026, 7, 27, 9, tzinfo=UTC),
+                valid_until=datetime(2026, 8, 27, tzinfo=UTC),
+                content_hash="sha256:" + digit * 64,
+            )
+
+        records = (
+            CompanyQualificationEvidence(
+                metadata=meta("company:C1", "COMPANY_QUALIFICATION", "1"),
+                company_id="C1",
+                provider_key="company_qualification",
+                company_size="small",
+                credit_issue_free=True,
+            ).to_record(),
+            KsureCreditEvidence(
+                metadata=meta("ksure-exporter:C1", "KSURE_CREDIT", "2"),
+                subject=KsureCreditSubject.EXPORTER,
+                subject_id="C1",
+                grade="A",
+                provider_key="ksure_credit",
+            ).to_record(),
+            KsureCreditEvidence(
+                metadata=meta("ksure-importer:EXP-1", "KSURE_CREDIT", "3"),
+                subject=KsureCreditSubject.IMPORTER,
+                subject_id="EXP-1",
+                grade="B",
+                provider_key="ksure_credit",
+            ).to_record(),
+            EligibilityEvidenceRecord(
+                metadata=meta("country-policy:EXP-1", "KSURE_COUNTRY_POLICY", "4"),
+                subject_kind=EvidenceSubjectKind.CASE,
+                subject_id="EXP-1",
+                facts={"counterparty.country_restricted": False},
+                provider_key="ksure_country_policy",
+            ),
+        )
+        eligibility = EligibilityEvidenceAssembler(
+            FactCatalog.from_json(ROOT / "knowledge" / "fact_catalog.json"),
+            trusted_source_ids={
+                "COMPANY_QUALIFICATION",
+                "KSURE_CREDIT",
+                "KSURE_COUNTRY_POLICY",
+            },
+        ).assemble(
+            program=self.program,
+            records=records,
+            evaluated_at=datetime(2026, 7, 27, 12, tzinfo=UTC),
+            required_fields_by_case={
+                "EXP-1": tuple(self.support_facts),
+            },
+        )
+        remaining_profile = KsureCaseProfile(
+            payment_term_days=180,
+            financing_purpose="trade_finance",
+            has_bank_consultation=True,
+            evidence_ids_by_field={
+                **{
+                    field: ("trade-terms:KSURE-1",)
+                    for field in self.trade_facts
+                },
+                "financing.has_bank_consultation": ("procedure:KSURE-1",),
+            },
+        )
+
+        packet = self.pipeline.analyze_case_packet_with_eligibility(
+            self.program,
+            eligibility=eligibility,
+            assertions_by_case={"EXP-1": remaining_profile.assertions()},
+            evidence=self.evidence[1:],
+            source_freshness=self.freshness,
+        )
+
+        self.assertEqual(3, len(packet.decisions))
+        self.assertTrue(all(item.matched for item in packet.decisions))
+        input_by_name = {item.name: item.value for item in packet.inputs}
+        eligibility_input = dict(input_by_name["eligibility_evidence"])
+        self.assertEqual((), eligibility_input["stale_evidence_ids"])
+        missing_by_case = dict(eligibility_input["missing_fields_by_case"])
+        self.assertEqual((), missing_by_case["EXP-1"])
+        evidence_ids = {item.evidence_id for item in packet.evidence}
+        self.assertIn("company:C1", evidence_ids)
+        self.assertIn("ksure-importer:EXP-1", evidence_ids)
+
+    def test_stale_required_provider_evidence_is_audited_and_forces_review(self) -> None:
+        stale = CompanyQualificationEvidence(
+            metadata=EvidenceMetadata(
+                evidence_id="company:C1:stale",
+                source_id="COMPANY_QUALIFICATION",
+                observed_at=datetime(2026, 7, 25, tzinfo=UTC),
+                retrieved_at=datetime(2026, 7, 25, 1, tzinfo=UTC),
+                valid_until=datetime(2026, 7, 26, tzinfo=UTC),
+                content_hash="sha256:" + "5" * 64,
+            ),
+            company_id="C1",
+            provider_key="company_qualification",
+            company_size="small",
+        ).to_record()
+        eligibility = EligibilityEvidenceAssembler(
+            FactCatalog.from_json(ROOT / "knowledge" / "fact_catalog.json"),
+            trusted_source_ids={"COMPANY_QUALIFICATION"},
+        ).assemble(
+            program=self.program,
+            records=(stale,),
+            evaluated_at=datetime(2026, 7, 27, 12, tzinfo=UTC),
+            required_fields_by_case={"EXP-1": ("company.size",)},
+        )
+
+        result = self.pipeline.analyze_cases_with_eligibility(
+            self.program,
+            eligibility=eligibility,
+            source_freshness=self.freshness,
+        )
+
+        self.assertTrue(result.review_required)
+        self.assertIn(
+            "EXP-1: missing eligibility evidence: company.size",
+            result.review_reasons,
+        )
+        self.assertIn(
+            "stale eligibility evidence: company:C1:stale",
+            result.review_reasons,
+        )
+        stale_evidence = next(
+            item for item in result.evidence if item.evidence_id == "company:C1:stale"
+        )
+        self.assertEqual("stale", stale_evidence.payload["usability"])
+        self.assertNotIn("facts", stale_evidence.payload)
 
     def test_country_policy_snapshot_supplies_restriction_fact_end_to_end(self) -> None:
         profile = self._profile(
