@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from tradeflow.contracts.evidence import EvidenceDescriptor
+from tradeflow.domain.datasets import KsureCountryPolicyCatalog, SnapshotDataset
+from tradeflow.domain.enums import EvidenceRole
+from tradeflow.domain.models import TradeCase
 from tradeflow.knowledge.facts import FactAssertion, FactContractError
 
 
@@ -67,3 +71,68 @@ class KsureCaseProfile:
                 )
             assertions.append(FactAssertion(fact_field, value, evidence_ids))
         return tuple(assertions)
+
+
+def bind_country_policy(
+    profile: KsureCaseProfile,
+    dataset: SnapshotDataset,
+    case: TradeCase,
+) -> tuple[KsureCaseProfile, EvidenceDescriptor]:
+    """Bind a verified country-policy snapshot to one K-SURE case profile."""
+    if not isinstance(dataset.value, KsureCountryPolicyCatalog):
+        raise TypeError("dataset is not a K-SURE country-policy catalog")
+    if profile.country_restricted is not None:
+        raise FactContractError(
+            "counterparty.country_restricted is already set and cannot be overridden"
+        )
+    country_code = case.counterparty_country
+    if country_code is None:
+        raise FactContractError(
+            f"{case.case_id}: counterparty country is required for K-SURE policy"
+        )
+    try:
+        policy = dataset.value.get(country_code)
+        country_restricted = policy.country_restricted
+    except (KeyError, ValueError) as exc:
+        raise FactContractError(str(exc)) from None
+
+    evidence_id = (
+        f"ksure-country-policy:{case.case_id}:{policy.country_code}:"
+        f"{dataset.ref.version}"
+    )
+    evidence = EvidenceDescriptor(
+        evidence_id=evidence_id,
+        role=EvidenceRole.SUPPORT_ELIGIBILITY,
+        identifiers=(case.case_id, policy.country_code),
+        source_ids=(dataset.ref.source_id,),
+        generated_at=dataset.ref.retrieved_at,
+        payload={
+            "facts": {
+                "counterparty.country_restricted": country_restricted,
+            },
+            "country_code": policy.country_code,
+            "country_name": policy.country_name,
+            "policy_status": policy.status.value,
+            "deep_watch": policy.deep_watch,
+            "snapshot": {
+                "source_id": dataset.ref.source_id,
+                "version": dataset.ref.version,
+                "content_hash": dataset.ref.content_hash,
+                "observed_at": dataset.ref.observed_at.isoformat(),
+            },
+        },
+    )
+    evidence_ids = dict(profile.evidence_ids_by_field)
+    if "counterparty.country_restricted" in evidence_ids:
+        raise FactContractError(
+            "counterparty.country_restricted evidence is already configured"
+        )
+    evidence_ids["counterparty.country_restricted"] = (evidence_id,)
+    return (
+        replace(
+            profile,
+            country_restricted=country_restricted,
+            evidence_ids_by_field=evidence_ids,
+        ),
+        evidence,
+    )

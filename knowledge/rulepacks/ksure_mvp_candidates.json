@@ -112,11 +112,15 @@
           "description": "개별보험 결제기간 2년 이내"
         }
       ],
-      "source_ids": ["KSURE_SHORT_TERM_EXPORT_POSTSHIP"],
+      "source_ids": [
+        "KSURE_SHORT_TERM_EXPORT_POSTSHIP",
+        "KSURE_COUNTRY_POLICY_API"
+      ],
       "source_claim_ids": [
         "KSURE_SHORT_TERM_EXPORTER",
         "KSURE_SHORT_TERM_IMPORTER",
-        "KSURE_SHORT_TERM_INDIVIDUAL_TERM"
+        "KSURE_SHORT_TERM_INDIVIDUAL_TERM",
+        "KSURE_COUNTRY_POLICY_RESTRICTION_MAPPING"
       ],
       "candidate_outcome": {
         "kind": "support_candidate",

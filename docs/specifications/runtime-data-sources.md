@@ -17,6 +17,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | 기준 환율 시계열 | 변동성·시나리오와 결과 재현 | 공식 공공 API에서 스냅샷 수집 |
 | 실제 호가·계약 조건 | 실행 가능한 헤지 가격과 비용 비교 | 계약된 은행·브로커 API에서 수집 |
 | 법령·지원사업 조건 | 자격·제한·절차 판정 | 검증된 규칙·출처 레지스트리 사용 |
+| K-SURE 국별인수방침 | 단기수출보험의 수입국 제한 fact | 공식 K-Sight 응답을 비공개 스냅샷으로 수집 |
 
 앞의 세 종류는 시점에 따라 값이 달라지므로 API가 적합하다. 법령과 정책은 변경 빈도가
 낮고 해석 검토가 필요하므로 API 응답을 곧바로 판단값으로 쓰지 않는다.
@@ -32,6 +33,7 @@ TradeFlow의 런타임 데이터는 서로 다른 결정을 위해 쓰인다.
 | Microsoft Dynamics 365 Business Central API v2.0 | 판매·구매 송장, 통화, 지급기일, 잔액 | 테넌트와 Entra OAuth 권한 | 거래·예정 현금흐름 원천 | fail-closed 매퍼 구현, 실제 테넌트 연결 대기 |
 | SAP S/4HANA Cloud OData API | AR/AP 개방항목 | 고객 시스템 통신 설정과 권한 | 거래·잔액·실현 현금흐름 원천 | fail-closed 매퍼 구현, 실제 시스템 연결 대기 |
 | 은행 기업 API/브로커 API | 실시간 또는 지연 호가, 거래 가능 조건 | 법인 계약과 별도 권한 | 최종 실행 가격 | 공급자 계약 후 추가 |
+| K-SURE K-Sight Country Risk Map | 국가별 정상·조건부·인수제한 상태 | 공개 화면의 내부 JSON 계약, 안정성 보장 없음 | 단기수출보험 국가 제한 근거 | 일일 비공개 스냅샷 사용 |
 
 공공기관의 “실시간 업데이트” 표시는 API가 현재 고시값을 돌려준다는 뜻이지
 거래 가능한 스트리밍 호가를 보장하지 않는다. ECOS와 수출입은행 값은 기준·분석용이며,
@@ -152,6 +154,17 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 고객 거래 스냅샷은 `data/runtime/` 또는 운영 비공개 저장소만 사용하며 Git에 커밋하지
 않는다. 공개 ECOS 스냅샷만 재현 테스트를 위해 `data/snapshots/`에 커밋한다.
 
+### `KsureCountryPolicyAdapter`
+
+- 공식 K-Sight Country Risk Map 화면이 사용하는 전체 국가 정책 응답을 POST로 수집한다.
+- 국가 디렉터리와 정상·조건부·인수제한·심층감시 필터를 각각 조회해 alpha-2
+  국가코드 집합을 교차검증하고 typed catalog로 만든다.
+- 중복 국가, 디렉터리에 없는 필터 결과, unknown 상태와 누락 국가는 fail-closed한다.
+- 원문 이용·재배포 조건과 내부 API 안정성이 확인되지 않았으므로 스냅샷은
+  `data/runtime/`에만 저장하고 48시간 freshness gate를 적용한다.
+- `bind_country_policy`는 exact snapshot source·version·hash를 포함한 evidence와
+  `counterparty.country_restricted` fact를 함께 생성한다.
+
 ## 소비와 계보
 
 | 단계 | 구현 | 실패 조건 |
@@ -186,3 +199,5 @@ source·hash·schema·freshness 검증을 통과해야 `collected`가 된다.
 - [Business Central 구매 송장 리소스](https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_purchaseinvoice)
 - [SAP Receivable Payable Item](https://help.sap.com/docs/SAP_S4HANA_CLOUD/c0c54048d35849128be8e872df5bea6d/139895f571ce4417b9bd3b01eb3323f7.html)
 - [SAP C1 released CDS view catalog](https://help.sap.com/docs/SAP_S4HANA_CLOUD/c0c54048d35849128be8e872df5bea6d/95c4b490537a415e834076e07abccb1c.html)
+- [K-Sight Country Risk Map](https://ksight.ksure.or.kr/rsrch/nation/nationView)
+- [K-SURE 단기수출보험(선적후) 이용요건](https://www.ksure.or.kr/rh-kr/cntnts/i-118/web.do)

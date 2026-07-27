@@ -45,6 +45,21 @@
         "max_observation_age_seconds": 172800,
         "max_retrieval_age_seconds": 172800
       }
+    },
+    {
+      "dataset_id": "KSURE_COUNTRY_POLICY_DAILY",
+      "source_id": "KSURE_COUNTRY_POLICY_API",
+      "kind": "country_policy_catalog",
+      "adapter_key": "ksure_country_policy",
+      "parser_key": "ksure_country_policy_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 172800,
+        "max_retrieval_age_seconds": 172800
+      }
     }
   ]
 }

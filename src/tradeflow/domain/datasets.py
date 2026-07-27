@@ -10,9 +10,15 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
-from tradeflow.domain.enums import Freshness, PaymentMethod, TradeDirection
+from tradeflow.domain.enums import (
+    CountryPolicyStatus,
+    Freshness,
+    PaymentMethod,
+    TradeDirection,
+)
 from tradeflow.domain.models import CompanyProfile, TradeCase, TradeProgram
 from tradeflow.domain.snapshot import FreshnessPolicy, SnapshotRef, require_aware
 from tradeflow.domain.snapshot_file import read_snapshot, safe_segment
@@ -78,9 +84,45 @@ class SupportProgramCatalog:
 
 
 @dataclass(frozen=True)
+class KsureCountryPolicy:
+    country_code: str
+    country_name: str
+    status: CountryPolicyStatus
+    deep_watch: bool
+
+    @property
+    def country_restricted(self) -> bool:
+        if self.status is CountryPolicyStatus.UNKNOWN:
+            raise DatasetContractError(
+                f"K-SURE country policy status is unknown for {self.country_code}"
+            )
+        return self.status is CountryPolicyStatus.RESTRICTED
+
+
+@dataclass(frozen=True)
+class KsureCountryPolicyCatalog:
+    policies: Mapping[str, KsureCountryPolicy]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "policies", MappingProxyType(dict(self.policies)))
+
+    def get(self, country_code: str) -> KsureCountryPolicy:
+        code = _country_code(country_code, "country_code")
+        try:
+            return self.policies[code]
+        except KeyError:
+            raise KeyError(f"K-SURE country policy is unavailable for {code}") from None
+
+
+@dataclass(frozen=True)
 class SnapshotDataset:
     ref: SnapshotRef
-    value: TradeFeedData | FxSeries | SupportProgramCatalog
+    value: (
+        TradeFeedData
+        | FxSeries
+        | SupportProgramCatalog
+        | KsureCountryPolicyCatalog
+    )
 
 
 def _required_text(record: Mapping[str, Any], field: str) -> str:
@@ -312,6 +354,108 @@ def parse_bizinfo_support_payload(payload: Any) -> SupportProgramCatalog:
     if total_count < len(programs):
         raise DatasetContractError("Bizinfo total_count is smaller than item count")
     return SupportProgramCatalog(tuple(programs), total_count)
+
+
+def parse_ksure_country_policy_payload(payload: Any) -> KsureCountryPolicyCatalog:
+    """Normalize the current K-Sight country-risk-map policy response."""
+    if not isinstance(payload, dict):
+        raise DatasetContractError("K-SURE country policy payload must be an object")
+    if payload.get("schema_version") != "1.0":
+        raise DatasetContractError(
+            "unsupported K-SURE country-policy schema_version"
+        )
+    directory = payload.get("directory")
+    filters = payload.get("policy_filters")
+    if not isinstance(directory, Mapping) or not isinstance(filters, Mapping):
+        raise DatasetContractError(
+            "K-SURE country policy requires directory and policy_filters"
+        )
+    directory_records = directory.get("getNationLst")
+    if not isinstance(directory_records, list) or not directory_records:
+        raise DatasetContractError("K-SURE getNationLst must be a non-empty array")
+
+    names: dict[str, str] = {}
+    for index, record in enumerate(directory_records):
+        prefix = f"K-SURE country directory[{index}]"
+        if not isinstance(record, dict):
+            raise DatasetContractError(f"{prefix} must be an object")
+        raw_code = record.get("stdInfrmCtryCd")
+        if raw_code in {None, ""}:
+            continue
+        code = _country_code(raw_code, f"{prefix}.stdInfrmCtryCd")
+        if code in names:
+            raise DatasetContractError(f"duplicate K-SURE country code: {code}")
+        names[code] = _required_text(record, "trgtpsnNm")
+    if not names:
+        raise DatasetContractError(
+            "K-SURE country directory has no alpha-2 country codes"
+        )
+
+    sets = {
+        name: _ksure_filter_codes(filters.get(name), name, set(names))
+        for name in ("normal", "conditional", "restricted", "deep_watch")
+    }
+    if not sets["restricted"]:
+        raise DatasetContractError("K-SURE restricted-country filter is empty")
+
+    policies: dict[str, KsureCountryPolicy] = {}
+    for code, name in names.items():
+        if code in sets["restricted"]:
+            status = CountryPolicyStatus.RESTRICTED
+        elif code in sets["conditional"]:
+            status = CountryPolicyStatus.CONDITIONAL
+        elif code in sets["normal"]:
+            status = CountryPolicyStatus.NORMAL
+        else:
+            status = CountryPolicyStatus.UNKNOWN
+        policies[code] = KsureCountryPolicy(
+            code, name, status, code in sets["deep_watch"]
+        )
+    return KsureCountryPolicyCatalog(policies)
+
+
+def _country_code(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise DatasetContractError(f"{field} must be a two-letter country code")
+    code = value.strip().upper()
+    if len(code) != 2 or not code.isalpha() or not code.isascii():
+        raise DatasetContractError(f"{field} must be a two-letter country code")
+    return code
+
+
+def _ksure_filter_codes(
+    document: Any,
+    filter_name: str,
+    directory_codes: set[str],
+) -> set[str]:
+    if not isinstance(document, Mapping):
+        raise DatasetContractError(
+            f"K-SURE {filter_name} filter response must be an object"
+        )
+    records = document.get("selectFilterLst")
+    if not isinstance(records, list):
+        raise DatasetContractError(
+            f"K-SURE {filter_name} selectFilterLst must be an array"
+        )
+    codes: set[str] = set()
+    for index, record in enumerate(records):
+        prefix = f"K-SURE {filter_name} filter[{index}]"
+        if not isinstance(record, dict):
+            raise DatasetContractError(f"{prefix} must be an object")
+        raw_code = record.get("ggCode")
+        if raw_code in {None, ""}:
+            continue
+        code = _country_code(raw_code, f"{prefix}.ggCode")
+        if code not in directory_codes:
+            raise DatasetContractError(
+                f"K-SURE {filter_name} filter has unknown country: {code}"
+            )
+        if code in codes:
+            raise DatasetContractError(
+                f"K-SURE {filter_name} filter duplicates country: {code}"
+            )
+        codes.add(code)
+    return codes
 
 
 def _optional_text(record: Mapping[str, Any], field: str) -> str | None:

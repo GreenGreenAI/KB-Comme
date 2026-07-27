@@ -13,12 +13,14 @@ from typing import Any, Iterable, Mapping, Protocol
 from tradeflow.domain.datasets import (
     DatasetContractError,
     FxSeries,
+    KsureCountryPolicyCatalog,
     SnapshotDataset,
     StaleDatasetError,
     SupportProgramCatalog,
     TradeFeedData,
     parse_ecos_usd_krw_payload,
     parse_bizinfo_support_payload,
+    parse_ksure_country_policy_payload,
     parse_trade_feed_payload,
 )
 from tradeflow.domain.enums import Freshness
@@ -30,6 +32,7 @@ class DatasetKind(StrEnum):
     TRADE_FEED = "trade_feed"
     FX_SERIES = "fx_series"
     SUPPORT_PROGRAM_CATALOG = "support_program_catalog"
+    COUNTRY_POLICY_CATALOG = "country_policy_catalog"
 
 
 class StorageScope(StrEnum):
@@ -80,7 +83,12 @@ class DatasetParser(Protocol):
 
     def parse(
         self, payload: Any, ref: SnapshotRef
-    ) -> TradeFeedData | FxSeries | SupportProgramCatalog: ...
+    ) -> (
+        TradeFeedData
+        | FxSeries
+        | SupportProgramCatalog
+        | KsureCountryPolicyCatalog
+    ): ...
 
 
 @dataclass(frozen=True)
@@ -124,6 +132,17 @@ class BizinfoSupportV1Parser:
         return parse_bizinfo_support_payload(payload)
 
 
+@dataclass(frozen=True)
+class KsureCountryPolicyV1Parser:
+    kind: DatasetKind = DatasetKind.COUNTRY_POLICY_CATALOG
+    schema_version: str = "1.0"
+
+    def parse(
+        self, payload: Any, ref: SnapshotRef
+    ) -> KsureCountryPolicyCatalog:
+        return parse_ksure_country_policy_payload(payload)
+
+
 class ParserRegistry:
     def __init__(self, parsers: Mapping[str, DatasetParser] | None = None) -> None:
         self._parsers: dict[str, DatasetParser] = {}
@@ -141,7 +160,12 @@ class ParserRegistry:
         definition: DatasetDefinition,
         payload: Any,
         ref: SnapshotRef,
-    ) -> TradeFeedData | FxSeries | SupportProgramCatalog:
+    ) -> (
+        TradeFeedData
+        | FxSeries
+        | SupportProgramCatalog
+        | KsureCountryPolicyCatalog
+    ):
         parser = self._parsers.get(definition.parser_key)
         if parser is None:
             raise DatasetContractError(
@@ -212,6 +236,7 @@ def default_parser_registry() -> ParserRegistry:
             "trade_feed_v1": TradeFeedV1Parser(),
             "ecos_usd_krw_v1": EcosUsdKrwV1Parser(),
             "bizinfo_support_v1": BizinfoSupportV1Parser(),
+            "ksure_country_policy_v1": KsureCountryPolicyV1Parser(),
         }
     )
 

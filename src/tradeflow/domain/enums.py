@@ -63,6 +63,13 @@ class Freshness(StrEnum):
     STALE = "stale"
 
 
+class CountryPolicyStatus(StrEnum):
+    NORMAL = "normal"
+    CONDITIONAL = "conditional"
+    RESTRICTED = "restricted"
+    UNKNOWN = "unknown"
+
+
 class HedgeMeasureCategory(StrEnum):
     """A contracted product and a way of restructuring trade behave differently.
 

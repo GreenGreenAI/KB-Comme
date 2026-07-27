@@ -13,12 +13,14 @@ from tradeflow.domain.enums import (
     TradeDirection,
 )
 from tradeflow.domain.models import CompanyProfile, TradeCase, TradeProgram
+from tradeflow.domain.datasets import SnapshotDataset, parse_ksure_country_policy_payload
+from tradeflow.domain.snapshot import SnapshotRef
 from tradeflow.knowledge.facts import (
     FactAssembler,
     FactCatalog,
     FactContractError,
 )
-from tradeflow.knowledge.ksure import KsureCaseProfile
+from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 
@@ -164,6 +166,67 @@ class KsureOrchestrationTests(unittest.TestCase):
         )
         self.assertTrue(all(action.required_documents for action in packet.actions))
         self.assertTrue(all(action.steps for action in packet.actions))
+
+    def test_country_policy_snapshot_supplies_restriction_fact_end_to_end(self) -> None:
+        profile = self._profile(
+            country_restricted=None,
+            evidence_ids_by_field={
+                field: evidence_ids
+                for field, evidence_ids in self.profile.evidence_ids_by_field.items()
+                if field != "counterparty.country_restricted"
+            },
+        )
+        moment = datetime(2026, 7, 27, tzinfo=UTC)
+        dataset = SnapshotDataset(
+            SnapshotRef(
+                "KSURE_COUNTRY_POLICY_API",
+                "20260727T000000Z",
+                moment,
+                moment,
+                "sha256:country-policy",
+            ),
+            parse_ksure_country_policy_payload(
+                {
+                    "schema_version": "1.0",
+                    "directory": {
+                        "getNationLst": [
+                            {"stdInfrmCtryCd": "US", "trgtpsnNm": "미국"},
+                            {"stdInfrmCtryCd": "SY", "trgtpsnNm": "시리아"},
+                        ]
+                    },
+                    "policy_filters": {
+                        "normal": {"selectFilterLst": [{"ggCode": "US"}]},
+                        "conditional": {"selectFilterLst": []},
+                        "restricted": {
+                            "selectFilterLst": [{"ggCode": "SY"}]
+                        },
+                        "deep_watch": {"selectFilterLst": []},
+                    },
+                }
+            ),
+        )
+        profile, policy_evidence = bind_country_policy(
+            profile, dataset, self.program.cases[0]
+        )
+
+        packet = self.pipeline.analyze_case_packet(
+            self.program,
+            assertions_by_case={"EXP-1": profile.assertions()},
+            evidence=(*self.evidence, policy_evidence),
+            source_freshness=self.freshness,
+        )
+
+        short_term = next(
+            item
+            for item in packet.decisions
+            if item.rule_id
+            == "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE"
+        )
+        self.assertTrue(short_term.matched)
+        self.assertIn(
+            policy_evidence.evidence_id,
+            {item.evidence_id for item in packet.evidence},
+        )
 
     def test_missing_bank_consultation_is_a_structured_requirement(self) -> None:
         procedure_facts = {"financing.has_bank_consultation": False}

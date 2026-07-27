@@ -96,6 +96,17 @@
         "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do",
         "crtfcKey"
       ]
+    },
+    {
+      "source_id": "KSURE_COUNTRY_POLICY_API",
+      "url": "https://ksight.ksure.or.kr/rsrch/nation/nationView",
+      "storage_policy": "metadata_and_fingerprint_only",
+      "required_markers": [
+        "Country Risk Map",
+        "정상인수국",
+        "조건부 인수국",
+        "인수제한국"
+      ]
     }
   ]
 }

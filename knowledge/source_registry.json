@@ -199,6 +199,25 @@
       "extract_path": "knowledge/extracts/BIZINFO_SUPPORT_API.json",
       "refresh_interval_days": 1,
       "attribution": "중소벤처기업부 기업마당"
+    },
+    {
+      "source_id": "KSURE_COUNTRY_POLICY_API",
+      "title": "K-Sight Country Risk Map 국별인수방침",
+      "organization": "한국무역보험공사",
+      "url": "https://ksight.ksure.or.kr/rsrch/nation/nationView",
+      "official": true,
+      "retrieved_at": "2026-07-27T18:00:00+09:00",
+      "published_at": null,
+      "effective_from": null,
+      "effective_to": null,
+      "content_hash": "sha256:3ce0032664a3a4f6a988411785d5373e1633198915d0718e68825b21f45a7763",
+      "verified": true,
+      "freshness_required": true,
+      "source_kind": "dynamic_country_policy",
+      "authority_level": "primary",
+      "extract_path": "knowledge/extracts/KSURE_COUNTRY_POLICY_API.json",
+      "refresh_interval_days": 1,
+      "attribution": "한국무역보험공사 K-Sight Country Risk Map"
     }
   ]
 }

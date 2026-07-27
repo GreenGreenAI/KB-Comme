@@ -15,12 +15,14 @@ from tradeflow.domain.dataset_registry import (
 from tradeflow.domain.datasets import (
     DatasetContractError,
     FxSeries,
+    KsureCountryPolicyCatalog,
     StaleDatasetError,
     SupportProgramCatalog,
     TradeFeedData,
 )
 from tradeflow.integration.bizinfo import BizinfoSupportAdapter
 from tradeflow.integration.ecos import EcosFxAdapter
+from tradeflow.integration.ksure_country_policy import KsureCountryPolicyAdapter
 from tradeflow.integration.registry import AdapterRegistry
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
 from tradeflow.integration.trade_feed import JsonTradeFeedAdapter
@@ -60,18 +62,26 @@ class DatasetRegistryTests(unittest.TestCase):
                 "ECOS_USD_KRW_DAILY",
                 "ERP_TRADE_FEED_V1",
                 "BIZINFO_SUPPORT_PROGRAMS_DAILY",
+                "KSURE_COUNTRY_POLICY_DAILY",
             },
             set(self.registry.definitions),
         )
         ecos = self.registry.get("ECOS_USD_KRW_DAILY")
         erp = self.registry.get("ERP_TRADE_FEED_V1")
         bizinfo = self.registry.get("BIZINFO_SUPPORT_PROGRAMS_DAILY")
+        country_policy = self.registry.get("KSURE_COUNTRY_POLICY_DAILY")
         self.assertEqual(DatasetKind.FX_SERIES, ecos.kind)
         self.assertEqual(DatasetKind.SUPPORT_PROGRAM_CATALOG, bizinfo.kind)
+        self.assertEqual(
+            DatasetKind.COUNTRY_POLICY_CATALOG, country_policy.kind
+        )
         self.assertEqual(timedelta(days=1), bizinfo.collection_interval)
         self.assertEqual(timedelta(hours=1), erp.collection_interval)
         self.assertEqual(StorageScope.COMMITTED_PUBLIC, ecos.storage_scope)
         self.assertEqual(StorageScope.RUNTIME_PRIVATE, erp.storage_scope)
+        self.assertEqual(
+            StorageScope.RUNTIME_PRIVATE, country_policy.storage_scope
+        )
         self.assertEqual("data/snapshots", ecos.storage_root)
         self.assertEqual("data/runtime", erp.storage_root)
         with self.assertRaises(TypeError):
@@ -194,6 +204,44 @@ class DatasetRegistryTests(unittest.TestCase):
                     evaluated_at=ref_time,
                 )
 
+    def test_country_policy_snapshot_uses_registered_typed_parser(self) -> None:
+        observed = datetime(2026, 7, 27, 9, tzinfo=KST)
+        payload = {
+            "schema_version": "1.0",
+            "directory": {
+                "getNationLst": [
+                    {"stdInfrmCtryCd": "US", "trgtpsnNm": "미국"},
+                    {"stdInfrmCtryCd": "SY", "trgtpsnNm": "시리아"},
+                ]
+            },
+            "policy_filters": {
+                "normal": {"selectFilterLst": [{"ggCode": "US"}]},
+                "conditional": {"selectFilterLst": []},
+                "restricted": {"selectFilterLst": [{"ggCode": "SY"}]},
+                "deep_watch": {"selectFilterLst": []},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_snapshot(
+                tmp,
+                build_envelope(
+                    source_id="KSURE_COUNTRY_POLICY_API",
+                    version="20260727T000000Z",
+                    observed_at=observed,
+                    retrieved_at=observed,
+                    payload=payload,
+                ),
+            )
+            dataset = self.registry.read_snapshot(
+                "KSURE_COUNTRY_POLICY_DAILY",
+                path,
+                parsers=default_parser_registry(),
+                evaluated_at=observed + timedelta(hours=1),
+            )
+
+        self.assertIsInstance(dataset.value, KsureCountryPolicyCatalog)
+        self.assertFalse(dataset.value.get("US").country_restricted)
+
     def test_registry_schema_and_collection_interval_are_versioned(self) -> None:
         document = json.loads(
             (ROOT / "data" / "dataset_registry.json").read_text(encoding="utf-8")
@@ -225,15 +273,21 @@ class AdapterRegistryTests(unittest.TestCase):
             source_id="ERP_TRADE_FEED",
         )
         bizinfo = BizinfoSupportAdapter(api_key="secret")
+        country_policy = KsureCountryPolicyAdapter()
 
         self.adapters.register("ECOS_USD_KRW_DAILY", ecos)
         self.adapters.register("ERP_TRADE_FEED_V1", erp)
         self.adapters.register("BIZINFO_SUPPORT_PROGRAMS_DAILY", bizinfo)
+        self.adapters.register("KSURE_COUNTRY_POLICY_DAILY", country_policy)
 
         self.assertIs(ecos, self.adapters.get("ECOS_USD_KRW_DAILY"))
         self.assertIs(erp, self.adapters.get("ERP_TRADE_FEED_V1"))
         self.assertIs(
             bizinfo, self.adapters.get("BIZINFO_SUPPORT_PROGRAMS_DAILY")
+        )
+        self.assertIs(
+            country_policy,
+            self.adapters.get("KSURE_COUNTRY_POLICY_DAILY"),
         )
 
     def test_duplicate_or_mismatched_adapter_is_rejected(self) -> None:

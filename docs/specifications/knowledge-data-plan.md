@@ -22,7 +22,7 @@ MVP의 지원제도 후보와 외국환 신고 검토를 공식 출처에서 재
 | P0 | 단기수출보험 | K-SURE | 선적후 개별보험 후보 규칙 | draft |
 | P0 | 수출신용보증 | K-SURE | 선적전 보증 후보 규칙 | draft |
 | P1 | 지원사업 탐색 | 기업마당 API와 개별 공고 | 일일 API 스냅샷·정규화 객체 | 상세 조건 규칙화 대기 |
-| P1 | 국별인수방침 | K-SURE | 수입자 국가 제한 fact | 수집 방식 확인 필요 |
+| P1 | 국별인수방침 | K-SURE K-Sight | 일일 비공개 스냅샷·typed catalog·수입자 국가 제한 fact | 구현, 상대 역할 검토 대기 |
 | P1 | 기업 자격 | 중소기업확인서, K-SURE 신용정보 | 증거 연결 | 외부 연동 대기 |
 
 ## 데이터 계층
@@ -72,7 +72,7 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 ## 다음 수집 배치
 
 1. 기업마당 공고 상세 조건의 근거 추출과 역할 B 검토
-2. K-SURE 국별인수방침 및 상품별 신청서류의 버전 추적
+2. K-SURE 상품별 신청서류의 버전 추적과 국별인수방침 내부 API 변경 감시
 3. 거래·계정 원장의 완료일·기장일·결산일에서 상호계산 기한 fact를 생성하는
    결정론 파생기
 4. 중소기업·중견기업 확인자료와 K-SURE 신용등급의 증거 인터페이스
@@ -80,3 +80,8 @@ canonical JSON SHA-256을 남기고 `freshness_required=true`로 관리한다.
 거래피드의 스냅샷 수집·정규화와 근거 결합형 `FactAssembler`, 케이스별
 `trade_support_case`·`fx_compliance` 실행은 완료했다. 현재 수직 기준은 양자간
 상호계산계정 개설 신고 검토이며, 규칙은 상대 역할 검토 전까지 draft 상태를 유지한다.
+
+K-SURE 국별인수방침은 K-Sight 원문을 48시간 freshness gate가 있는 비공개 스냅샷으로
+수집하고, ISO 국가코드별 정상·조건부·인수제한 상태 객체로 변환한다. 거래의
+상대국가가 catalog에 없으면 제한 없음으로 추정하지 않으며, exact snapshot hash를
+attestation evidence에 포함해 `counterparty.country_restricted` fact를 생성한다.
