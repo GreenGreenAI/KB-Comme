@@ -93,6 +93,19 @@
     box-shadow: var(--lift-lg); padding: .35rem; text-align: left; z-index: 50;
   }
   .menu[hidden] { display: none; }
+  /* Grows from the avatar it belongs to, and leaves the same way.
+     Duration is mirrored by MENU_EXIT_MS in Nav.jsx — the menu must stay
+     mounted for exactly as long as it takes to go. */
+  .menu { transform-origin: top right; animation: menu-in .15s cubic-bezier(.22,.9,.3,1); }
+  .menu.out { animation: menu-out .15s ease forwards; pointer-events: none; }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-6px) scale(.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes menu-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-4px) scale(.985); }
+  }
   .menu-id {
     display: flex; gap: .6rem; align-items: center;
     padding: .6rem .65rem .7rem; border-bottom: 1px solid var(--rule-faint); margin-bottom: .35rem;
