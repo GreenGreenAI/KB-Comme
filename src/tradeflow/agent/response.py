@@ -12,10 +12,15 @@ change them.
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
+from tradeflow.agent.routing import COMPLIANCE, DECLARED_STRUCTURE_FIELDS
+from tradeflow.knowledge.compliance_declarations import DECLARABLE_GATEWAY_FIELDS
 from tradeflow.runtime.analysis_service import decision_packet_document
 
 def _decimal(value: Decimal | None) -> str | None:
@@ -147,7 +152,19 @@ def _hedge_analysis(analysis: Analysis) -> dict[str, Any] | None:
     }
 
 
-def _evidence(analysis: Analysis) -> list[dict[str, Any]]:
+SOURCE_REGISTRY = Path(__file__).resolve().parents[3] / "knowledge" / "source_registry.json"
+
+
+@lru_cache(maxsize=1)
+def _source_registry() -> dict[str, dict[str, Any]]:
+    document = json.loads(SOURCE_REGISTRY.read_text(encoding="utf-8"))
+    return {item["source_id"]: item for item in document["sources"]}
+
+
+def _evidence(
+    analysis: Analysis,
+    knowledge: dict[str, Any],
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = [
         {
             "role": "calculation",
@@ -167,7 +184,125 @@ def _evidence(analysis: Analysis) -> list[dict[str, Any]]:
                 "content_hash": snapshot.content_hash,
             }
         )
+    source_ids = {
+        source_id
+        for decision in (knowledge.get("decision_packet") or {}).get("decisions", [])
+        for source_id in decision.get("source_ids", [])
+    }
+    registry = _source_registry()
+    for source_id in sorted(source_ids):
+        source = registry.get(source_id)
+        if source is None:
+            records.append(
+                {
+                    "role": "official_source",
+                    "source_id": source_id,
+                    "verified": False,
+                    "status": "registry_missing",
+                }
+            )
+            continue
+        records.append(
+            {
+                "role": "official_source",
+                "source_id": source_id,
+                "title": source.get("title"),
+                "organization": source.get("organization"),
+                "url": source.get("url"),
+                "official": source.get("official"),
+                "verified": source.get("verified"),
+                "retrieved_at": source.get("retrieved_at"),
+                "effective_from": source.get("effective_from"),
+                "effective_to": source.get("effective_to"),
+                "content_hash": source.get("content_hash"),
+            }
+        )
     return records
+
+
+def _input_scope(field: str) -> str:
+    if field in {"baseline_profit", "profit_floor", "forward_quote"}:
+        return "hedge"
+    if field.startswith("company."):
+        return "profile"
+    if field in DECLARABLE_GATEWAY_FIELDS:
+        return "compliance_declaration"
+    if field in {"trade.payment_term_days", "financing.purpose"}:
+        return "case"
+    return "external_evidence"
+
+
+def _missing_input_queue(
+    analysis: Analysis,
+    knowledge: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """One ordered queue across workers, without converting unknown to false."""
+    queued: list[dict[str, Any]] = []
+    seen: set[tuple[str | None, str]] = set()
+
+    packet = knowledge.get("decision_packet") or {}
+    for decision in packet.get("decisions", []):
+        if decision.get("status") != "insufficient_information":
+            continue
+        for field in decision.get("missing_fields", []):
+            key = (decision.get("subject_id"), field)
+            if key in seen:
+                continue
+            seen.add(key)
+            queued.append(
+                {
+                    "field": field,
+                    "scope": _input_scope(field),
+                    "subject_id": decision.get("subject_id"),
+                    "worker": (
+                        "support"
+                        if decision.get("outcome", decision.get("candidate_outcome", {})).get(
+                            "kind"
+                        )
+                        == "support_candidate"
+                        else "compliance"
+                    ),
+                    "status": decision.get("status"),
+                    "reason": decision.get("title"),
+                }
+            )
+
+    for worker in analysis.plan.decisions:
+        required = (
+            DECLARED_STRUCTURE_FIELDS
+            if worker.name == COMPLIANCE and not worker.run and not worker.requires
+            else worker.requires
+        )
+        for field in required:
+            key = (None, field)
+            if key in seen:
+                continue
+            seen.add(key)
+            queued.append(
+                {
+                    "field": field,
+                    "scope": _input_scope(field),
+                    "subject_id": None,
+                    "worker": worker.name,
+                    "status": "missing",
+                    "reason": worker.reason,
+                }
+            )
+    priority = {
+        "profile": 0,
+        "compliance_declaration": 1,
+        "hedge": 2,
+        "case": 3,
+        "external_evidence": 4,
+    }
+    return sorted(
+        queued,
+        key=lambda item: (
+            priority.get(item["scope"], 9),
+            item["subject_id"] or "",
+            item["field"],
+        ),
+    )
 
 
 def build_response(analysis: Analysis) -> dict[str, Any]:
@@ -180,6 +315,18 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             if analysis.decision_packet is not None
             else None
         ),
+        "company_profile": {
+            "company_id": analysis.program.company.company_id,
+            "company_name": analysis.program.company.name,
+            "is_sme": analysis.program.company.is_sme,
+            "country_code": analysis.program.company.country_code,
+            "industry_code": analysis.program.company.industry_code,
+            "facts": {
+                key: value
+                for key, value in analysis.program.company.facts().items()
+                if value is not None
+            },
+        },
         "trade_timeline": [
             {
                 "case_id": case.case_id,
@@ -202,7 +349,7 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
         "hedge_analysis": _hedge_analysis(analysis),
         **knowledge,
         "missing_information": list(analysis.report.missing_information()),
-        "evidence": _evidence(analysis),
+        "evidence": _evidence(analysis, knowledge),
         "review_required": analysis.review_required,
         "review_reasons": list(analysis.review_reasons),
         "workers": {
@@ -210,7 +357,14 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
         },
-        "required_inputs": {"hedge": list(analysis.required_inputs)},
+        "missing_input_queue": _missing_input_queue(analysis, knowledge),
+        "required_inputs": {
+            "hedge": list(analysis.required_inputs),
+            "all": [
+                item["field"]
+                for item in _missing_input_queue(analysis, knowledge)
+            ],
+        },
         # §4.2[2]'s output. A reader can see which workers were called and, for
         # the rest, what would call them — so an empty section is never left to
         # be read as "nothing to report".

@@ -1,24 +1,43 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
-import { analyze } from "./api.js";
+import Login from "./Login.jsx";
+import Notices from "./Notices.jsx";
+import {
+  analyze,
+  listAnalyses,
+  readAnalysis,
+  signOut,
+  updateProfile,
+  whoami,
+} from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** How long each reasoning step is shown.
+/** How long the whole reasoning phase lasts, at the least.
  *
- *  The deterministic analysis returns in about 45ms; synthesis over a language
- *  model will not. This paces the mockup the way the finished product will
- *  behave, so the screen is designed against the timing it will actually have
- *  rather than against a timing that disappears the moment the API lands.
+ *  A floor on the wait, not an addition to it. The step names are a replay —
+ *  by the time the server has said which workers ran, they have run — so the
+ *  time already spent waiting is time the trace has already had. What is left
+ *  of this budget is what the replay gets.
  *
- *  Only the pacing is simulated. The steps themselves are read from the
- *  execution plan the server really produced, so nothing is shown as running
- *  that did not run. When streaming replaces this, the step list stays and the
- *  timer goes. */
-const STEP_MS = 1000;
+ *  Before this, the two were added: the request took its own time and then the
+ *  steps took a fixed second each on top. Connecting §4.2[9] made that visible
+ *  — synthesis really costs 1.2–1.8s, so an eight-second wait appeared for
+ *  work that had finished in two.
+ *
+ *  The effect is that the screen's rhythm stays the same whether or not the
+ *  language model is reachable. Only the share of it that is real changes.
+ *
+ *  The steps themselves are read from the execution plan the server really
+ *  produced, so nothing is shown as running that did not run. */
+const TRACE_MS = 3000;
+
+/** No step passes faster than this, however little budget is left. A name that
+ *  flashes is a name nobody read, and the trace exists to be read. */
+const STEP_FLOOR_MS = 120;
 
 /** Fallback for the request bar, in case the turn never reports its arrival.
  *
@@ -28,6 +47,9 @@ const STEP_MS = 1000;
  *  is missed. */
 const WRITE_CEILING_MS = 4000;
 
+
+/** How close the newest question sits to the top of the view. */
+const HEAD_GAP = 8;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,11 +68,17 @@ function stepsForAsk(data, utterance) {
   return steps;
 }
 
-/** Walk a step list, holding each one on screen for its turn. */
-async function walk(steps, show) {
+/** Walk a step list, fitting the replay into whatever the wait has left.
+ *
+ *  `spent` is how long the request actually took. A slow answer has already
+ *  shown the reader that work was happening, so its trace is brief; a fast one
+ *  has shown nothing yet, so its trace takes the time. */
+async function walk(steps, show, spent = 0) {
+  const left = Math.max(0, TRACE_MS - spent);
+  const each = Math.max(STEP_FLOOR_MS, left / Math.max(steps.length, 1));
   for (let index = 0; index < steps.length; index += 1) {
     show({ steps, index });
-    await wait(STEP_MS);
+    await wait(each);
   }
   show(null);
 }
@@ -69,32 +97,187 @@ function stepsFor(result) {
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {} });
+  const [facts, setFacts] = useState({
+    cases: [{}],
+    profile: {},
+    declarations: [],
+  });
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
   const [writing, setWriting] = useState(false);
+  // Who the server says we are, or null. Signing in is not required — the
+  // product answers anonymously — so this starts as "not yet asked" rather than
+  // as "signed out", and the sign-in screen is somewhere you go, not a door you
+  // are stopped at.
+  const [account, setAccount] = useState(null);
+  const [showSignIn, setShowSignIn] = useState(false);
+  // Things that happened to no screen in particular. What belongs to a screen
+  // stays on it: a failed analysis is a turn in the thread, a rejected password
+  // sits by the password field.
+  const [notices, setNotices] = useState([]);
+  const [knownUnknowns, setKnownUnknowns] = useState([]);
+  const [analysisHistory, setAnalysisHistory] = useState([]);
+  const noticeId = useRef(0);
+
+  function notify(text) {
+    noticeId.current += 1;
+    const id = noticeId.current;
+    // Say a thing once. Retrying a failing request every few seconds would
+    // otherwise stack the same sentence down the screen.
+    setNotices((prev) =>
+      prev.some((notice) => notice.text === text) ? prev : [...prev, { id, text }],
+    );
+  }
+
+  // Ask once on load. A session that survived a refresh should not have to be
+  // proved again by typing.
+  useEffect(() => {
+    let live = true;
+    whoami()
+      .then((found) => live && found && setAccount(found))
+      .catch(() => {
+        // Not the same as being signed out, and it must not look like it.
+        if (live) notify("로그인 상태를 확인하지 못했습니다. 서버에 연결되지 않았습니다.");
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!account) {
+      setAnalysisHistory([]);
+      return;
+    }
+    let live = true;
+    listAnalyses()
+      .then((items) => live && setAnalysisHistory(items))
+      .catch(() => live && notify("저장된 분석 이력을 불러오지 못했습니다."));
+    return () => {
+      live = false;
+    };
+    // The account id is the tenant boundary. A changed profile should not
+    // refetch history; a changed tenant must.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.account_id]);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
-  // Remember, before the new turn paints, whether the reader was at the
-  // bottom. Someone scrolled up reading an earlier answer should not be
-  // yanked to the newest one.
-  function rememberPosition() {
-    const el = threadRef.current;
-    if (!el) return;
-    stick.current = el.scrollHeight - el.clientHeight - el.scrollTop < 120;
+  /** Leave room under the conversation so the newest exchange can reach the
+   *  top of the view.
+   *
+   *  Without it a short exchange simply cannot be scrolled up — there is
+   *  nothing below it to scroll into — so it stays pinned to the bottom edge
+   *  and the answer is written downward out of sight. The spacer holds exactly
+   *  what is left over, so it disappears the moment an exchange is tall enough
+   *  to fill the thread on its own and never leaves a gap behind. */
+  function fitTail(el) {
+    const spacer = el.querySelector(".tail");
+    if (!spacer) return;
+    const heads = el.querySelectorAll(".turn.user");
+    const head = heads[heads.length - 1];
+    const last = spacer.previousElementSibling;
+    if (!head || !last) {
+      spacer.style.height = "0px";
+      return;
+    }
+    // Measured from the neighbour rather than from the spacer itself: reading
+    // the spacer's own box would mean zeroing it first, and a forced reflow
+    // every frame of the cascade.
+    const used = last.getBoundingClientRect().bottom - head.getBoundingClientRect().top;
+    spacer.style.height = `${Math.max(0, Math.round(el.clientHeight - used - HEAD_GAP))}px`;
   }
 
+  /** Where the bottom of the real conversation sits, in scroll coordinates.
+   *  Not scrollHeight — that includes the spacer, and easing into empty space
+   *  would carry the answer off the top of the view for no reason. */
+  function contentFoot(el) {
+    const spacer = el.querySelector(".tail");
+    if (!spacer) return el.scrollHeight;
+    return spacer.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+  }
+
+  const exchange = turns.filter((turn) => turn.who === "user").length;
+
+  /** The newest question goes to the top of the view when it is asked.
+   *
+   *  The answer is then written downward into empty space. Pinning to the
+   *  bottom instead started every answer at the bottom edge of the thread, so
+   *  the reader watched its first line leave while the rest arrived. */
   useLayoutEffect(() => {
     const el = threadRef.current;
     if (!el || !stick.current) return;
-    // Set scrollTop directly rather than scrollIntoView({behavior:"smooth"}):
-    // smooth scrolling does not run in a background tab, which left the thread
-    // pinned near the top with the newest answer out of sight.
-    el.scrollTop = el.scrollHeight;
-  }, [turns, busy]);
+    fitTail(el);
+    const max = el.scrollHeight - el.clientHeight;
+    const heads = el.querySelectorAll(".turn.user");
+    const head = heads[heads.length - 1];
+    if (!head) {
+      el.scrollTop = max;
+      return;
+    }
+    const top =
+      head.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.max(0, Math.min(top - HEAD_GAP, max));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchange]);
+
+  /** Follow the exchange down as it arrives.
+   *
+   *  The anchor above happens once, when the question is asked — at which point
+   *  there is no answer yet. Everything that gives it height arrives over the
+   *  next few seconds, and without this the answer grows past the bottom of the
+   *  thread while the reader watches the top of it.
+   *
+   *  It eases rather than pins, so the view moves at the pace the answer is
+   *  being written, and it stops at the foot of the conversation rather than at
+   *  the foot of the spacer.
+   *
+   *  What makes it yield is a real input — a wheel, a drag, a key. The previous
+   *  version watched scrollTop for a value it had not set, which cannot tell a
+   *  reader apart from a layout change; the request panel appearing and the
+   *  thinking line being replaced both move the scroll on their own, and the
+   *  follower read that as the reader taking over and let go. It then stayed
+   *  let go, so the next answer was written entirely off screen. */
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el) return undefined;
+
+    const release = () => {
+      stick.current = false;
+    };
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("touchmove", release, { passive: true });
+    el.addEventListener("keydown", release);
+
+    const follow = setInterval(() => {
+      fitTail(el);
+      if (!stick.current) {
+        clearInterval(follow);
+        return;
+      }
+      const target = Math.min(
+        contentFoot(el) - el.clientHeight,
+        el.scrollHeight - el.clientHeight,
+      );
+      const delta = target - el.scrollTop;
+      if (delta <= 0.5) {
+        if (!busy && !writing) clearInterval(follow);
+        return;
+      }
+      el.scrollTop += Math.max(delta * 0.16, 0.5);
+    }, 16);
+
+    return () => {
+      clearInterval(follow);
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("touchmove", release);
+      el.removeEventListener("keydown", release);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, writing, turns.length]);
 
   function say(turn) {
     setTurns((prev) => [...prev, turn]);
@@ -105,33 +288,76 @@ export default function App() {
    *  `placement` is only set when the user has answered the "새 거래인가,
    *  수정인가" question. Sending it unasked would reintroduce the guess the
    *  server refuses to make. */
-  async function send(utterance, patch = {}, placement = null) {
+  async function send(utterance, patch = {}, placement = null, said = null) {
     // A slot answer always completes the trade currently being described,
     // which is the last one.
     const nextCases = patch.case
-      ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
+      ? [
+          ...facts.cases.slice(0, -1),
+          {
+            ...facts.cases.at(-1),
+            ...patch.case,
+            case_facts: {
+              ...(facts.cases.at(-1)?.case_facts ?? {}),
+              ...(patch.case.case_facts ?? {}),
+            },
+          },
+        ]
       : facts.cases;
-    const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
-    setFacts({ cases: nextCases, profile: nextProfile });
+    const nextProfile = {
+      ...facts.profile,
+      ...(patch.profile ?? {}),
+      company_facts: {
+        ...(facts.profile.company_facts ?? {}),
+        ...(patch.profile?.company_facts ?? {}),
+      },
+    };
+    const nextDeclarations = patch.declaration
+      ? mergeDeclaration(facts.declarations, patch.declaration)
+      : facts.declarations;
+    setFacts({
+      cases: nextCases,
+      profile: nextProfile,
+      declarations: nextDeclarations,
+    });
 
-    // When `placement` is set the sentence is being resent after the user
-    // answered where it belongs, and it is already in the thread.
-    rememberPosition();
-    if (utterance && !placement) say({ who: "user", text: utterance });
+    // What the user said, as the thread should carry it. A typed sentence is
+    // its own text. An answer given through the request panel says what was
+    // chosen or entered — the panel is gone a moment later, and without this
+    // the conversation read as the agent asking a question and then answering
+    // itself. When `placement` is set the original sentence is already in the
+    // thread; what is new is the answer about where it belongs.
+    const spoken = said ?? (placement ? null : utterance);
+
+    // Someone who just asked a question wants to see the answer, so following
+    // resumes with every send. Only the reader scrolling during the arrival
+    // turns it off again.
+    stick.current = true;
+    if (spoken) say({ who: "user", text: spoken });
     setView("work");
     setBusy(true);
 
     try {
+      const started = performance.now();
+      if (account && Object.keys(patch.profile?.company_facts ?? {}).length > 0) {
+        const updated = await updateProfile(patch.profile.company_facts);
+        setAccount(updated);
+      }
       const data = await analyze({
         cases: nextCases,
         utterance,
         ...nextProfile,
+        compliance_declarations: nextDeclarations,
         as_of: today(),
         ...(placement ? { placement } : {}),
       });
+      const spent = performance.now() - started;
+      // Company facts are not sent from here when signed in. The server reads
+      // them from the session, so the screen cannot show one company while the
+      // analysis runs for another.
 
       if (data.status === "needs_placement") {
-        await walk(stepsForAsk(data, utterance), setThinking);
+        await walk(stepsForAsk(data, utterance), setThinking, spent);
         // Nothing is recorded yet — the sentence has no home until the user
         // says which trade it belongs to.
         setPending(data);
@@ -153,12 +379,23 @@ export default function App() {
       if (data.status === "ready") {
         // Walk the plan's steps before showing the answer. The result is
         // already in hand — this paces the reveal, it does not wait on work.
-        await walk(stepsFor(data.result), setThinking);
+        await walk(stepsFor(data.result), setThinking, spent);
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
-        setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
+        setFacts((prev) => ({
+          ...prev,
+          cases: data.result.trade_timeline.map((trade, index) => ({
+            ...(prev.cases[index] ?? {}),
+            ...trade,
+          })),
+        }));
         setResult(data.result);
+        if (data.analysis_run_id) {
+          listAnalyses()
+            .then(setAnalysisHistory)
+            .catch(() => notify("방금 분석은 저장됐지만 이력 목록을 갱신하지 못했습니다."));
+        }
         setPending(null);
         setWriting(true);
         setTimeout(() => setWriting(false), WRITE_CEILING_MS);
@@ -170,7 +407,7 @@ export default function App() {
           spoken: Boolean(utterance),
         });
       } else {
-        await walk(stepsForAsk(data, utterance), setThinking);
+        await walk(stepsForAsk(data, utterance), setThinking, spent);
         setPending(data);
         say({ who: "agent", kind: "ask", ask: data });
       }
@@ -187,7 +424,58 @@ export default function App() {
       {/* Home returns to the opening screen without discarding anything. The
           conversation is still there, and typing continues it — a brand click
           should not be able to destroy work the user cannot get back. */}
-      <Nav onHome={() => setView("entry")} />
+      <Nav
+        onHome={() => {
+          setShowSignIn(false);
+          setView("entry");
+        }}
+        account={account}
+        signingIn={showSignIn}
+        onSignIn={() => setShowSignIn(true)}
+        onSignOut={async () => {
+          try {
+            await signOut();
+            setAccount(null);
+            setAnalysisHistory([]);
+          } catch {
+            // The session is still open on the server. Showing a signed-out
+            // screen over it would be the screen lying about the state that
+            // matters most here.
+            notify("로그아웃하지 못했습니다. 세션이 아직 열려 있습니다.");
+          }
+        }}
+        analyses={analysisHistory}
+        onOpenAnalysis={async (runId) => {
+          try {
+            const stored = await readAnalysis(runId);
+            setResult(stored.result);
+            setTurns([{
+              who: "agent",
+              kind: "result",
+              result: stored.result,
+              heard: {},
+              spoken: false,
+            }]);
+            setView("work");
+          } catch (error) {
+            notify(error.message);
+          }
+        }}
+      />
+      <Notices
+        notices={notices}
+        onDismiss={(id) =>
+          setNotices((prev) => prev.filter((notice) => notice.id !== id))
+        }
+      />
+      {showSignIn && !account ? (
+        <Login
+          onSignIn={(who) => {
+            setAccount(who);
+            setShowSignIn(false);
+          }}
+        />
+      ) : (
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>
           <Entry onSend={(text) => send(text)} busy={busy} />
@@ -221,9 +509,17 @@ export default function App() {
                       ? []
                       : result?.required_inputs?.hedge ?? []
                   }
-                  onSlot={(patch) => send(null, patch)}
-                  onPlace={(utterance, placement) =>
-                    send(utterance, {}, placement)
+                  missingInputs={(result?.missing_input_queue ?? []).filter(
+                    (item) => !knownUnknowns.includes(item.field),
+                  )}
+                  onSlot={(patch, said) => send(null, patch, null, said)}
+                  onUnknown={(field) =>
+                    setKnownUnknowns((current) =>
+                      current.includes(field) ? current : [...current, field],
+                    )
+                  }
+                  onPlace={(utterance, placement, said) =>
+                    send(utterance, {}, placement, said)
                   }
                 />
               )}
@@ -232,7 +528,23 @@ export default function App() {
           </section>
         </div>
       </div>
+      )}
     </>
+  );
+}
+
+function mergeDeclaration(declarations, patch) {
+  const index = declarations.findIndex(
+    (item) => item.case_index === patch.case_index,
+  );
+  const previous =
+    index >= 0
+      ? declarations[index]
+      : { case_index: patch.case_index, confirmed: true };
+  const merged = { ...previous, ...patch, confirmed: true };
+  if (index < 0) return [...declarations, merged];
+  return declarations.map((item, itemIndex) =>
+    itemIndex === index ? merged : item,
   );
 }
 

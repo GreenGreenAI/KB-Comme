@@ -187,6 +187,8 @@ def read_slots(raw: Mapping[str, Any]) -> SlotReading:
     for field in ("country", "counterparty_id"):
         if field in provided:
             values[field] = str(provided[field]).strip()
+    if "case_facts" in provided:
+        values["case_facts"] = dict(provided["case_facts"])
 
     # A slot the user attempted but we could not read is reported once, as an
     # issue. Listing it as missing too would ask for it and correct it in the

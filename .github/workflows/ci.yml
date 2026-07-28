@@ -28,6 +28,7 @@ jobs:
         working-directory: web/frontend
         run: |
           npm ci
+          npm test
           npm run build
       - name: Compile
         run: python -m compileall -q src tests examples

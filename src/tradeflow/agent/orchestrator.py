@@ -24,6 +24,10 @@ from tradeflow.domain.models import HedgeMeasure, TradeProgram
 from tradeflow.domain.snapshot import FreshnessPolicy, SnapshotRef
 from tradeflow.domain.snapshot_file import latest_snapshot_path, read_snapshot
 from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
+from tradeflow.knowledge.compliance_declarations import (
+    ComplianceDeclarationAssembler,
+    ComplianceGatewayDeclaration,
+)
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.agent.routing import (
     COMPLIANCE,
@@ -164,6 +168,11 @@ def _default_knowledge_pipeline() -> TradeFlowPipeline:
 
 
 @lru_cache(maxsize=1)
+def _fact_catalog() -> FactCatalog:
+    return FactCatalog.from_json(FACT_CATALOG)
+
+
+@lru_cache(maxsize=1)
 def _default_knowledge_files() -> tuple[InputFile, ...]:
     """Fingerprint the rule files the default pipeline was built from.
 
@@ -180,6 +189,17 @@ def _default_knowledge_files() -> tuple[InputFile, ...]:
 
 
 STRUCTURE_EVIDENCE_ID = "TRADEFLOW_DERIVED_STRUCTURE"
+DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
+
+#: The company facts §5.4's eligibility rules will not read without evidence.
+#: Everything else on the profile reaches the rulepack conditions directly; these
+#: three go through `KsureCaseProfile`, which refuses a fact that cannot say
+#: where it came from.
+DECLARED_COMPANY_FIELDS = (
+    "company.size",
+    "company.credit_issue_free",
+    "company.ksure_exporter_grade",
+)
 
 
 def _structure_assertions(
@@ -219,6 +239,55 @@ def _structure_assertions(
     return assertions, (descriptor,)
 
 
+def _declared_company_assertions(
+    program: TradeProgram,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the company facts the company itself stated.
+
+    These arrive from the signed-in account, which is to say from the company.
+    That is a weaker kind of evidence than a snapshot of an official source, and
+    the descriptor says so rather than dressing it up: the role is the one the
+    eligibility catalog demands, but the payload names the account as the
+    declarer. A judgement resting on it still carries `review_required`, because
+    "우리는 중소기업입니다"라는 자기 선언으로 보험 자격을 확정할 수는 없다.
+
+    An unstated fact produces no assertion at all — the rules then report it as
+    missing, which is the answer, not a gap to be filled with `False`.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    facts = program.company.facts()
+    declared = {
+        field: facts[field]
+        for field in DECLARED_COMPANY_FIELDS
+        if facts.get(field) is not None
+    }
+    if not declared:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        DECLARED_COMPANY_EVIDENCE_ID,
+        EvidenceRole.SUPPORT_ELIGIBILITY,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(declared),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 계정에 직접 입력한 사실",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (DECLARED_COMPANY_EVIDENCE_ID,))
+            for field, value in declared.items()
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def analyze(
     program: TradeProgram,
     *,
@@ -227,6 +296,7 @@ def analyze(
     profit_floor: Decimal | None = None,
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
+    compliance_declarations: tuple[ComplianceGatewayDeclaration, ...] = (),
     utterance: str | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
@@ -243,6 +313,16 @@ def analyze(
     # only the company can state (netting and friends) are not here; see
     # routing.DECLARED_STRUCTURE_FIELDS.
     structure = derive_structure(program)
+    declaration_input = ComplianceDeclarationAssembler(_fact_catalog()).assemble(
+        program=program,
+        declarations=tuple(compliance_declarations),
+        evaluated_at=evaluated_at,
+    )
+    declared_structure = {
+        assertion.field: assertion.value
+        for assertions in declaration_input.assertions_by_case.values()
+        for assertion in assertions
+    }
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has
     # already run because every other decision reads its result.
@@ -250,7 +330,7 @@ def analyze(
         program,
         exposures,
         company_facts=program.company.facts(),
-        trade_structure=structure,
+        trade_structure={**structure, **declared_structure},
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
         has_usable_measure=bool(usable_measures(hedge_measures)),
@@ -284,8 +364,29 @@ def analyze(
         pipeline = knowledge_pipeline or _knowledge_pipeline(
             tuple(PACK_FOR_WORKER[name] for name in knowledge_workers)
         )
+        evaluated_at_utc = as_of or datetime.now(UTC)
         assertions, structure_evidence = _structure_assertions(
-            program, structure, as_of=as_of or datetime.now(UTC)
+            program, structure, as_of=evaluated_at_utc
+        )
+        declared, declared_evidence = _declared_company_assertions(
+            program, as_of=evaluated_at_utc
+        )
+        assertions = {
+            case_id: (
+                *assertions.get(case_id, ()),
+                *declared.get(case_id, ()),
+                *declaration_input.assertions_by_case.get(case_id, ()),
+            )
+            for case_id in {
+                *assertions,
+                *declared,
+                *declaration_input.assertions_by_case,
+            }
+        }
+        structure_evidence = (
+            *structure_evidence,
+            *declared_evidence,
+            *declaration_input.evidence,
         )
         decision_packet = _isolated(
             report,

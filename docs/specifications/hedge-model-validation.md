@@ -120,3 +120,44 @@ python scripts/check_hedge_models.py
 The check loads the committed ECOS USD/KRW snapshot, compares all operational
 models over no-lookahead origins, reports promotion blockers and fails if the
 executable and governed registries drift.
+
+## Persistent validation and promotion workflow
+
+The benchmark can be written and registered in the hash-bound governance ledger:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/check_hedge_models.py `
+  --output data/governance/latest_hedge_validation.json `
+  --store data/governance/hedge_models.db
+```
+
+`validation_runs.content_hash` is calculated over canonical JSON. Identical
+reports resolve to the same run. A promotion request is rejected before approval
+collection when any numerical gate fails or `quote_basis` is not
+`observed_forward_quote`.
+
+For an eligible observed-quote report, the controlled sequence is:
+
+```powershell
+python scripts/manage_hedge_model_promotion.py request `
+  --run-id MODEL-RUN-... --challenger ewma_profit_floor
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role knowledge_domain --reviewer REVIEWER
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role platform_runtime --reviewer REVIEWER
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role domain_expert --reviewer REVIEWER `
+  --organization ORGANIZATION
+python scripts/manage_hedge_model_promotion.py promote `
+  --request-id MODEL-PROMOTION-...
+```
+
+Every approval stores the exact validation hash. Domain-expert approval also
+requires an organization. `promote` refuses incomplete approvals and only swaps
+an active challenger with the current champion; it never selects a model by
+score or falls back automatically.
+
+The committed latest spot-proxy report is intentionally ineligible. Persistence
+of a blocked result proves the workflow and preserves diagnostics; it does not
+weaken the observed-forward-quote gate.

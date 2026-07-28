@@ -1,18 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { won, pct } from "./api.js";
+import DecisionWorkspace from "./DecisionWorkspace.jsx";
 
 /** How an answer arrives: top to bottom, one part after the next.
  *
- *  Read as a budget rather than as scattered constants — the trace lands
- *  first, the sentence writes itself, and the figures follow it down the
- *  card. Nothing starts from nothing: every part opens at 0.2 so an animation
- *  that never advances costs the motion and not the content.
+ *  Read as a budget rather than as scattered constants — the sentence writes
+ *  itself, and the figures follow it down the card.
+ *
+ *  Every gap here is shorter than the fade it starts, and deliberately so. A
+ *  part that finished arriving before the next one began would read as a
+ *  series of separate pops; overlapping them means eight or nine words are
+ *  always mid-fade, and the sentence washes in instead of clicking into place.
  */
-const TRACE_MS = 70;
-const WORD_MS = 45;
-const AFTER_SENTENCE_MS = 90;
-const BLOCK_MS = 130;
-const ARRIVE_MS = 340;   // matches the .arrive animation in styles.css
+const OPENING_MS = 120;
+const WORD_MS = 52;
+const BLOCK_MS = 165;
+const ARRIVE_MS = 520;   // matches the .arrive animation in styles.css
+
+/** How long after the last unit lands before the motion classes come off.
+ *  A hair over the longest fade, so nothing is cut short. */
+const FADE_MS = ARRIVE_MS + 60;
 
 const DEFAULT_ORDER = [
   "exposure",
@@ -68,6 +75,12 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
       )}
 
       {busy && <Thinking thinking={thinking} />}
+
+      {/* Room under the conversation so the newest exchange can be scrolled to
+          the top of the view. App sizes it to whatever is left over — see
+          fitTail there — and it is empty by design: without something below a
+          short exchange, there is nothing to scroll into. */}
+      <div className="tail" aria-hidden="true" />
     </div>
   );
 }
@@ -167,9 +180,16 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         {turn.ask.issues?.map((issue) => (
           <p key={issue.field}>{issue.reason}</p>
         ))}
-        {turn.ask.questions.map((question) => (
-          <p key={question}>{question}</p>
-        ))}
+        {/* §4.2[1] wrote this, over the slots the reader found missing. The
+            list is what the screen falls back to — three questions stacked at
+            someone who said hello, which is what this replaced. */}
+        {turn.ask.spoken ? (
+          <p>{turn.ask.spoken}</p>
+        ) : (
+          turn.ask.questions.map((question) => (
+            <p key={question}>{question}</p>
+          ))
+        )}
       </div>
     );
   }
@@ -200,30 +220,49 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     !tradesChanged &&
     opened.length === 0;
 
-  const line = sentence({
-    first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
-    opened, unread,
-  });
+  // §4.2[9] wrote this one, and the server only kept it after checking that
+  // every number in it came from a tool. When it is empty — no key, no network,
+  // or a sentence that invented a figure — the turn assembles its own, which is
+  // why that assembly stays here rather than being deleted as dead code.
+  const line = result.summary
+    ? [{ text: result.summary }]
+    : sentence({
+        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
+        opened, unread,
+      });
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
-  const sentenceStart = trace.length * TRACE_MS;
-  const answerStart = sentenceStart + words * WORD_MS + AFTER_SENTENCE_MS;
+  const asksProfit = !hedge && hedgeInputs.length > 0;
 
-  // One counter for everything below the sentence, owned by the turn. The
-  // card advances it as it lays its blocks out, and whatever follows the card
-  // picks up where it stopped — React runs sibling component bodies in order,
-  // so the count is already correct by the time the trailing line asks.
-  const cascade = counter(answerStart, live);
-
-  // The turn knows how long it takes to arrive; nothing else can. Block count
-  // depends on what the plan produced and the sentence length varies, so a
-  // constant elsewhere would drift out of step with the cascade it describes.
-  useEffect(() => {
-    if (!live || !onArrived) return;
-    const total = cascade.end() + ARRIVE_MS;
-    const timer = setTimeout(onArrived, total);
-    return () => clearTimeout(timer);
+  // The order the turn arrives in, as a gap before each unit: the sentence a
+  // word at a time, then the blocks below it.
+  //
+  // The trace is not in here. It is a list of which tools ran, not part of the
+  // answer, and staging it made the reader watch a receipt being printed
+  // before the answer would start. It is simply there.
+  const timeline = useMemo(() => {
+    const gaps = [];
+    for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
+    // card, band, folds, and the line that follows them
+    const blocks = 2 + (result.market_scenario ? 1 : 0) + (asksProfit ? 1 : 0);
+    for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
+    return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live]);
+  }, [words, asksProfit]);
+
+  const [shown, settled] = useCascade(timeline, live);
+  // One switch for the whole turn: while it is arriving the parts carry the
+  // motion class, and once it has settled they carry nothing.
+  const arrive = settled ? "" : " arrive";
+
+  // The turn knows when it has finished landing; nothing else can. Block count
+  // depends on what the plan produced and the sentence length varies, so a
+  // constant elsewhere would drift out of step with the cascade.
+  useEffect(() => {
+    if (!live || !onArrived) return undefined;
+    if (shown < timeline.length) return undefined;
+    const timer = setTimeout(onArrived, ARRIVE_MS);
+    return () => clearTimeout(timer);
+  }, [live, onArrived, shown, timeline.length]);
 
   return (
     <div className="turn agent">
@@ -231,32 +270,30 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
 
       {trace.length > 0 && (
         <div className="trace">
-          {trace.map((name, index) => (
-            <span
-              className={`ok ${live ? "arrive" : ""}`}
-              style={{ animationDelay: `${index * TRACE_MS}ms` }}
-              key={name}
-            >
+          {trace.map((name) => (
+            <span className="ok" key={name}>
               {WORKER_LABEL[name] ?? name}
             </span>
           ))}
         </div>
       )}
 
-      {/* The sentence arrives a word at a time, after the trace has landed.
-          Written as segments rather than JSX so each word can carry its own
-          delay; emphasis rides along on the segment. */}
-      <Written live={live} segments={line} start={sentenceStart} />
+      {/* The sentence arrives a word at a time. Written as segments rather than
+          JSX so words can be mounted one by one; emphasis rides along on the
+          segment. */}
+      {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
 
-      <Answer result={result} order={order} cascade={cascade} />
+      {shown > words && (
+        <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
+      )}
 
       {/* Asked once, and only in words. The fields live in the bar above the
           composer so they stay reachable after the thread scrolls on. */}
-      {!hedge && hedgeInputs.length > 0 && live && (
-        <Trailing cascade={cascade}>
+      {asksProfit && shown >= timeline.length && (
+        <p className={arrive.trim()}>
           기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
           입력하지 않은 하한을 임의로 만들지 않습니다.
-        </Trailing>
+        </p>
       )}
     </div>
   );
@@ -313,77 +350,101 @@ function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, trad
   return [{ text: "다시 계산했습니다." }];
 }
 
-/** Hands out the next arrival slot below the sentence.
+/** Reveals a turn one unit at a time.
  *
- *  A shared counter rather than a delay per component: the card's height
- *  varies with what the plan produced, and anything after it has to start
- *  where the card stopped rather than at a number guessed in advance.
+ *  Units are mounted as their turn comes rather than rendered up front and
+ *  faded in. A delayed fade leaves the whole answer sitting on screen as a
+ *  ghost before it arrives, which reads as a half-loaded page; nothing that
+ *  has not arrived should be on screen at all.
+ *
+ *  Returns what has arrived and whether the turn has settled. Settling is what
+ *  makes it safe for the motion to touch opacity at all: an animation that is
+ *  applied but never advances holds its opening frame forever, and an opening
+ *  frame at zero is an answer nobody can read. Once the fade has had its time
+ *  the classes come off, so the content's resting state is plain visible text
+ *  that no stalled animation can override. The clock decides this, not the
+ *  animation — a suspended timeline would never report itself finished.
  */
-function counter(start, live) {
-  let block = 0;
-  const next = () => {
-    const delay = start + block * BLOCK_MS;
-    block += 1;
-    return live
-      ? { className: "arrive", style: { animationDelay: `${delay}ms` } }
-      : {};
-  };
-  // When the last slot handed out begins. Read after render, once every block
-  // has taken its turn.
-  next.end = () => start + Math.max(block - 1, 0) * BLOCK_MS;
-  return next;
-}
+function useCascade(delays, live) {
+  const [shown, setShown] = useState(live ? 0 : delays.length);
+  const [settled, setSettled] = useState(!live);
 
-/** A line that follows the answer card, taking the next slot after it. */
-function Trailing({ cascade, children }) {
-  return <p {...cascade()}>{children}</p>;
-}
+  useEffect(() => {
+    if (!live) {
+      setShown(delays.length);
+      setSettled(true);
+      return undefined;
+    }
+    // How many units are due at a given moment, read off the clock rather
+    // than counted off by a chain of timers. A hidden tab throttles timers to
+    // one a second; a chain would then spend twenty seconds dribbling out an
+    // answer the reader has already come back to, while a clock reading
+    // catches up to where it should be on the first tick.
+    //
+    // An interval and not requestAnimationFrame, for the same reason in its
+    // harsher form: rAF does not run at all in a hidden tab, so an answer
+    // driven by it would simply never arrive.
+    const schedule = [];
+    let due = 0;
+    for (const gap of delays) {
+      due += gap;
+      schedule.push(due);
+    }
 
-/** Merge a base class with the arrival props, so a block can have both. */
-function withClass(props, base) {
-  return { ...props, className: [base, props.className].filter(Boolean).join(" ") };
+    const start = performance.now();
+    const done = due + FADE_MS;
+    const tick = setInterval(() => {
+      const elapsed = performance.now() - start;
+      let count = 0;
+      while (count < schedule.length && schedule[count] <= elapsed) count += 1;
+      setShown(count);
+      if (elapsed < done) return;
+      setSettled(true);
+      clearInterval(tick);
+    }, 16);
+    return () => clearInterval(tick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, delays.length]);
+
+  return [shown, settled];
 }
 
 /** Words appearing in order, as if being written.
  *
- *  They fade in from dim rather than from nothing. An animation that is
- *  applied but not advancing holds its opening frame, and a sentence whose
- *  opening frame is invisible is a sentence that can fail to arrive. At 0.2 it
- *  is faint but readable, so the worst case costs the effect and not the text.
+ *  Only the words that have arrived are rendered. Rendering the whole sentence
+ *  and fading the rest in put the finished line on screen before it was
+ *  written, which is the one thing writing-in is meant to avoid.
  *
  *  Only the newest turn writes itself. Re-animating the history every time
  *  React re-renders would make the whole conversation flicker.
  */
-function Written({ segments, live, start = 0 }) {
+function Written({ segments, shown, settled }) {
   let index = 0;
-  return (
-    <p className={live ? "written" : ""}>
-      {segments.map((segment, s) =>
-        segment.text.split(" ").map((word) => {
-          const i = index;
-          index += 1;
-          return (
-            <span
-              className={`w ${segment.strong ? "em" : ""}`}
-              style={{ animationDelay: `${start + i * WORD_MS}ms` }}
-              key={`${s}-${i}`}
-            >
-              {word}{" "}
-            </span>
-          );
-        })
-      )}
-    </p>
-  );
+  const out = [];
+  for (const [s, segment] of segments.entries()) {
+    for (const word of segment.text.split(" ")) {
+      if (index >= shown) break;
+      // The space sits outside the box. Each word has to be an inline-block
+      // for a transform to apply to it, and a trailing space inside an
+      // inline-block collapses — the sentence would come out run together.
+      out.push(
+        <span className={segment.strong ? "w em" : "w"} key={`${s}-${index}`}>
+          {word}
+        </span>,
+        " ",
+      );
+      index += 1;
+    }
+    if (index >= shown) break;
+  }
+  return <p className={settled ? "written" : "written writing"}>{out}</p>;
 }
 
 
-function Answer({ result, order, cascade }) {
+function Answer({ result, order, shown, arrive }) {
   // The card arrives with its first figures, not before them. Drawing the grey
-  // box first left an empty panel sitting on screen waiting to be filled,
-  // which read as something still loading rather than as an answer being
-  // written. Blocks after the first follow it down.
-  const next = cascade;
+  // box first left an empty panel waiting to be filled, which read as
+  // something still loading rather than as an answer being written.
   const cash = result.cashflow_analysis;
   const market = result.market_scenario;
   const hedge = result.hedge_analysis;
@@ -395,12 +456,10 @@ function Answer({ result, order, cascade }) {
   const matched = cash.maturity_matched_amount?.[0]?.amount;
   const skipped = result.workers?.skipped ?? {};
 
-  const card = next();
-
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
-    <div {...withClass(card, "answer")}>
+    <div className={`answer${arrive}`}>
       <dl className="figrow">
         <div>
           <dt>순노출</dt>
@@ -424,15 +483,16 @@ function Answer({ result, order, cascade }) {
       </dl>
 
       {Number(natural) > 0 && Number(matched) === 0 && (
-        <p {...withClass(next(), "answer-note")}>
+        <p className="answer-note">
           상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
         </p>
       )}
 
-      {market && <RateBand market={market} hedge={hedge} wrap={next()} />}
+      {market && shown > 1 && <RateBand market={market} hedge={hedge} arrive={arrive} />}
 
       {/* Sections follow the order §4.2[2]'s intent reading produced. */}
-      <div {...withClass(next(), "folds")}>
+      {shown > (market ? 2 : 1) && (
+        <div className={`folds${arrive}`}>
         {order
           .filter((section) => section !== "exposure" && section !== "market_scenario")
           .map((section) => {
@@ -451,6 +511,7 @@ function Answer({ result, order, cascade }) {
                 </details>
               );
             }
+            if (section !== "hedge") return null;
             if (!reason) return null;
             return (
               <details className="fold" key={section}>
@@ -459,25 +520,15 @@ function Answer({ result, order, cascade }) {
               </details>
             );
           })}
-
-        <details className="fold">
-          <summary>근거 · 재현에 필요한 입력</summary>
-          <ul className="versions">
-            {(result.calculation_versions?.snapshots ?? []).map((item) => (
-              <li key={item.source_id}>
-                <span className="vk">{item.source_id}</span>
-                <span className="vv">{item.version}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      </div>
+        </div>
+      )}
+      {shown > (market ? 2 : 1) ? <DecisionWorkspace result={result} /> : null}
     </div>
   );
 }
 
 /** Where the rate can land by the last payment date, drawn to scale. */
-function RateBand({ market, hedge, wrap = {} }) {
+function RateBand({ market, hedge, arrive }) {
   const lower = Number(market.band_lower);
   const upper = Number(market.band_upper);
   const spot = Number(market.spot_rate);
@@ -495,7 +546,7 @@ function RateBand({ market, hedge, wrap = {} }) {
   const at = (v) => ((v - min) / (max - min)) * 100;
 
   return (
-    <div {...withClass(wrap, "rate")}>
+    <div className={`rate${arrive}`}>
       <div className="rate-track">
         <span
           className="rate-fill"

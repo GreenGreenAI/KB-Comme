@@ -12,6 +12,7 @@ from tradeflow.domain.snapshot_file import read_snapshot
 from tradeflow.knowledge.hedge_model_policy import (
     HedgeModelGovernanceRegistry,
 )
+from tradeflow.knowledge.hedge_model_promotion import HedgeModelPromotionStore
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge_model_validation import (
     HedgeModelPromotionPolicy,
@@ -49,6 +50,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--window", type=int, default=250)
     parser.add_argument("--horizon", type=int, default=20)
     parser.add_argument("--step", type=int, default=20)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the canonical validation report to this JSON path.",
+    )
+    parser.add_argument(
+        "--store",
+        type=Path,
+        help="Record the report in the promotion SQLite ledger.",
+    )
     return parser
 
 
@@ -139,6 +150,8 @@ def main() -> int:
                             )
                         ).eligible,
                         "blockers": assessment.blockers,
+                        "champion_id": assessment.champion_id,
+                        "challenger_id": assessment.challenger_id,
                     }
                 ),
             }
@@ -150,6 +163,16 @@ def main() -> int:
             if model.status == "data_blocked"
         },
     }
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    if args.store:
+        report["validation_record"] = HedgeModelPromotionStore(
+            args.store
+        ).record_validation(report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if any(result.tested < 100 for result in results.values()):
         raise ValueError("benchmark produced fewer than 100 validation origins")
