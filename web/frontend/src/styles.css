@@ -237,23 +237,14 @@
   .trace .wait::before { content: "· "; color: var(--accent); }
   .trace .wait { color: var(--accent); }
 
-  .slotline { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .55rem; }
-  .slotline input {
-    font-family: var(--mono); font-size: .875rem; background: var(--paper);
-    border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem; width: 10rem;
-  }
-  .slotline button { cursor: pointer; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: .4rem .95rem; font-size: .8125rem; }
-  .slotline button:hover { background: var(--accent-deep); }
-  .quick { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
-  .quick button { cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 999px; padding: .25rem .8rem; font-size: .8125rem; }
-  .quick button:hover { border-color: var(--accent); }
 
   /* ---------- the input surface ---------- */
   /* One box. The request the agent is waiting on is its top row, the text
      area its middle, and the footer carries what the session computes against
      plus how to send. Two same-width rounded panels stacked on each other read
      as separate parts, which is what this replaced. */
-  .composer { border-top: 1px solid var(--rule-faint); padding: .85rem 1.5rem 1.15rem; }
+  .dock { flex: none; border-top: 1px solid var(--rule-faint); padding: .85rem 1.5rem 1.15rem; }
+  .composer { flex: none; }
   .composer-box {
     background: var(--paper); border: 1px solid var(--rule);
     border-radius: 14px; overflow: hidden;
@@ -308,12 +299,16 @@
   /* ---------- the request ---------- */
   /* Marked by an edge rather than a panel: it belongs to this box, and the
      stripe says which part of it is waiting on the user. */
+  /* Its own panel, directly above the input.
+     It was briefly a row inside the input box. That works for a single field,
+     but a choice list is several lines tall and reads as the box having
+     swallowed something — so it stands on its own and simply sits close. */
   .ask {
-    display: flex; flex-direction: column; gap: .45rem;
-    padding: .6rem .95rem .65rem .8rem;
-    border-bottom: 1px solid var(--rule-faint);
-    border-left: 2px solid var(--accent);
-    background: color-mix(in srgb, var(--accent) 5%, #fff);
+    display: flex; flex-direction: column; gap: .5rem;
+    margin-bottom: .5rem; padding: .7rem .85rem .75rem;
+    border: 1px solid var(--rule); border-left: 2px solid var(--accent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 4%, #fff);
   }
   /* A single value fits on the label's line; a list does not. */
   .ask-inline { flex-direction: row; align-items: center; flex-wrap: wrap; gap: .5rem; }
@@ -327,9 +322,13 @@
      the second one has been read. */
   .choices { display: grid; gap: 2px; outline: none; }
   .choice {
-    display: grid; grid-template-columns: 1.1rem auto 1fr; align-items: baseline;
-    gap: .55rem; width: 100%; text-align: left; cursor: pointer;
-    padding: .34rem .5rem .34rem .35rem; border: none; border-radius: 7px;
+    /* Four tracks, because ::before is a grid item too. Giving it its own
+       column keeps the hint out of the 1.1rem caret track, where it wrapped
+       one character per line. */
+    display: grid; grid-template-columns: .8rem auto auto 1fr;
+    align-items: baseline; gap: .5rem;
+    width: 100%; text-align: left; cursor: pointer;
+    padding: .38rem .6rem .38rem .3rem; border: none; border-radius: 8px;
     background: none; color: var(--ink); font-size: .8125rem;
     transition: background .12s ease, color .12s ease;
   }
@@ -337,7 +336,7 @@
      missing from enough system fonts to render as tofu, and this one carries
      the selection. */
   .choice::before {
-    content: ""; grid-column: 1; justify-self: end; align-self: center;
+    content: ""; justify-self: center; align-self: center;
     width: 0; height: 0; opacity: 0;
     border-left: 4px solid var(--accent);
     border-top: 3.5px solid transparent;
@@ -433,8 +432,7 @@
 
   .turn { animation: rise .3s cubic-bezier(.22,.9,.3,1); }
 
-  .choice, .quick button, .slotline button { transition: transform .12s ease, border-color .15s ease, background .15s ease, color .15s ease; }
-  .choice:active, .quick button:active { transform: scale(.97); }
+  .choice:active { transform: scale(.97); }
   .send { transition: transform .12s ease, background .15s ease; }
   .send:active:not(:disabled) { transform: scale(.92); }
   .fold > summary { transition: color .15s ease; }
@@ -498,10 +496,6 @@
   .cases .amt { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .cases .when, .cases .how { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
 
-  /* Two choices, side by side, when the sentence could belong to either trade. */
-  .choices { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
-  .choice { font: inherit; font-size: .8125rem; padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--rule); background: #fff; color: var(--ink); cursor: pointer; transition: border-color .15s ease, color .15s ease; }
-  .choice:hover { border-color: var(--accent); color: var(--accent); }
 
   .review { margin: .85rem 0 0; padding-top: .6rem; border-top: 1px dashed var(--rule); }
   .review-head { margin: 0 0 .35rem; font-size: .8125rem; }

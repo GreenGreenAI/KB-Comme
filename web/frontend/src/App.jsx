@@ -143,9 +143,10 @@ export default function App() {
         <div className={`view work ${view === "entry" ? "away" : ""}`}>
           <section className="chat">
             <Thread turns={turns} busy={busy} threadRef={threadRef} />
-            {/* One input surface. What the agent is waiting on is the top row
-                of the box the user types into, not a second box above it. */}
-            <Composer onSend={(text) => send(text)} busy={busy} asOf={asOf}>
+            {/* Directly above the input, and its own panel. A choice list is
+                several lines tall; inside the text box it read as the box
+                having swallowed something. */}
+            <div className="dock">
               {!busy && (
                 <AskBar
                   pending={pending}
@@ -160,7 +161,8 @@ export default function App() {
                   }
                 />
               )}
-            </Composer>
+              <Composer onSend={(text) => send(text)} busy={busy} asOf={asOf} />
+            </div>
           </section>
         </div>
       </div>
@@ -174,7 +176,7 @@ function stripEmpty(object) {
   );
 }
 
-function Composer({ onSend, busy, children, asOf }) {
+function Composer({ onSend, busy, asOf }) {
   const [text, setText] = useState("");
   const field = useRef(null);
 
@@ -199,7 +201,6 @@ function Composer({ onSend, busy, children, asOf }) {
   return (
     <div className="composer">
       <div className="composer-box">
-        {children}
         <textarea
           ref={field}
           rows="1"
