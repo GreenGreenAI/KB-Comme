@@ -17,6 +17,13 @@ from tradeflow.knowledge.eligibility_evidence import (
     EvidenceMetadata,
     KsureCreditEvidence,
 )
+from tradeflow.knowledge.hedge_quotes import (
+    USER_QUOTE_SOURCE_PREFIX,
+    HedgeQuoteAvailabilityInput,
+    HedgeQuoteSide,
+    UserForwardQuote,
+    UserQuoteHedgeAvailabilityService,
+)
 from tradeflow.knowledge.mutual_account import (
     MutualAccountTimeline,
     derive_mutual_account_timeline,
@@ -36,10 +43,15 @@ __all__ = [
     "EligibilityFactInput",
     "EligibilityProviderRegistry",
     "EvidenceMetadata",
+    "HedgeQuoteAvailabilityInput",
+    "HedgeQuoteSide",
     "KsureCaseProfile",
     "KsureCreditEvidence",
     "MutualAccountTimeline",
     "USER_DECLARATION_SOURCE_ID",
+    "USER_QUOTE_SOURCE_PREFIX",
+    "UserForwardQuote",
+    "UserQuoteHedgeAvailabilityService",
     "derive_mutual_account_timeline",
     "validate_evidence_contract",
 ]
