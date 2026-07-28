@@ -1,47 +1,87 @@
-/** Navigation exposes only implemented surfaces. Authentication and saved
- * analyses stay out of the UI until a real persistence boundary exists.
- *
- * The four links jump to sections of the panel, so they are only offered once
- * there is a panel to jump into. Before that they are disabled rather than
- * hidden: the reader can see what the finished answer will contain. Rendering
- * them as inert text — which they were — made them look like navigation that
- * silently did nothing. */
-const AREAS = [
-  { id: "sec-analysis", label: "분석" },
-  { id: "sec-support", label: "지원제도" },
-  { id: "sec-compliance", label: "신고의무" },
-  { id: "sec-evidence", label: "근거" },
-];
+import { useEffect, useRef, useState } from "react";
 
-export default function Nav({ ready = false }) {
-  function jump(id) {
-    document
-      .getElementById(id)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+/** Signed out shows a way in; signed in shows who you are. The menu is built
+ *  from this product's own concepts — what is saved here is what the intake
+ *  agent no longer has to ask for. */
+export default function Nav() {
+  const [signedIn, setSignedIn] = useState(false);
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (event) => {
+      if (!box.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("click", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("click", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
 
   return (
     <header className="nav">
       <div className="brand">
         <i>T</i> TradeFlow
       </div>
-      <nav aria-label="주요 영역">
-        {AREAS.map((area) => (
-          <button
-            type="button"
-            key={area.id}
-            className="nav-link"
-            onClick={() => jump(area.id)}
-            disabled={!ready}
-          >
-            {area.label}
-          </button>
-        ))}
+      <nav>
+        <a href="#" className="on">분석</a>
+        <a href="#">지원제도</a>
+        <a href="#">신고의무</a>
+        <a href="#">근거</a>
       </nav>
-      <div className="account">
-        <span className="nav-cta" aria-label="MVP 데모">
-          MVP 데모
-        </span>
+
+      <div className="account" ref={box}>
+        {!signedIn ? (
+          <button className="nav-cta" type="button" onClick={() => setSignedIn(true)}>
+            로그인
+          </button>
+        ) : (
+          <>
+            <button
+              className="avatar"
+              type="button"
+              aria-expanded={open}
+              aria-haspopup="true"
+              aria-label="계정 메뉴"
+              onClick={() => setOpen((v) => !v)}
+            >
+              한
+            </button>
+            {open && (
+              <div className="menu">
+                <div className="menu-id">
+                  <span className="avatar" aria-hidden="true">한</span>
+                  <div>
+                    <b>한빛정밀</b>
+                    <span>중소기업 · 제조업</span>
+                  </div>
+                </div>
+                <a href="#">저장한 분석 <em>4건</em></a>
+                <a href="#" className="saved">기업 정보 <em>3개 항목 저장됨</em></a>
+                <a href="#">근거 이력 <em>스냅샷 12건</em></a>
+                <p className="note">
+                  중소기업 여부·담보 여력·업종은 계정에 저장되어 있어, 새 분석에서
+                  다시 묻지 않습니다.
+                </p>
+                <hr />
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setOpen(false);
+                    setSignedIn(false);
+                  }}
+                >
+                  로그아웃
+                </a>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </header>
   );
