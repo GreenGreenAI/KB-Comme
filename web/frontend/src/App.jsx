@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
+import AskBar from "./AskBar.jsx";
 import { analyze } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -127,14 +128,23 @@ export default function App() {
             as the conversation lengthens. */}
         <div className={`view work ${view === "entry" ? "away" : ""}`}>
           <section className="chat">
-            <Thread
-              turns={turns}
-              busy={busy}
-              pending={pending}
-              onSlot={(patch) => send(null, patch)}
-              onPlace={(utterance, placement) => send(utterance, {}, placement)}
-              threadRef={threadRef}
-            />
+            <Thread turns={turns} busy={busy} threadRef={threadRef} />
+            {/* What the agent is waiting on sits next to where the user
+                types, not back in the message that asked for it. */}
+            {!busy && (
+              <AskBar
+                pending={pending}
+                requiredInputs={
+                  result?.hedge_analysis
+                    ? []
+                    : result?.required_inputs?.hedge ?? []
+                }
+                onSlot={(patch) => send(null, patch)}
+                onPlace={(utterance, placement) =>
+                  send(utterance, {}, placement)
+                }
+              />
+            )}
             <Composer onSend={(text) => send(text)} busy={busy} />
           </section>
         </div>
