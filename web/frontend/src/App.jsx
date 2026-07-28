@@ -4,6 +4,7 @@ import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
+import Notices from "./Notices.jsx";
 import { analyze, signOut, whoami } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -85,15 +86,36 @@ export default function App() {
   // are stopped at.
   const [account, setAccount] = useState(null);
   const [showSignIn, setShowSignIn] = useState(false);
+  // Things that happened to no screen in particular. What belongs to a screen
+  // stays on it: a failed analysis is a turn in the thread, a rejected password
+  // sits by the password field.
+  const [notices, setNotices] = useState([]);
+  const noticeId = useRef(0);
+
+  function notify(text) {
+    noticeId.current += 1;
+    const id = noticeId.current;
+    // Say a thing once. Retrying a failing request every few seconds would
+    // otherwise stack the same sentence down the screen.
+    setNotices((prev) =>
+      prev.some((notice) => notice.text === text) ? prev : [...prev, { id, text }],
+    );
+  }
 
   // Ask once on load. A session that survived a refresh should not have to be
   // proved again by typing.
   useEffect(() => {
     let live = true;
-    whoami().then((found) => live && found && setAccount(found));
+    whoami()
+      .then((found) => live && found && setAccount(found))
+      .catch(() => {
+        // Not the same as being signed out, and it must not look like it.
+        if (live) notify("로그인 상태를 확인하지 못했습니다. 서버에 연결되지 않았습니다.");
+      });
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const threadRef = useRef(null);
   const stick = useRef(true);
@@ -323,9 +345,22 @@ export default function App() {
         signingIn={showSignIn}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={async () => {
-          await signOut();
-          setAccount(null);
+          try {
+            await signOut();
+            setAccount(null);
+          } catch {
+            // The session is still open on the server. Showing a signed-out
+            // screen over it would be the screen lying about the state that
+            // matters most here.
+            notify("로그아웃하지 못했습니다. 세션이 아직 열려 있습니다.");
+          }
         }}
+      />
+      <Notices
+        notices={notices}
+        onDismiss={(id) =>
+          setNotices((prev) => prev.filter((notice) => notice.id !== id))
+        }
       />
       {showSignIn && !account ? (
         <Login
