@@ -66,6 +66,9 @@ const STEP_LABEL = {
   compliance: "신고의무 규칙 판정",
   hedge: "헤지비율 산출",
   synthesis: "답변 정리",
+  read: "문장에서 거래 정보 읽기",
+  slots: "빠진 정보 확인",
+  placement: "앞 거래와 대조",
 };
 
 /** What the agent is doing, while it is doing it.
