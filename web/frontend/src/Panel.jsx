@@ -1,4 +1,15 @@
+import { Fragment } from "react";
+
 import { won, pct } from "./api.js";
+
+/** Mirrors tools/intent.DEFAULT_ORDER, used until a response arrives. */
+const DEFAULT_ORDER = [
+  "exposure",
+  "market_scenario",
+  "hedge",
+  "support",
+  "compliance",
+];
 
 /** The living document. Sections fill in as the conversation supplies what
  *  they need, and a locked section states what would unlock it — that is the
@@ -8,6 +19,7 @@ export default function Panel({ result, pending, facts }) {
   const market = result?.market_scenario;
   const hedge = result?.hedge_analysis;
   const completed = result?.workers?.completed ?? [];
+  const order = result?.execution_plan?.section_order ?? DEFAULT_ORDER;
 
   const sections = [
     Boolean(cash),
@@ -52,15 +64,29 @@ export default function Panel({ result, pending, facts }) {
       {result?.trade_timeline?.length > 0 && (
         <Understanding cases={result.trade_timeline} />
       )}
-      {cash && <Cashflow cash={cash} />}
-      {market && <Market market={market} hedge={hedge} />}
-      <Hedge
-        hedge={hedge}
-        reason={result?.workers?.skipped?.hedge}
-        requiredInputs={result?.required_inputs?.hedge ?? []}
-      />
-      <Support result={result} />
-      <Compliance result={result} />
+
+      {/* §4.2[2]'s third input, applied. The question moves a section to the
+          front; it never removes one, so a reader who asked about the rate
+          still meets their filing duty further down. Input confirmation stays
+          first regardless — every section below it rests on that reading. */}
+      {order.map((section) => {
+        const card = {
+          exposure: cash ? <Cashflow cash={cash} /> : null,
+          market_scenario: market ? (
+            <Market market={market} hedge={hedge} />
+          ) : null,
+          hedge: (
+            <Hedge
+              hedge={hedge}
+              reason={result?.workers?.skipped?.hedge}
+              requiredInputs={result?.required_inputs?.hedge ?? []}
+            />
+          ),
+          support: <Support result={result} />,
+          compliance: <Compliance result={result} />,
+        }[section];
+        return card ? <Fragment key={section}>{card}</Fragment> : null;
+      })}
 
       {result && <Evidence result={result} />}
     </aside>
@@ -370,6 +396,21 @@ function Support({ result }) {
   const candidates = result?.support_candidates ?? [];
   const excluded = result?.excluded_candidates ?? [];
   const completed = result?.workers?.completed?.includes("support");
+  const skipped = result?.workers?.skipped?.support;
+
+  // §4.2[2] left it out of the plan. The reason names what would put it back,
+  // which is more use than three cards of "정보 부족".
+  if (!completed && skipped) {
+    return (
+      <Blocked
+        id="sec-support"
+        eyebrow="지원제도"
+        title="쓸 수 있는 제도가 있나?"
+        state="알려주시면 판정"
+        reason={skipped}
+      />
+    );
+  }
 
   return (
     <section className={`sec ${completed ? "" : "locked"}`} id="sec-support">
@@ -405,17 +446,18 @@ function Compliance({ result }) {
   const findings = result?.risk_findings ?? [];
   const obligations = result?.filing_obligations ?? [];
   const completed = result?.workers?.completed?.includes("compliance");
+  const skipped = result?.workers?.skipped?.compliance;
 
   return (
     <Blocked
       id="sec-compliance"
       eyebrow="규제"
       title="해야 할 신고가 있나?"
-      state={completed ? "규칙 판정 완료" : "대기 중"}
+      state={completed ? "규칙 판정 완료" : "알려주시면 판정"}
       reason={
         completed
           ? `검토 항목 ${findings.length}건 · 실행 의무 후보 ${obligations.length}건. 정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.`
-          : "거래 정보가 준비되면 역할 A 규칙으로 판정합니다."
+          : (skipped ?? "거래 정보가 준비되면 역할 A 규칙으로 판정합니다.")
       }
     />
   );

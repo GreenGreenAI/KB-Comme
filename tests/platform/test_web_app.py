@@ -7,6 +7,27 @@ from tradeflow.web.app import AnalyzeRequest, analyze_endpoint
 
 
 class WebApiValidationTests(unittest.TestCase):
+    def test_a_company_profile_puts_the_support_worker_back_in(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                is_sme=True,
+                cases=[
+                    {
+                        "direction": "export",
+                        "currency": "USD",
+                        "amount": "100000",
+                        "expected_payment_date": (
+                            date.today() + timedelta(days=30)
+                        ).isoformat(),
+                    },
+                ],
+            )
+        )
+
+        self.assertIn("support", body["result"]["execution_plan"]["planned"])
+        self.assertTrue(body["result"]["packet_id"].startswith("decision:"))
+
     def test_invalid_money_is_rejected_instead_of_treated_as_missing(self) -> None:
         with self.assertRaises(HTTPException) as context:
             analyze_endpoint(AnalyzeRequest(baseline_profit="not-a-number"))
@@ -45,9 +66,15 @@ class WebApiValidationTests(unittest.TestCase):
         )
 
         self.assertEqual("ready", body["status"])
-        self.assertTrue(body["result"]["packet_id"].startswith("decision:"))
-        self.assertIn("support", body["result"]["workers"]["completed"])
-        self.assertIn("compliance", body["result"]["workers"]["completed"])
+
+        # §4.2[2]: with no company profile and no declared trade structure,
+        # neither knowledge worker is in the plan — and each says what would
+        # put it there rather than leaving its section blank.
+        plan = body["result"]["execution_plan"]
+        self.assertEqual(["exposure", "market_scenario"], plan["planned"])
+        skipped = body["result"]["workers"]["skipped"]
+        self.assertIn("기업규모", skipped["support"])
+        self.assertIn("신고 불필요로 판단하지 않습니다", skipped["compliance"])
 
         # Fail-closed, and the reason reaches the caller. Which reason applies
         # depends on how old the committed snapshot is on the day this runs, so

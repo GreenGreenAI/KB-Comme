@@ -14,16 +14,27 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from tradeflow.contracts.decision_packet import DecisionPacket
+from tradeflow.contracts.evidence import EvidenceDescriptor
 from tradeflow.contracts.response import project_cashflow_analysis
-from tradeflow.domain.enums import Freshness
+from tradeflow.domain.enums import EvidenceRole, Freshness
 from tradeflow.domain.models import HedgeMeasure, TradeProgram
 from tradeflow.domain.snapshot import FreshnessPolicy, SnapshotRef
 from tradeflow.domain.snapshot_file import latest_snapshot_path, read_snapshot
-from tradeflow.knowledge.facts import FactAssembler, FactCatalog
+from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
 from tradeflow.knowledge.repository import KnowledgeRepository
+from tradeflow.agent.routing import (
+    COMPLIANCE,
+    derive_structure,
+    EXPOSURE,
+    HEDGE,
+    MARKET,
+    SUPPORT,
+    ExecutionPlan,
+    plan_execution,
+)
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 from tradeflow.runtime.provenance import (
     CalculationVersions,
@@ -36,6 +47,7 @@ from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
+from tradeflow.tools.intent import read_intent
 from tradeflow.tools.source_freshness import load_source_verification
 from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
 
@@ -95,6 +107,7 @@ class Analysis:
     required_inputs: tuple[str, ...]
     review_reasons: tuple[str, ...]
     versions: CalculationVersions
+    plan: ExecutionPlan
 
     @property
     def review_required(self) -> bool:
@@ -119,20 +132,35 @@ def _business_days_until(target, as_of) -> int:
 KNOWLEDGE_ROOT = REPO_ROOT / "knowledge"
 SOURCE_REGISTRY = KNOWLEDGE_ROOT / "source_registry.json"
 FACT_CATALOG = KNOWLEDGE_ROOT / "fact_catalog.json"
-RULEPACKS = (
-    KNOWLEDGE_ROOT / "rulepacks" / "ksure_mvp_candidates.json",
-    KNOWLEDGE_ROOT / "rulepacks" / "fx_compliance_mvp.json",
-)
+SUPPORT_PACK = KNOWLEDGE_ROOT / "rulepacks" / "ksure_mvp_candidates.json"
+COMPLIANCE_PACK = KNOWLEDGE_ROOT / "rulepacks" / "fx_compliance_mvp.json"
+RULEPACKS = (SUPPORT_PACK, COMPLIANCE_PACK)
+
+#: Which rulepack answers which worker. Routing (§4.2[2]) is implemented by
+#: loading only the packs the plan selected, so an unplanned worker's rules are
+#: never evaluated — as opposed to evaluated and then filtered out of the
+#: answer, which would leave them in the packet and in its identity.
+PACK_FOR_WORKER = {SUPPORT: SUPPORT_PACK, COMPLIANCE: COMPLIANCE_PACK}
 
 
-@lru_cache(maxsize=1)
-def _default_knowledge_pipeline() -> TradeFlowPipeline:
-    """Load the shared Role A rulepacks once for the web process."""
-    knowledge = KnowledgeRepository.from_json_files(SOURCE_REGISTRY, RULEPACKS)
+@lru_cache(maxsize=4)
+def _knowledge_pipeline(packs: tuple[Path, ...]) -> TradeFlowPipeline:
+    """Load a pipeline over exactly these rulepacks.
+
+    Cached per pack set: a web process sees at most the four combinations the
+    routing table can produce, and rebuilding the repository per request would
+    re-read and re-parse every rule file.
+    """
+    knowledge = KnowledgeRepository.from_json_files(SOURCE_REGISTRY, packs)
     return TradeFlowPipeline(
         knowledge,
         fact_assembler=FactAssembler(FactCatalog.from_json(FACT_CATALOG)),
     )
+
+
+def _default_knowledge_pipeline() -> TradeFlowPipeline:
+    """Every rulepack — the shape callers outside routing still expect."""
+    return _knowledge_pipeline(RULEPACKS)
 
 
 @lru_cache(maxsize=1)
@@ -150,6 +178,47 @@ def _default_knowledge_files() -> tuple[InputFile, ...]:
     )
 
 
+
+STRUCTURE_EVIDENCE_ID = "TRADEFLOW_DERIVED_STRUCTURE"
+
+
+def _structure_assertions(
+    program: TradeProgram,
+    structure: Mapping[str, Any],
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the structure facts this module computed, or attest nothing.
+
+    The rules refuse a fact without evidence of the role the catalog demands,
+    which is the point: a day count that arrived from nowhere would be
+    indistinguishable from one the user stated. These came from a subtraction
+    over dates the user gave, so the evidence says `calculation` and names this
+    module — and `generated_at` is passed explicitly so re-running the same
+    analysis produces the same packet identity (ADR-0007).
+    """
+    empty = {case.case_id: () for case in program.cases}
+    if not structure:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        STRUCTURE_EVIDENCE_ID,
+        EvidenceRole.CALCULATION,
+        case_ids,
+        generated_at=as_of,
+        payload={"facts": dict(structure)},
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (STRUCTURE_EVIDENCE_ID,))
+            for field, value in structure.items()
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def analyze(
     program: TradeProgram,
     *,
@@ -158,6 +227,7 @@ def analyze(
     profit_floor: Decimal | None = None,
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
+    utterance: str | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -169,7 +239,25 @@ def analyze(
     report.completed.append("exposure")
     cashflow = project_cashflow_analysis(exposures)
 
-    pipeline = knowledge_pipeline or _default_knowledge_pipeline()
+    # What the trades themselves say about their structure. The four facts
+    # only the company can state (netting and friends) are not here; see
+    # routing.DECLARED_STRUCTURE_FIELDS.
+    structure = derive_structure(program)
+
+    # §4.2[2]: decide the call plan before calling anything. Exposure has
+    # already run because every other decision reads its result.
+    plan = plan_execution(
+        program,
+        exposures,
+        company_facts=program.company.facts(),
+        trade_structure=structure,
+        baseline_profit=baseline_profit,
+        profit_floor=profit_floor,
+        has_usable_measure=bool(usable_measures(hedge_measures)),
+        intent=read_intent(utterance),
+    )
+    report.skipped.update(plan.skipped())
+
     verification = _isolated(
         report,
         "source_verification",
@@ -185,23 +273,43 @@ def analyze(
             "공식 출처 검증 기록을 읽지 못해 규칙 판정을 자동으로 확정할 수 "
             "없습니다"
         )
-    decision_packet = _isolated(
-        report,
-        "knowledge",
-        lambda: pipeline.analyze_case_packet(
-            program,
-            assertions_by_case={case.case_id: () for case in program.cases},
-            evidence=(),
-            source_freshness=source_freshness,
-        ),
+
+    knowledge_workers = tuple(
+        name for name in (SUPPORT, COMPLIANCE) if plan.runs(name)
     )
-    if decision_packet is not None:
-        report.completed.extend(("support", "compliance"))
-        review.extend(decision_packet.review_reasons)
-    else:
-        review.append(
-            "지원제도와 신고의무 규칙을 실행하지 못해 전문가 검토가 필요합니다"
+    decision_packet = None
+    if knowledge_workers:
+        # Only the planned packs are loaded, so an unplanned worker's rules do
+        # not reach the evaluation at all.
+        pipeline = knowledge_pipeline or _knowledge_pipeline(
+            tuple(PACK_FOR_WORKER[name] for name in knowledge_workers)
         )
+        assertions, structure_evidence = _structure_assertions(
+            program, structure, as_of=as_of or datetime.now(UTC)
+        )
+        decision_packet = _isolated(
+            report,
+            "knowledge",
+            lambda: pipeline.analyze_case_packet(
+                program,
+                assertions_by_case=assertions,
+                evidence=structure_evidence,
+                source_freshness=source_freshness,
+            ),
+        )
+        if decision_packet is not None:
+            report.completed.extend(knowledge_workers)
+            review.extend(decision_packet.review_reasons)
+        else:
+            review.append(
+                "지원제도와 신고의무 규칙을 실행하지 못해 전문가 검토가 "
+                "필요합니다"
+            )
+    else:
+        # Not run is not "nothing to report". §5.5's filing duties arise only
+        # from trade structures the user has to tell us about, and staying
+        # quiet about that would read as a clearance.
+        review.append(plan.skipped()[COMPLIANCE])
 
     horizon = max(
         (
@@ -251,20 +359,15 @@ def analyze(
             "헤지 수단의 이용 가능성이 확정되지 않아 손익 계산에서 제외했습니다"
         )
 
-    if net_exposure == 0:
-        report.skipped["hedge"] = "순노출이 0이어서 헤지가 필요하지 않습니다"
-    elif band is None:
+    if band is None:
+        # Whatever the plan was waiting for, no input the user can type
+        # produces a hedge ratio without a scenario band. Asking for profit
+        # here would send them off to do work that changes nothing, so the
+        # market failure is the reason reported and nothing is requested.
         report.skipped["hedge"] = "환율 시나리오가 없어 헤지비율을 계산할 수 없습니다"
-    elif not available_measures:
-        report.skipped["hedge"] = (
-            "검증된 이용 가능 헤지 수단과 가격 정보가 없어 계산하지 않았습니다"
-        )
-    elif baseline_profit is None:
-        report.skipped["hedge"] = "기준 영업이익을 입력하면 헤지비율을 계산할 수 있습니다"
-        required_inputs.append("baseline_profit")
-    elif profit_floor is None:
-        report.skipped["hedge"] = "목표 손익 하한을 입력하면 헤지비율을 계산할 수 있습니다"
-        required_inputs.append("profit_floor")
+    elif not plan.runs(HEDGE):
+        # The plan already recorded the reason and what it is waiting for.
+        required_inputs.extend(plan.requires())
     else:
         measure = available_measures[0]
         hedge = _isolated(
@@ -304,6 +407,7 @@ def analyze(
         report=report,
         required_inputs=tuple(required_inputs),
         review_reasons=tuple(dict.fromkeys(review)),
+        plan=plan,
         versions=CalculationVersions(
             formula_version=FORMULA_VERSION,
             packet_schema_version=(

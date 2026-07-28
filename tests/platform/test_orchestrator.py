@@ -32,9 +32,14 @@ CASES = [
 ]
 
 
-def _program():
+def _program(**profile):
+    """A program with no company profile and no declared trade structure.
+
+    That is the ordinary starting point, and §4.2[2] routes the support and
+    compliance workers out of the plan until one of them is supplied.
+    """
     return intake(
-        CASES, opening_balances={"USD": "20000"}, as_of=AS_OF
+        CASES, opening_balances={"USD": "20000"}, as_of=AS_OF, **profile
     ).program
 
 
@@ -143,9 +148,9 @@ class RoutingTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = _snapshot_root(Path(self._tmp.name))
 
-    def test_all_available_workers_run_on_a_complete_program(self) -> None:
+    def test_every_planned_worker_runs_on_a_complete_program(self) -> None:
         analysis = analyze(
-            _program(),
+            _program(is_sme=True),
             snapshot_root=self.root,
             baseline_profit=Decimal("6000000"),
             profit_floor=Decimal("4000000"),
@@ -153,10 +158,58 @@ class RoutingTests(unittest.TestCase):
             as_of=NOW,
         )
 
-        self.assertEqual(
-            ["exposure", "support", "compliance", "market_scenario", "hedge"],
-            analysis.report.completed,
+        self.assertIn("exposure", analysis.report.completed)
+        self.assertIn("support", analysis.report.completed)
+        self.assertIn("market_scenario", analysis.report.completed)
+        self.assertIn("hedge", analysis.report.completed)
+
+    def test_compliance_is_not_called_on_an_undeclared_structure(self) -> None:
+        """§4.2[2] routes it in only when the trade structure calls for it.
+
+        Its nineteen rules are each about netting, third-party payment, a
+        mutual account or an over-long period. Running them on a plain T/T
+        trade returned nineteen INSUFFICIENT_INFORMATION — the same absence of
+        information as one sentence, spread until nobody reads it.
+        """
+        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+
+        self.assertNotIn("compliance", analysis.report.completed)
+        self.assertFalse(analysis.plan.runs("compliance"))
+
+    def test_not_calling_compliance_never_reads_as_a_clearance(self) -> None:
+        """The one conclusion this product must not imply by omission."""
+        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+        reason = analysis.report.skipped["compliance"]
+
+        self.assertIn("알려주세요", reason)
+        self.assertIn("신고 불필요로 판단하지 않습니다", reason)
+        self.assertTrue(
+            any("compliance" in item for item in analysis.report.missing_information())
         )
+
+    def test_a_period_the_dates_imply_puts_compliance_back_in(self) -> None:
+        """§5.5's period tests follow from dates intake already collected."""
+        program = intake(
+            [
+                {
+                    "direction": "수출",
+                    "amount": "150000",
+                    "expected_payment_date": "2026-08-25",
+                    "expected_shipment_date": "2028-03-01",
+                }
+            ],
+            as_of=AS_OF,
+        ).program
+
+        analysis = analyze(program, snapshot_root=self.root, as_of=NOW)
+
+        self.assertIn("compliance", analysis.report.completed)
+        matched = [
+            item
+            for item in analysis.decision_packet.decisions
+            if "days_before_shipment" in " ".join(item.reasons)
+        ]
+        self.assertTrue(matched, "derived day count did not reach the rules")
 
     def test_hedge_needs_a_baseline_profit_and_says_so(self) -> None:
         analysis = analyze(
@@ -182,17 +235,24 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(("profit_floor",), analysis.required_inputs)
         self.assertIn("손익 하한", analysis.report.skipped["hedge"])
 
-    def test_role_a_workers_return_a_decision_packet(self) -> None:
-        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+    def test_a_company_profile_puts_the_support_worker_in_the_plan(self) -> None:
+        analysis = analyze(
+            _program(is_sme=True), snapshot_root=self.root, as_of=NOW
+        )
 
         self.assertIn("support", analysis.report.completed)
-        self.assertIn("compliance", analysis.report.completed)
         self.assertIsNotNone(analysis.decision_packet)
         self.assertTrue(analysis.review_required)
 
+    def test_without_a_profile_the_support_worker_states_what_it_needs(self) -> None:
+        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+
+        self.assertNotIn("support", analysis.report.completed)
+        self.assertIn("기업규모", analysis.report.skipped["support"])
+
     def test_hedge_is_not_fabricated_without_verified_availability(self) -> None:
         analysis = analyze(
-            _program(),
+            _program(is_sme=True),
             snapshot_root=self.root,
             baseline_profit=Decimal("6000000"),
             profit_floor=Decimal("4000000"),
@@ -203,7 +263,9 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("검증된 이용 가능", analysis.report.skipped["hedge"])
 
     def test_response_reports_the_snapshot_it_used(self) -> None:
-        analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)
+        analysis = analyze(
+            _program(is_sme=True), snapshot_root=self.root, as_of=NOW
+        )
         response = build_response(analysis)
 
         self.assertEqual(
