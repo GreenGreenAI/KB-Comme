@@ -1,9 +1,9 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
-import { analyze } from "./api.js";
+import { analyze, health } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -18,6 +18,20 @@ export default function App() {
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
   const threadRef = useRef(null);
+  const [asOf, setAsOf] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    health()
+      .then((info) => {
+        const versions = info.fx_snapshots ?? [];
+        if (alive && versions.length) setAsOf(versions[versions.length - 1]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   const stick = useRef(true);
 
   // Remember, before the new turn paints, whether the reader was at the
@@ -131,7 +145,7 @@ export default function App() {
             <Thread turns={turns} busy={busy} threadRef={threadRef} />
             {/* One input surface. What the agent is waiting on is the top row
                 of the box the user types into, not a second box above it. */}
-            <Composer onSend={(text) => send(text)} busy={busy}>
+            <Composer onSend={(text) => send(text)} busy={busy} asOf={asOf}>
               {!busy && (
                 <AskBar
                   pending={pending}
@@ -160,25 +174,38 @@ function stripEmpty(object) {
   );
 }
 
-function Composer({ onSend, busy, children }) {
+function Composer({ onSend, busy, children, asOf }) {
   const [text, setText] = useState("");
+  const field = useRef(null);
+
+  // Grow with the text up to a ceiling, then scroll inside. A fixed one-line
+  // box hides what the user already typed; an unbounded one pushes the
+  // conversation off screen.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+  }, [text]);
+
+  const ready = text.trim().length > 0 && !busy;
 
   function submit() {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!ready) return;
     setText("");
-    onSend(trimmed);
+    onSend(text.trim());
   }
 
   return (
     <div className="composer">
       <div className="composer-box">
         {children}
-        <div className="composer-row">
-          <textarea
+        <textarea
+          ref={field}
           rows="1"
           value={text}
-          placeholder="예: 8월 25일에 수입대금 6만 달러도 나가요"
+          placeholder="거래를 설명하거나 물어보세요"
+          aria-label="메시지"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -187,20 +214,31 @@ function Composer({ onSend, busy, children }) {
             }
           }}
         />
+        {/* What this session is computing against, and how to send. Both are
+            things the user would otherwise have to remember. */}
+        <div className="composer-foot">
+          <span className="ctx">
+            <b>USD</b>
+            {asOf ? ` · ECOS ${asOf}` : ""}
+          </span>
+          {/* Words, not glyphs. ⏎ and ⇧ are missing from enough system fonts
+              to render as tofu, and a hint nobody can read is worse than one
+              that takes two more characters. */}
+          <span className="keys">
+            <kbd>Enter</kbd> 전송
+            <kbd>Shift + Enter</kbd> 줄바꿈
+          </span>
           <button
             className="send"
             type="button"
             onClick={submit}
-            disabled={busy}
+            disabled={!ready}
             aria-label="보내기"
           >
             ↑
           </button>
         </div>
       </div>
-      <p className="composer-hint">
-        숫자 계산과 규정 판정은 결정론적 코드가 수행합니다.
-      </p>
     </div>
   );
 }
