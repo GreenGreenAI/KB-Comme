@@ -129,23 +129,24 @@ export default function App() {
         <div className={`view work ${view === "entry" ? "away" : ""}`}>
           <section className="chat">
             <Thread turns={turns} busy={busy} threadRef={threadRef} />
-            {/* What the agent is waiting on sits next to where the user
-                types, not back in the message that asked for it. */}
-            {!busy && (
-              <AskBar
-                pending={pending}
-                requiredInputs={
-                  result?.hedge_analysis
-                    ? []
-                    : result?.required_inputs?.hedge ?? []
-                }
-                onSlot={(patch) => send(null, patch)}
-                onPlace={(utterance, placement) =>
-                  send(utterance, {}, placement)
-                }
-              />
-            )}
-            <Composer onSend={(text) => send(text)} busy={busy} />
+            {/* One input surface. What the agent is waiting on is the top row
+                of the box the user types into, not a second box above it. */}
+            <Composer onSend={(text) => send(text)} busy={busy}>
+              {!busy && (
+                <AskBar
+                  pending={pending}
+                  requiredInputs={
+                    result?.hedge_analysis
+                      ? []
+                      : result?.required_inputs?.hedge ?? []
+                  }
+                  onSlot={(patch) => send(null, patch)}
+                  onPlace={(utterance, placement) =>
+                    send(utterance, {}, placement)
+                  }
+                />
+              )}
+            </Composer>
           </section>
         </div>
       </div>
@@ -159,7 +160,7 @@ function stripEmpty(object) {
   );
 }
 
-function Composer({ onSend, busy }) {
+function Composer({ onSend, busy, children }) {
   const [text, setText] = useState("");
 
   function submit() {
@@ -172,7 +173,9 @@ function Composer({ onSend, busy }) {
   return (
     <div className="composer">
       <div className="composer-box">
-        <textarea
+        {children}
+        <div className="composer-row">
+          <textarea
           rows="1"
           value={text}
           placeholder="예: 8월 25일에 수입대금 6만 달러도 나가요"
@@ -184,15 +187,16 @@ function Composer({ onSend, busy }) {
             }
           }}
         />
-        <button
-          className="send"
-          type="button"
-          onClick={submit}
-          disabled={busy}
-          aria-label="보내기"
-        >
-          ↑
-        </button>
+          <button
+            className="send"
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            aria-label="보내기"
+          >
+            ↑
+          </button>
+        </div>
       </div>
       <p className="composer-hint">
         숫자 계산과 규정 판정은 결정론적 코드가 수행합니다.
