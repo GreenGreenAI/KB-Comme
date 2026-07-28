@@ -284,7 +284,17 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
 
       {shown > words && (
-        <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
+        first ? (
+          <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
+        ) : (
+          <ResultUpdate
+            previous={previous}
+            result={result}
+            order={order}
+            shown={shown - words}
+            arrive={arrive}
+          />
+        )
       )}
 
       {/* Asked once, and only in words. The fields live in the bar above the
@@ -440,6 +450,116 @@ function Written({ segments, shown, settled }) {
   return <p className={settled ? "written" : "written writing"}>{out}</p>;
 }
 
+const CHANGE_METRICS = [
+  {
+    key: "net-exposure",
+    label: "순노출",
+    read: (result) => result.cashflow_analysis?.net_exposure?.[0]?.amount,
+    format: (value) => `${Number(value) > 0 ? "+" : ""}${won(value)} USD`,
+  },
+  {
+    key: "funding-gap",
+    label: "자금 공백",
+    read: (result) => result.cashflow_analysis?.funding_gap?.[0]?.peak_amount,
+    format: (value) => `${won(value)} USD`,
+  },
+  {
+    key: "natural-hedge",
+    label: "자연헤지",
+    read: (result) => result.cashflow_analysis?.natural_hedge_amount?.[0]?.amount,
+    format: (value) => `${won(value)} USD`,
+  },
+  {
+    key: "adverse-rate",
+    label: "불리한 환율",
+    read: (result) => result.market_scenario?.adverse_rate,
+    format: (value) => `${won(value)}원`,
+  },
+  {
+    key: "hedge-ratio",
+    label: "권장 헤지비율",
+    read: (result) => result.hedge_analysis?.optimal_ratio,
+    format: (value) => pct(value),
+  },
+  {
+    key: "trade-count",
+    label: "분석 거래",
+    read: (result) => result.trade_timeline?.length ?? 0,
+    format: (value) => `${value}건`,
+  },
+  {
+    key: "support-count",
+    label: "지원제도 후보",
+    read: (result) => result.support_candidates?.length ?? 0,
+    format: (value) => `${value}건`,
+  },
+  {
+    key: "filing-count",
+    label: "신고 검토사항",
+    read: (result) => result.filing_obligations?.length ?? 0,
+    format: (value) => `${value}건`,
+  },
+];
+
+function comparable(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : String(value);
+}
+
+export function resultChanges(previous, result) {
+  if (!previous) return [];
+  const changes = [];
+  for (const metric of CHANGE_METRICS) {
+    const before = metric.read(previous);
+    const after = metric.read(result);
+    if (comparable(before) === comparable(after)) continue;
+    changes.push({
+      key: metric.key,
+      label: metric.label,
+      before: before === null || before === undefined ? "미산출" : metric.format(before),
+      after: after === null || after === undefined ? "미산출" : metric.format(after),
+    });
+  }
+  return changes;
+}
+
+export function ResultChangeSummary({ previous, result }) {
+  const changes = resultChanges(previous, result);
+  return (
+    <section className="change-summary" aria-label="변경 요약">
+      <h3>이번 분석에서 달라진 값</h3>
+      {changes.length > 0 ? (
+        <dl>
+          {changes.map((change) => (
+            <div key={change.key}>
+              <dt>{change.label}</dt>
+              <dd>
+                <span>{change.before}</span>
+                <span aria-hidden="true">→</span>
+                <strong>{change.after}</strong>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>주요 계산값은 이전 분석과 같습니다.</p>
+      )}
+    </section>
+  );
+}
+
+export function ResultUpdate({ previous, result, order, shown, arrive = "" }) {
+  return (
+    <div className={`result-update${arrive}`}>
+      <ResultChangeSummary previous={previous} result={result} />
+      <details className="full-result">
+        <summary>전체 결과 보기</summary>
+        <Answer result={result} order={order} shown={shown} arrive="" />
+      </details>
+    </div>
+  );
+}
 
 function Answer({ result, order, shown, arrive }) {
   // The card arrives with its first figures, not before them. Drawing the grey

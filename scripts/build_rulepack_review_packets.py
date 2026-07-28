@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from tradeflow.domain.snapshot_file import content_hash
+from tradeflow.knowledge.validation import rulepack_review_hash
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,7 +57,7 @@ def build_packet(pack: dict, suite: dict) -> dict:
         "packet_type": "independent_domain_review_request",
         "pack_id": pack["pack_id"],
         "as_of": pack["as_of"],
-        "rulepack_hash": content_hash(pack),
+        "rulepack_hash": rulepack_review_hash(pack),
         "validation_suite_hash": content_hash(suite),
         "requested_decisions": ["approved", "rejected", "changes_requested"],
         "reviewer_requirements": {

@@ -1,13 +1,13 @@
 ---
-status: proposed
+status: accepted
 owner: knowledge-domain
 reviewers: platform-runtime
-last-reviewed: 2026-07-27
+last-reviewed: 2026-07-29
 ---
 
 # ADR-0019: 규칙팩 승격 게이트와 전문가 검토 정책 분리
 
-- 상태: 제안
+- 상태: 승인
 - 날짜: 2026-07-27
 
 ## 배경
@@ -42,10 +42,15 @@ last-reviewed: 2026-07-27
 - validation suite는 각 규칙에 대해 일치, 명시적 비일치, 정보 누락을 모두 요구한다.
 - 금액 임계값은 JSON 부동소수점이 아니라 decimal 문자열로 고정한다.
 - 승인 manifest에는 지식·도메인, 플랫폼·런타임, 도메인 전문가 역할이 모두 필요하다.
-- 승인에는 reviewer, timezone이 있는 시각, Git commit, 규칙팩과 validation suite의
-  canonical SHA-256을 기록한다. 승인 후 자산이 바뀌면 승인은 stale로 거부한다.
+- 승인에는 reviewer, timezone이 있는 시각, Git commit, 규칙팩의 semantic SHA-256과
+  validation suite의 canonical SHA-256을 기록한다. semantic hash는 승인 대상인 조건,
+  절차, 출처와 결과를 포함하지만 승격 시에만 바뀌는 최상위 `status`와 규칙별
+  `production_ready`는 제외한다. 승인 후 검토 대상 자산이 바뀌면 승인은 stale로
+  거부한다.
 - 모든 승인이 완료되기 전에 `status=active` 또는 `production_ready=true`로 바뀌면
   CI가 실패한다.
+- 세 역할 승인 후 `python scripts/promote_rulepacks.py PACK_ID`만이 상태와 모든
+  `production_ready` 값을 원자적으로 함께 변경한다. 부분 승격은 허용하지 않는다.
 
 ## 결과
 
@@ -58,5 +63,7 @@ golden case 차이로 드러나며, 승인받은 파일이 바뀌면 재검토�
 - 모든 규칙의 true/false/missing 커버리지 검사
 - K-SURE 730/731일, 외국환 5천·1만·10만달러 및 365/366일 경계 사례
 - 승인 메타데이터·artifact hash 불변식 테스트
+- 승격 메타데이터 변경 전후 semantic hash 불변식 테스트
 - 승인 없는 production flag를 거부하는 회귀 테스트
+- 세 역할 승인 완료 전 승격 명령을 거부하는 회귀 테스트
 - `scripts/check_rulepacks.py`를 로컬 check와 CI에서 실행

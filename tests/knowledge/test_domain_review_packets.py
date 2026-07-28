@@ -3,6 +3,7 @@ import unittest
 
 from scripts.build_rulepack_review_packets import PROJECT_ROOT, build_packet
 from tradeflow.domain.snapshot_file import content_hash
+from tradeflow.knowledge.validation import rulepack_review_hash
 
 
 class DomainReviewPacketTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class DomainReviewPacketTests(unittest.TestCase):
         )
         packet = build_packet(pack, suite)
 
-        self.assertEqual(content_hash(pack), packet["rulepack_hash"])
+        self.assertEqual(rulepack_review_hash(pack), packet["rulepack_hash"])
         self.assertEqual(content_hash(suite), packet["validation_suite_hash"])
         self.assertEqual(
             {rule["rule_id"] for rule in pack["rules"]},

@@ -3,7 +3,7 @@
   "packet_type": "independent_domain_review_request",
   "pack_id": "FX_COMPLIANCE_MVP",
   "as_of": "2026-07-27",
-  "rulepack_hash": "sha256:40dd445bdf41be5a4925186114f46954ee3fa31b07eeb52809724016b3bbdf71",
+  "rulepack_hash": "sha256:26c7f48facef83b783cff0616f7c678e667f2b8ad008d5b77ab3956aef65d120",
   "validation_suite_hash": "sha256:93ac34aee41795b764e785334f729ca7e9250f10f8ac89eb59fed7959cdba3cc",
   "requested_decisions": [
     "approved",

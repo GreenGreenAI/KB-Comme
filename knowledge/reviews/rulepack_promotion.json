@@ -17,10 +17,18 @@
           "reviewer": "kyne0127",
           "reviewed_at": "2026-07-28T15:30:00+09:00",
           "commit_sha": "b4d88cb4c016f5d031c3ffba78d803c2df4f860b",
-          "rulepack_hash": "sha256:4f83ddcbe652e144b9352afd9d4efe5e2a379b336b395f01660bf015d296598a",
+          "rulepack_hash": "sha256:c20f9f2d8ef993c535983d6da63c3a4695959c2ff9f2680a82d904fe48e2653f",
           "validation_suite_hash": "sha256:f4573f70437cbe495e00dc40cd730518ee88f23e70525bc7256e617d23e9c8cc"
         },
-        {"role": "platform_runtime", "status": "pending"},
+        {
+          "role": "platform_runtime",
+          "status": "approved",
+          "reviewer": "Codex Role A Runtime Review",
+          "reviewed_at": "2026-07-29T03:10:26+09:00",
+          "commit_sha": "09e40979598839ac88c0cd02d01be92c3cefa90e",
+          "rulepack_hash": "sha256:c20f9f2d8ef993c535983d6da63c3a4695959c2ff9f2680a82d904fe48e2653f",
+          "validation_suite_hash": "sha256:f4573f70437cbe495e00dc40cd730518ee88f23e70525bc7256e617d23e9c8cc"
+        },
         {"role": "domain_expert", "status": "pending"}
       ]
     },
@@ -36,10 +44,18 @@
           "reviewer": "kyne0127",
           "reviewed_at": "2026-07-28T15:30:00+09:00",
           "commit_sha": "b4d88cb4c016f5d031c3ffba78d803c2df4f860b",
-          "rulepack_hash": "sha256:40dd445bdf41be5a4925186114f46954ee3fa31b07eeb52809724016b3bbdf71",
+          "rulepack_hash": "sha256:26c7f48facef83b783cff0616f7c678e667f2b8ad008d5b77ab3956aef65d120",
           "validation_suite_hash": "sha256:93ac34aee41795b764e785334f729ca7e9250f10f8ac89eb59fed7959cdba3cc"
         },
-        {"role": "platform_runtime", "status": "pending"},
+        {
+          "role": "platform_runtime",
+          "status": "approved",
+          "reviewer": "Codex Role A Runtime Review",
+          "reviewed_at": "2026-07-29T03:10:26+09:00",
+          "commit_sha": "09e40979598839ac88c0cd02d01be92c3cefa90e",
+          "rulepack_hash": "sha256:26c7f48facef83b783cff0616f7c678e667f2b8ad008d5b77ab3956aef65d120",
+          "validation_suite_hash": "sha256:93ac34aee41795b764e785334f729ca7e9250f10f8ac89eb59fed7959cdba3cc"
+        },
         {"role": "domain_expert", "status": "pending"}
       ]
     }

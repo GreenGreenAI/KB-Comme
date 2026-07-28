@@ -347,7 +347,7 @@ def audit_rulepack_readiness(
         if approval.status == "rejected":
             blockers.append(f"rejected approval: {role}")
             continue
-        if approval.rulepack_hash != content_hash(raw_pack):
+        if approval.rulepack_hash != rulepack_review_hash(raw_pack):
             issues.append(f"{spec.pack_id}: {role} approval rulepack hash is stale")
         if approval.validation_suite_hash != content_hash(raw_suite):
             issues.append(f"{spec.pack_id}: {role} approval validation hash is stale")
@@ -598,3 +598,28 @@ def _project_path(project_root: Path, value: str) -> Path:
     if not path.is_relative_to(root):
         raise ValueError(f"path escapes project root: {value}")
     return path
+
+
+def rulepack_review_hash(raw_pack: Mapping[str, Any]) -> str:
+    """Hash decision content while excluding promotion-state metadata.
+
+    Reviewers approve conditions, outcomes, sources and procedures. Switching
+    `draft` to `active` and every `production_ready` flag together is the
+    consequence of those approvals, so including those fields in the reviewed
+    hash would make the act of promotion invalidate the approvals that permit
+    it.
+    """
+    reviewable = {
+        key: value
+        for key, value in raw_pack.items()
+        if key != "status"
+    }
+    reviewable["rules"] = [
+        {
+            key: value
+            for key, value in rule.items()
+            if key != "production_ready"
+        }
+        for rule in raw_pack.get("rules", [])
+    ]
+    return content_hash(reviewable)

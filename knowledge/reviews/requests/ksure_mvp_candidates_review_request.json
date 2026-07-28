@@ -3,7 +3,7 @@
   "packet_type": "independent_domain_review_request",
   "pack_id": "KSURE_MVP_CANDIDATES",
   "as_of": "2026-07-27",
-  "rulepack_hash": "sha256:4f83ddcbe652e144b9352afd9d4efe5e2a379b336b395f01660bf015d296598a",
+  "rulepack_hash": "sha256:c20f9f2d8ef993c535983d6da63c3a4695959c2ff9f2680a82d904fe48e2653f",
   "validation_suite_hash": "sha256:f4573f70437cbe495e00dc40cd730518ee88f23e70525bc7256e617d23e9c8cc",
   "requested_decisions": [
     "approved",

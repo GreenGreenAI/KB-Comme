@@ -20,6 +20,7 @@ from tradeflow.knowledge.validation import (
     RuleValidationSuite,
     audit_rulepack_readiness,
     load_promotion_manifest,
+    rulepack_review_hash,
     validate_rule_suite,
 )
 
@@ -92,10 +93,7 @@ class RulepackPromotionGateTests(unittest.TestCase):
                 self.assertTrue(report.validation.passed, report.validation.issues)
                 self.assertFalse(report.integrity_issues)
                 self.assertFalse(report.ready)
-                self.assertIn(
-                    "pending approval: platform_runtime",
-                    report.blockers,
-                )
+                self.assertNotIn("pending approval: platform_runtime", report.blockers)
                 self.assertIn(
                     "pending approval: domain_expert",
                     report.blockers,
@@ -275,7 +273,7 @@ class RulepackPromotionGateTests(unittest.TestCase):
                     "2026-07-27T20:00:00+09:00"
                 ),
                 commit_sha="37e8b45",
-                rulepack_hash=content_hash(raw_pack),
+                rulepack_hash=rulepack_review_hash(raw_pack),
                 validation_suite_hash=content_hash(raw_suite),
                 reviewer_organization=(
                     "Independent Authority" if role == "domain_expert" else None

@@ -11,7 +11,10 @@ last-reviewed: 2026-07-28
 
 Tradeflow 작성자가 자신의 규칙을 `domain_expert`로 승인해서는 안 된다.
 `scripts/build_rulepack_review_packets.py`가 만드는 패킷은 규칙·golden case·경계값과
-각 원본의 canonical SHA-256을 한 묶음으로 고정한다.
+규칙팩의 semantic SHA-256과 validation suite의 canonical SHA-256을 한 묶음으로
+고정한다. semantic hash는 승격 메타데이터인 `status`와 `production_ready`만
+제외하므로, 검토자가 승인한 조건·절차·출처·결과가 승격 과정에서 바뀌지 않았음을
+확인할 수 있다.
 
 - `FX_COMPLIANCE_MVP`: 한국은행 외환심사팀에 조건, 예외, 신고기관, 신고시점,
   서류와 경계값을 질의한다.
@@ -23,6 +26,19 @@ Tradeflow 작성자가 자신의 규칙을 `domain_expert`로 승인해서는 �
   규칙이나 suite가 바뀌면 이전 답변은 자동으로 stale이다.
 - 답변 전까지 규칙은 `draft`, `production_ready=false`,
   `expert_confirmation_required`를 유지한다.
+
+독립 전문가 답변을 반영해 세 역할 승인이 모두 `approved`가 된 뒤에는 다음 명령으로
+규칙팩을 승격한다.
+
+```powershell
+python scripts/promote_rulepacks.py KSURE_MVP_CANDIDATES
+python scripts/promote_rulepacks.py FX_COMPLIANCE_MVP
+python scripts/check_rulepacks.py --require-ready
+```
+
+승격 명령은 승인 hash와 현재 자산을 다시 비교하고, 규칙팩 상태와 모든 규칙의
+`production_ready`를 한 번에 변경한다. 승인이 누락됐거나 검토 대상 내용이 바뀌면
+파일을 수정하지 않고 실패한다.
 
 공식 접점:
 

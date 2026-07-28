@@ -161,3 +161,35 @@ score or falls back automatically.
 The committed latest spot-proxy report is intentionally ineligible. Persistence
 of a blocked result proves the workflow and preserves diagnostics; it does not
 weaken the observed-forward-quote gate.
+
+## Post-promotion degradation monitoring
+
+Promotion is not permanent evidence that a model remains fit. Each scheduled
+validation run is compared with the approved champion baseline using identical
+window, horizon, step and quote basis. A mismatch in benchmark settings is not
+treated as performance—it is rejected as an incomparable run.
+
+The default drift policy raises a blocker for:
+
+- fewer than 100 current origins or any model failure;
+- absolute adverse-quantile calibration error above 0.03, or an increase above
+  0.01 from baseline;
+- profit-floor breach-rate increase above 0.01;
+- expected-shortfall or mean-quantile-loss increase above 10%;
+- hedge-ratio turnover increase above 0.05.
+
+Run the guard after producing a new like-for-like report:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/check_hedge_model_drift.py `
+  --baseline data/governance/approved_hedge_baseline.json `
+  --current data/governance/current_hedge_validation.json `
+  --output data/governance/current_hedge_drift.json `
+  --store data/governance/hedge_models.db
+```
+
+The command exits non-zero on degradation and records a content-addressed
+assessment bound to both report hashes. It does not silently switch models.
+Operations must stop automated champion rollout, investigate data/model changes
+and complete the normal three-role promotion workflow for any replacement.
