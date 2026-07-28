@@ -217,6 +217,62 @@ class ObservedForwardQuoteDataset:
 
 
 @dataclass(frozen=True)
+class ProviderIndicativeForwardQuote:
+    record_id: str
+    company_id: str
+    case_ids: tuple[str, ...]
+    buy_currency: str
+    sell_currency: str
+    fixed_side: str
+    amount: Decimal
+    client_buy_amount: Decimal
+    client_sell_amount: Decimal
+    client_rate: Decimal
+    core_rate: Decimal
+    mid_market_rate: Decimal | None
+    conversion_date: date
+    observed_at: datetime
+    evidence_content_hash: str
+
+
+@dataclass(frozen=True)
+class ProviderIndicativeForwardQuoteDataset:
+    dataset_id: str
+    tenant_id: str
+    provider_id: str
+    environment: str
+    retention_class: str
+    records: tuple[ProviderIndicativeForwardQuote, ...]
+
+    @property
+    def observed_at(self) -> datetime:
+        return max(record.observed_at for record in self.records)
+
+
+@dataclass(frozen=True)
+class ListedFxFutureDaily:
+    instrument_code: str
+    instrument_name: str
+    product_name: str
+    market_name: str
+    trading_date: date
+    close_price: Decimal | None
+    settlement_price: Decimal | None
+    spot_price: Decimal | None
+    volume: int
+    open_interest: int
+
+
+@dataclass(frozen=True)
+class ListedFxFutureDailyDataset:
+    dataset_id: str
+    venue: str
+    benchmark_class: str
+    observed_at: datetime
+    records: tuple[ListedFxFutureDaily, ...]
+
+
+@dataclass(frozen=True)
 class SnapshotDataset:
     ref: SnapshotRef
     value: (
@@ -227,6 +283,8 @@ class SnapshotDataset:
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
         | ObservedForwardQuoteDataset
+        | ProviderIndicativeForwardQuoteDataset
+        | ListedFxFutureDailyDataset
     )
 
 
@@ -1045,6 +1103,227 @@ def parse_observed_forward_quote_payload(
         dataset_id=dataset_id,
         tenant_id=tenant_id,
         retention_class="tenant_private_financial",
+        records=tuple(records),
+    )
+
+
+def parse_provider_indicative_forward_quote_payload(
+    payload: Any,
+) -> ProviderIndicativeForwardQuoteDataset:
+    """Validate non-executable provider quotes without promoting their basis."""
+    root_fields = {
+        "schema_version",
+        "dataset_id",
+        "tenant_id",
+        "provider_id",
+        "environment",
+        "retention_class",
+        "records",
+    }
+    if not isinstance(payload, Mapping) or set(payload) != root_fields:
+        raise DatasetContractError("provider quote payload fields are invalid")
+    if payload["schema_version"] != "1.0":
+        raise DatasetContractError("unsupported provider quote schema_version")
+    if payload["retention_class"] != "tenant_private_financial":
+        raise DatasetContractError("provider quote must be tenant private")
+    if payload["environment"] not in {"demo", "live"}:
+        raise DatasetContractError("provider quote environment is invalid")
+    records_raw = payload["records"]
+    if not isinstance(records_raw, list) or not records_raw:
+        raise DatasetContractError("provider quote records must be non-empty")
+    records: list[ProviderIndicativeForwardQuote] = []
+    seen: set[str] = set()
+    required = {
+        "record_id",
+        "company_id",
+        "case_ids",
+        "buy_currency",
+        "sell_currency",
+        "fixed_side",
+        "amount",
+        "client_buy_amount",
+        "client_sell_amount",
+        "client_rate",
+        "core_rate",
+        "mid_market_rate",
+        "conversion_date",
+        "observed_at",
+        "quote_basis",
+        "booking_required",
+        "evidence_content_hash",
+    }
+    for index, item in enumerate(records_raw):
+        prefix = f"provider quote records[{index}]"
+        if not isinstance(item, Mapping) or set(item) != required:
+            raise DatasetContractError(f"{prefix} fields are invalid")
+        record_id = _required_text(item, "record_id")
+        if record_id in seen:
+            raise DatasetContractError(f"duplicate provider quote: {record_id}")
+        seen.add(record_id)
+        if item["quote_basis"] != "provider_indicative_forward_quote":
+            raise DatasetContractError(f"{prefix} cannot claim executable quote basis")
+        if item["booking_required"] is not True:
+            raise DatasetContractError(f"{prefix} must require booking")
+        buy = _required_text(item, "buy_currency").upper()
+        sell = _required_text(item, "sell_currency").upper()
+        if not _CURRENCY.fullmatch(buy) or not _CURRENCY.fullmatch(sell) or buy == sell:
+            raise DatasetContractError(f"{prefix} currencies are invalid")
+        fixed_side = _required_text(item, "fixed_side")
+        if fixed_side not in {"buy", "sell"}:
+            raise DatasetContractError(f"{prefix}.fixed_side is invalid")
+        case_ids_raw = item["case_ids"]
+        if not isinstance(case_ids_raw, list) or not case_ids_raw:
+            raise DatasetContractError(f"{prefix}.case_ids must be non-empty")
+        case_ids = tuple(str(value).strip() for value in case_ids_raw)
+        if any(not value for value in case_ids) or len(set(case_ids)) != len(case_ids):
+            raise DatasetContractError(f"{prefix}.case_ids are invalid")
+        try:
+            conversion_date = date.fromisoformat(item["conversion_date"])
+        except (TypeError, ValueError):
+            raise DatasetContractError(f"{prefix}.conversion_date is invalid") from None
+        observed_at = _aware_datetime(item["observed_at"], f"{prefix}.observed_at")
+        if conversion_date <= observed_at.date():
+            raise DatasetContractError(f"{prefix} must have a future conversion date")
+        evidence_hash = _required_text(item, "evidence_content_hash")
+        if not _SHA256.fullmatch(evidence_hash):
+            raise DatasetContractError(f"{prefix}.evidence_content_hash is invalid")
+        mid = item["mid_market_rate"]
+        records.append(
+            ProviderIndicativeForwardQuote(
+                record_id=record_id,
+                company_id=_required_text(item, "company_id"),
+                case_ids=case_ids,
+                buy_currency=buy,
+                sell_currency=sell,
+                fixed_side=fixed_side,
+                amount=_decimal_string(item["amount"], f"{prefix}.amount", positive=True),
+                client_buy_amount=_decimal_string(
+                    item["client_buy_amount"],
+                    f"{prefix}.client_buy_amount",
+                    positive=True,
+                ),
+                client_sell_amount=_decimal_string(
+                    item["client_sell_amount"],
+                    f"{prefix}.client_sell_amount",
+                    positive=True,
+                ),
+                client_rate=_decimal_string(
+                    item["client_rate"], f"{prefix}.client_rate", positive=True
+                ),
+                core_rate=_decimal_string(
+                    item["core_rate"], f"{prefix}.core_rate", positive=True
+                ),
+                mid_market_rate=(
+                    None
+                    if mid is None
+                    else _decimal_string(mid, f"{prefix}.mid_market_rate", positive=True)
+                ),
+                conversion_date=conversion_date,
+                observed_at=observed_at,
+                evidence_content_hash=evidence_hash,
+            )
+        )
+    return ProviderIndicativeForwardQuoteDataset(
+        dataset_id=_required_text(payload, "dataset_id"),
+        tenant_id=_required_text(payload, "tenant_id"),
+        provider_id=_required_text(payload, "provider_id"),
+        environment=payload["environment"],
+        retention_class=payload["retention_class"],
+        records=tuple(records),
+    )
+
+
+def parse_listed_fx_futures_daily_payload(
+    payload: Any,
+) -> ListedFxFutureDailyDataset:
+    """Validate KRX listed USD futures as benchmark data, never OTC quotes."""
+    root_fields = {
+        "schema_version",
+        "dataset_id",
+        "venue",
+        "benchmark_class",
+        "observed_at",
+        "records",
+    }
+    if not isinstance(payload, Mapping) or set(payload) != root_fields:
+        raise DatasetContractError("listed FX futures payload fields are invalid")
+    if payload["schema_version"] != "1.0":
+        raise DatasetContractError("unsupported listed FX futures schema_version")
+    if payload["venue"] != "KRX" or payload["benchmark_class"] != "listed_fx_future":
+        raise DatasetContractError("listed FX futures cannot claim OTC quote basis")
+    observed_at = _aware_datetime(payload["observed_at"], "observed_at")
+    raw_records = payload["records"]
+    if not isinstance(raw_records, list) or not raw_records:
+        raise DatasetContractError("listed FX futures records must be non-empty")
+    records: list[ListedFxFutureDaily] = []
+    seen: set[str] = set()
+    required = {
+        "instrument_code",
+        "instrument_name",
+        "product_name",
+        "market_name",
+        "trading_date",
+        "close_price",
+        "settlement_price",
+        "spot_price",
+        "volume",
+        "open_interest",
+    }
+    for index, item in enumerate(raw_records):
+        prefix = f"listed FX futures records[{index}]"
+        if not isinstance(item, Mapping) or set(item) != required:
+            raise DatasetContractError(f"{prefix} fields are invalid")
+        code = _required_text(item, "instrument_code")
+        market = _required_text(item, "market_name")
+        identity = f"{code}:{market}"
+        if identity in seen:
+            raise DatasetContractError(f"duplicate listed future: {identity}")
+        seen.add(identity)
+        try:
+            trading_date = date.fromisoformat(item["trading_date"])
+        except (TypeError, ValueError):
+            raise DatasetContractError(f"{prefix}.trading_date is invalid") from None
+        if trading_date != observed_at.date():
+            raise DatasetContractError(f"{prefix}.trading_date differs from observation")
+
+        def optional_decimal(field: str) -> Decimal | None:
+            value = item[field]
+            return (
+                None
+                if value is None
+                else _decimal_string(value, f"{prefix}.{field}", positive=True)
+            )
+
+        volume = item["volume"]
+        open_interest = item["open_interest"]
+        if (
+            isinstance(volume, bool)
+            or not isinstance(volume, int)
+            or volume < 0
+            or isinstance(open_interest, bool)
+            or not isinstance(open_interest, int)
+            or open_interest < 0
+        ):
+            raise DatasetContractError(f"{prefix} quantities must be non-negative integers")
+        records.append(
+            ListedFxFutureDaily(
+                instrument_code=code,
+                instrument_name=_required_text(item, "instrument_name"),
+                product_name=_required_text(item, "product_name"),
+                market_name=market,
+                trading_date=trading_date,
+                close_price=optional_decimal("close_price"),
+                settlement_price=optional_decimal("settlement_price"),
+                spot_price=optional_decimal("spot_price"),
+                volume=volume,
+                open_interest=open_interest,
+            )
+        )
+    return ListedFxFutureDailyDataset(
+        dataset_id=_required_text(payload, "dataset_id"),
+        venue="KRX",
+        benchmark_class="listed_fx_future",
+        observed_at=observed_at,
         records=tuple(records),
     )
 

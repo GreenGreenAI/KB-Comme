@@ -42,6 +42,46 @@
         "FIX session endpoint, CompIDs and credentials"
       ],
       "production_eligible": false
+    },
+    {
+      "provider_id": "CURRENCYCLOUD_DEMO",
+      "product": "Currencycloud Demo Rates API",
+      "role": "authenticated_api_integration_validation",
+      "connection_state": "demo_credentials_required",
+      "supports": ["future_date_conversion_quote"],
+      "selected_scope": "Get Detailed Rates with a future conversion date",
+      "official_product_url": "https://developer.currencycloud.com/guides/getting-started/getting-started-with-the-api/",
+      "official_api_url": "https://devapi.currencycloud.com/v2/rates/detailed",
+      "official_fix_spec_url": null,
+      "normalizer": "tradeflow.integration.currencycloud.CurrencycloudDemoForwardQuoteAdapter",
+      "credential_storage": "local environment or tenant secret manager only",
+      "raw_data_storage": "tenant-private encrypted storage only",
+      "required_external_steps": [
+        "register for a Currencycloud Demo API key",
+        "configure demo login ID and API key",
+        "verify requested currency pair and future conversion-date support"
+      ],
+      "production_eligible": false
+    },
+    {
+      "provider_id": "KRX_USD_FUTURES",
+      "product": "KRX Futures Daily Trading Open API",
+      "role": "listed_fx_futures_benchmark",
+      "connection_state": "sample_transport_verified_production_key_required",
+      "supports": ["daily_usd_futures_market_data"],
+      "selected_scope": "USD futures daily close, settlement, volume and open interest",
+      "official_product_url": "https://open.krx.co.kr/contents/OPN/01/01040601/OPN01040601.jsp",
+      "official_api_url": "https://data-dbg.krx.co.kr/svc/apis/drv/fut_bydd_trd",
+      "official_fix_spec_url": null,
+      "normalizer": "tradeflow.integration.krx_futures.KrxUsdFuturesAdapter",
+      "credential_storage": "local environment or secret manager only",
+      "raw_data_storage": "runtime snapshot storage",
+      "required_external_steps": [
+        "KRX Data Marketplace membership and API authentication key",
+        "Futures Daily Trading API usage approval",
+        "confirm data-use and redistribution terms"
+      ],
+      "production_eligible": false
     }
   ]
 }

@@ -25,6 +25,8 @@ from tradeflow.integration.ecos import EcosFxAdapter
 from tradeflow.integration.eligibility_feed import JsonEligibilityEvidenceAdapter
 from tradeflow.integration.koreaexim_fx import KoreaEximFxAdapter
 from tradeflow.integration.ksure_country_policy import KsureCountryPolicyAdapter
+from tradeflow.integration.currencycloud import CurrencycloudDemoForwardQuoteAdapter
+from tradeflow.integration.krx_futures import KrxUsdFuturesAdapter
 from tradeflow.integration.registry import AdapterRegistry
 from tradeflow.integration.snapshot_store import build_envelope, write_snapshot
 from tradeflow.integration.trade_feed import JsonTradeFeedAdapter
@@ -68,6 +70,8 @@ class DatasetRegistryTests(unittest.TestCase):
                 "COMPANY_QUALIFICATION_EVIDENCE_V1",
                 "KSURE_CREDIT_EVIDENCE_V1",
                 "KOREAEXIM_REFERENCE_FX_DAILY",
+                "CURRENCYCLOUD_DEMO_FORWARD_QUOTES_V1",
+                "KRX_USD_FUTURES_DAILY_V1",
             },
             set(self.registry.definitions),
         )
@@ -79,6 +83,8 @@ class DatasetRegistryTests(unittest.TestCase):
             "COMPANY_QUALIFICATION_EVIDENCE_V1"
         )
         koreaexim = self.registry.get("KOREAEXIM_REFERENCE_FX_DAILY")
+        currencycloud = self.registry.get("CURRENCYCLOUD_DEMO_FORWARD_QUOTES_V1")
+        krx = self.registry.get("KRX_USD_FUTURES_DAILY_V1")
         self.assertEqual(DatasetKind.FX_SERIES, ecos.kind)
         self.assertEqual(DatasetKind.SUPPORT_PROGRAM_CATALOG, bizinfo.kind)
         self.assertEqual(
@@ -88,6 +94,11 @@ class DatasetRegistryTests(unittest.TestCase):
             DatasetKind.ELIGIBILITY_EVIDENCE, company_evidence.kind
         )
         self.assertEqual(DatasetKind.REFERENCE_FX_CATALOG, koreaexim.kind)
+        self.assertEqual(
+            DatasetKind.PROVIDER_INDICATIVE_FORWARD_QUOTE,
+            currencycloud.kind,
+        )
+        self.assertEqual(DatasetKind.LISTED_FX_FUTURES_DAILY, krx.kind)
         self.assertEqual("company_qualification", company_evidence.provider_key)
         self.assertEqual(timedelta(days=1), bizinfo.collection_interval)
         self.assertEqual(timedelta(hours=1), erp.collection_interval)
@@ -307,6 +318,13 @@ class AdapterRegistryTests(unittest.TestCase):
             source_id="KSURE_CREDIT_FEED",
             adapter_key="ksure_credit_json",
         )
+        currencycloud = CurrencycloudDemoForwardQuoteAdapter(
+            tenant_id="TENANT-1",
+            company_id="COMPANY-1",
+            login_id="login",
+            api_key="secret",
+        )
+        krx = KrxUsdFuturesAdapter(api_key="secret")
 
         self.adapters.register("ECOS_USD_KRW_DAILY", ecos)
         self.adapters.register("ERP_TRADE_FEED_V1", erp)
@@ -317,6 +335,11 @@ class AdapterRegistryTests(unittest.TestCase):
             "COMPANY_QUALIFICATION_EVIDENCE_V1", company_evidence
         )
         self.adapters.register("KSURE_CREDIT_EVIDENCE_V1", ksure_credit)
+        self.adapters.register(
+            "CURRENCYCLOUD_DEMO_FORWARD_QUOTES_V1",
+            currencycloud,
+        )
+        self.adapters.register("KRX_USD_FUTURES_DAILY_V1", krx)
 
         self.assertIs(ecos, self.adapters.get("ECOS_USD_KRW_DAILY"))
         self.assertIs(erp, self.adapters.get("ERP_TRADE_FEED_V1"))
@@ -339,6 +362,11 @@ class AdapterRegistryTests(unittest.TestCase):
             ksure_credit,
             self.adapters.get("KSURE_CREDIT_EVIDENCE_V1"),
         )
+        self.assertIs(
+            currencycloud,
+            self.adapters.get("CURRENCYCLOUD_DEMO_FORWARD_QUOTES_V1"),
+        )
+        self.assertIs(krx, self.adapters.get("KRX_USD_FUTURES_DAILY_V1"))
 
     def test_duplicate_or_mismatched_adapter_is_rejected(self) -> None:
         erp = JsonTradeFeedAdapter(

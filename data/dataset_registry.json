@@ -107,6 +107,36 @@
         "max_observation_age_seconds": 86400,
         "max_retrieval_age_seconds": 86400
       }
+    },
+    {
+      "dataset_id": "CURRENCYCLOUD_DEMO_FORWARD_QUOTES_V1",
+      "source_id": "CURRENCYCLOUD_DEMO_FORWARD_QUOTES",
+      "kind": "provider_indicative_forward_quote",
+      "adapter_key": "currencycloud_demo_forward_quote",
+      "parser_key": "provider_indicative_forward_quote_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 300,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 300,
+        "max_retrieval_age_seconds": 300
+      }
+    },
+    {
+      "dataset_id": "KRX_USD_FUTURES_DAILY_V1",
+      "source_id": "KRX_USD_FUTURES_DAILY",
+      "kind": "listed_fx_futures_daily",
+      "adapter_key": "krx_usd_futures",
+      "parser_key": "listed_fx_futures_daily_v1",
+      "payload_schema_version": "1.0",
+      "collection_interval_seconds": 86400,
+      "storage_scope": "runtime_private",
+      "storage_root": "data/runtime",
+      "freshness": {
+        "max_observation_age_seconds": 604800,
+        "max_retrieval_age_seconds": 604800
+      }
     }
   ]
 }

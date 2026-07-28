@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "checked_on": "2026-07-28",
+  "checks": [
+    {
+      "provider_id": "KRX_USD_FUTURES",
+      "endpoint_class": "official_sample",
+      "network_result": "success",
+      "contract_result": "OutBlock_1_received",
+      "request_date": "2020-04-14",
+      "record_count": 10,
+      "returned_product_scope": "KOSPI200 futures sample only",
+      "usd_futures_verified": false,
+      "next_requirement": "production API key and Futures Daily Trading API approval"
+    },
+    {
+      "provider_id": "CURRENCYCLOUD_DEMO",
+      "endpoint_class": "official_demo",
+      "network_result": "not_attempted_without_credentials",
+      "contract_result": "unit_contract_verified",
+      "usd_futures_verified": false,
+      "next_requirement": "demo login ID and API key"
+    }
+  ]
+}
