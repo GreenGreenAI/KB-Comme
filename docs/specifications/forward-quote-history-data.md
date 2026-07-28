@@ -24,7 +24,7 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 | 후보 | 용도 | 운영 승격 데이터 여부 |
 |---|---|---|
 | 기업의 은행 RFQ·Treasury Management System export | 기업·시각·만기·명목금액별 실제 가용 호가와 비용 | 가능, 최우선 |
-| 은행 또는 FX provider의 계약형 quote API | point-in-time bid/offer와 유효시간 | 가능, 계약·권한 검토 필요 |
+| [LSEG FXall Cash RFQ FIX API](https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker) | 다중 provider point-in-time bid/offer, forward points와 유효시간 | 가능, 우선 provider로 선정; 온보딩·권한 필요 |
 | [K-SURE 보장환율 공개 데이터](https://www.data.go.kr/data/15064336/fileData.do) | 보장환율·기간별 swap point·시장평균환율 benchmark | 불가, 보험 기준가격이지 기업별 은행 호가가 아님 |
 | [KRX 미국달러선물 상품](https://global.krx.co.kr/contents/GLB/02/0201/0201040601/GLB0201040601.jsp) | 상장 선물의 시장 hedge benchmark | 불가, 표준화 선물이며 OTC forward가 아님 |
 | [CME KRW futures](https://www.cmegroup.com/markets/fx/fx-delivery.html) | 해외 시장 stress·유동성 benchmark | 불가, cash-settled 표준상품 |
@@ -58,8 +58,10 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 ## 수집 순서
 
 1. 내부 또는 협력기업의 익명화된 RFQ/TMS export 확보 가능성을 확인한다.
-2. provider 계약, 이용목적, 보존기간과 재현 가능한 quote ID를 합의한다.
-3. `JsonForwardQuoteHistoryAdapter`로 HTTPS 정규화 feed를 수집하고
+2. LSEG FXall 온보딩 또는 trial, LP entitlement, 이용목적, 보존기간과 재현 가능한
+   quote ID를 합의한다.
+3. `normalize_fxall_forward_quote`로 인증된 Cash RFQ FIX Quote(S)를 정규화하거나
+   `JsonForwardQuoteHistoryAdapter`로 HTTPS 정규화 feed를 수집하고
    tenant scope를 대조한 뒤, 호출자가 지정한 비공개·암호화 저장소에 immutable raw
    snapshot을 기록한다. 저장소의 공개 `data/snapshots/`는 이 데이터의 기본 경로가
    아니다.
@@ -74,11 +76,16 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
   결정론적으로 검증한다.
 - `JsonForwardQuoteHistoryAdapter`는 HTTPS와 응답 크기 제한을 강제하고 bearer
   credential을 snapshot이나 오류에 남기지 않는다.
+- `normalize_fxall_forward_quote`는 단일 outright `FXFWD`만 받아 매수에는 offer,
+  매도에는 bid spot과 forward points를 적용한다. provider/company/tenant는
+  인증된 connector context에서만 받고 계정·LEI·세션 credential은 정규화 결과에서
+  제외한다.
 - adapter의 tenant와 payload tenant가 다르면 저장 전에 거부한다.
 - `read_observed_forward_quote_snapshot`은 immutable snapshot identity와 tenant scope를
   다시 검증한다.
 - `pair_company_forward_history`는 같은 기업·provider·통화쌍·side·명목금액
   구간·case·만기의 호가만 고르고, 각 호가가 인용한 정확한 origin spot snapshot과
   정렬한다. 미래 spot, 누락 snapshot과 동일 시각 중복 호가는 거부한다.
-- 실제 endpoint, credential, 암호화 저장소와 데이터 계약은 고객·provider 계약 후
-  운영 환경에서 주입한다. 이 저장소에는 실제 기업 호가 fixture를 넣지 않는다.
+- provider registry의 현재 연결 상태는 `onboarding_required`다. 실제 endpoint,
+  credential, 암호화 저장소와 데이터 계약은 고객·provider 계약 후 운영 환경에서
+  주입한다. 이 저장소에는 실제 기업 호가 fixture를 넣지 않는다.

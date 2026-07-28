@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "providers": [
+    {
+      "provider_id": "LSEG_FXALL_CASH_RFQ",
+      "product": "FXall Cash RFQ FIX API",
+      "role": "primary_company_applicable_forward_quote_provider",
+      "connection_state": "onboarding_required",
+      "supports": ["spot", "forward", "swap", "ndf"],
+      "selected_scope": "single-leg outright FXFWD Quote (S)",
+      "official_product_url": "https://www.lseg.com/en/fx/venues/fxall-electronic-trading-platform",
+      "official_api_url": "https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker",
+      "official_fix_spec_url": "https://developers.lseg.com/content/dam/devportal/api-families/fx-venues/cash-rfq-fix/refinitiv_fxall_fx_trading_fix_api.pdf",
+      "normalizer": "tradeflow.integration.fxall_forward_quotes",
+      "credential_storage": "tenant secret manager only",
+      "raw_data_storage": "tenant-private encrypted storage only",
+      "required_external_steps": [
+        "LSEG onboarding or trial approval",
+        "FXall account and liquidity-provider entitlements",
+        "FIX session endpoint and credentials",
+        "company consent and tenant-private retention configuration"
+      ],
+      "production_eligible": false
+    }
+  ]
+}
