@@ -20,26 +20,28 @@
     --wash: color-mix(in srgb, var(--soft) 16%, #fff);
     --wash-2: color-mix(in srgb, var(--ink) 7%, #fff);
 
-    /* One focus language for every field in the product.
-       The line does the announcing; the halo only softens its edge. A fully
-       saturated accent border reads as an error rather than as focus — the
-       composer is 1130px wide, and a hard coloured rectangle that size is what
-       a form says when something is wrong. So the line is muted and doubled
-       instead: weight carries it, not saturation.
+    /* One focus language for every field in the product: a single muted line
+       that fades out instead of stopping.
 
-       The second pixel is a shadow, not border-width. Growing the border from
-       1px to 2px on focus would shrink the padding box under it and nudge the
-       text sideways every time the field is entered. A shadow is drawn outside
-       the box and moves nothing.
+       A fully saturated accent border reads as an error rather than as focus —
+       the composer is 1130px wide, and a hard coloured rectangle that size is
+       what a form says when something is wrong. The weight went to two pixels
+       for a while to compensate, but that was propping up a line whose edge
+       was cut; once the edge fades, one pixel carries it and two are heavy.
 
-       The glow is the line's own colour losing its alpha, not a separate
-       accent wash, and its outer edge is blurred rather than cut. A hard band
-       of a different mix beside a hard line reads as two effects that happened
-       to land in the same place; one colour fading out reads as one. */
+       What makes it one effect rather than two is that the fade is the line's
+       own colour losing its alpha — not a separate accent wash — and that its
+       outer edge is blurred rather than cut. A hard band of a different mix
+       beside a hard line reads as two things that happened to land in the same
+       place; one colour going to nothing reads as one.
+
+       All of it past the border is shadow, never border-width. Growing the
+       border on focus would shrink the padding box under it and nudge the text
+       sideways every time the field is entered; a shadow is drawn outside the
+       box and moves nothing. */
     --focus-line: color-mix(in srgb, var(--accent) 65%, var(--rule));
-    --focus-ring: 0 0 0 1px var(--focus-line),
-                  0 0 0 2px color-mix(in srgb, var(--focus-line) 42%, transparent),
-                  0 0 5px 2px color-mix(in srgb, var(--focus-line) 24%, transparent);
+    --focus-ring: 0 0 0 1px color-mix(in srgb, var(--focus-line) 46%, transparent),
+                  0 0 4px 1px color-mix(in srgb, var(--focus-line) 26%, transparent);
 
     --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
             0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
