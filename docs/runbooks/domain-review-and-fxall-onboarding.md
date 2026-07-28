@@ -40,6 +40,23 @@ python scripts/check_rulepacks.py --require-ready
 `production_ready`를 한 번에 변경한다. 승인이 누락됐거나 검토 대상 내용이 바뀌면
 파일을 수정하지 않고 실패한다.
 
+전문가 원문은 tenant-private 위치에 보관하고 다음 명령으로 결정과 원문 hash만
+manifest에 기록한다. 명령은 현재 규칙팩·suite hash를 다시 계산하고 완성된 manifest를
+검증한 뒤 원자적으로 교체한다.
+
+```powershell
+python scripts/record_domain_rulepack_review.py FX_COMPLIANCE_MVP `
+  --decision approved `
+  --reviewer "검토자 이름" `
+  --organization "독립 기관" `
+  --authority-basis "해당 규정 검토 권한 또는 전문성 근거" `
+  --evidence "C:\private\fx-review-response.pdf"
+```
+
+K-SURE 규칙팩도 `KSURE_MVP_CANDIDATES`로 같은 절차를 사용한다. 전문가가
+`rejected`를 선택하면 승격하지 않고 rulepack·golden suite를 수정해 세 역할 검토를
+처음부터 다시 받는다.
+
 공식 접점:
 
 - 한국은행 외환심사팀: 02-759-5300, 외환거래 심사 및 온라인 신고 안내
