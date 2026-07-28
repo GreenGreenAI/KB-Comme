@@ -49,6 +49,9 @@ export default function Panel({ result, pending, facts }) {
         </section>
       )}
 
+      {result?.trade_timeline?.length > 0 && (
+        <Understanding cases={result.trade_timeline} />
+      )}
       {cash && <Cashflow cash={cash} />}
       {market && <Market market={market} hedge={hedge} />}
       <Hedge
@@ -64,6 +67,51 @@ export default function Panel({ result, pending, facts }) {
   );
 }
 
+const DIRECTION_LABEL = { export: "수출 · 받을 돈", import: "수입 · 낼 돈" };
+const METHOD_LABEL = { tt: "T/T", lc: "L/C", dp: "D/P", da: "D/A" };
+
+/** What the sentence was turned into, before anything is calculated from it.
+ *
+ *  Every figure below this card rests on this reading, and until now there was
+ *  nowhere to see it. A misread date produced a confidently wrong answer with
+ *  no visible cause. It is placed first for that reason: it is the premise,
+ *  not a detail. */
+function Understanding({ cases }) {
+  return (
+    <section className="sec">
+      <div className="sec-head">
+        <div>
+          <p className="eyebrow">입력 확인</p>
+          <h3>이렇게 이해했습니다</h3>
+        </div>
+        <span className="state done">거래 {cases.length}건</span>
+      </div>
+
+      <ul className="cases">
+        {cases.map((item) => (
+          <li key={item.case_id}>
+            <span className={`dir ${item.direction}`}>
+              {DIRECTION_LABEL[item.direction] ?? item.direction}
+            </span>
+            <span className="amt">
+              {item.currency} {won(item.amount)}
+            </span>
+            <span className="when">{item.expected_payment_date}</span>
+            <span className="how">
+              {METHOD_LABEL[item.payment_method] ?? item.payment_method}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="unlock">
+        다르게 이해했다면 그대로 말씀해 주세요 — 예: <b>결제일은 12월 3일이에요</b>
+      </p>
+    </section>
+  );
+}
+
+
 function Cashflow({ cash }) {
   const gap = cash.funding_gap?.[0]?.peak_amount;
   const net = cash.net_exposure?.[0]?.amount;
@@ -71,7 +119,7 @@ function Cashflow({ cash }) {
   const matched = cash.maturity_matched_amount?.[0]?.amount;
 
   return (
-    <section className="sec">
+    <section className="sec" id="sec-analysis">
       <div className="sec-head">
         <div>
           <p className="eyebrow">현금흐름</p>
@@ -200,24 +248,37 @@ function Market({ market, hedge }) {
   );
 }
 
+/** A section that has nothing to show yet.
+ *
+ *  It still has to say why — a silently absent card would read as "no hedge
+ *  needed" rather than "we refused to guess". But a full card header for one
+ *  sentence spent 920px on 66 characters, so the reason is stated on one line
+ *  and the space goes to the sections that have something in them. */
+function Blocked({ eyebrow, title, state, reason, id }) {
+  return (
+    <section className="sec blocked" id={id}>
+      <p className="blocked-head">
+        <span className="eyebrow">{eyebrow}</span>
+        <span className="blocked-title">{title}</span>
+        <span className="state need">{state}</span>
+      </p>
+      <p className="blocked-why">{reason}</p>
+    </section>
+  );
+}
+
 function Hedge({ hedge, reason, requiredInputs }) {
   if (!hedge) {
     return (
-      <section className="sec locked">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">손익 · 헤지</p>
-            <h3>얼마나 헤지하면 되나?</h3>
-          </div>
-          <span className="state need">
-            {requiredInputs.length > 0 ? "입력 필요" : "검토 필요"}
-          </span>
-        </div>
-        <p className="unlock">
-          {reason ??
-            "검증된 헤지 수단과 가격 정보가 준비되면 손익 비교를 계산합니다."}
-        </p>
-      </section>
+      <Blocked
+        eyebrow="손익 · 헤지"
+        title="얼마나 헤지하면 되나?"
+        state={requiredInputs.length > 0 ? "입력 필요" : "검토 필요"}
+        reason={
+          reason ??
+          "검증된 헤지 수단과 가격 정보가 준비되면 손익 비교를 계산합니다."
+        }
+      />
     );
   }
 
@@ -311,7 +372,7 @@ function Support({ result }) {
   const completed = result?.workers?.completed?.includes("support");
 
   return (
-    <section className={`sec ${completed ? "" : "locked"}`}>
+    <section className={`sec ${completed ? "" : "locked"}`} id="sec-support">
       <div className="sec-head">
         <div>
           <p className="eyebrow">지원제도</p>
@@ -346,25 +407,17 @@ function Compliance({ result }) {
   const completed = result?.workers?.completed?.includes("compliance");
 
   return (
-    <section className={`sec ${completed ? "" : "locked"}`}>
-      <div className="sec-head">
-        <div>
-          <p className="eyebrow">규제</p>
-          <h3>해야 할 신고가 있나?</h3>
-        </div>
-        <span className={`state ${completed ? "done" : "need"}`}>
-          {completed ? "규칙 판정 완료" : "대기 중"}
-        </span>
-      </div>
-      {completed ? (
-        <p className="unlock">
-          검토 항목 {findings.length}건 · 실행 의무 후보 {obligations.length}건.
-          정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.
-        </p>
-      ) : (
-        <p className="unlock">거래 정보가 준비되면 역할 A 규칙으로 판정합니다.</p>
-      )}
-    </section>
+    <Blocked
+      id="sec-compliance"
+      eyebrow="규제"
+      title="해야 할 신고가 있나?"
+      state={completed ? "규칙 판정 완료" : "대기 중"}
+      reason={
+        completed
+          ? `검토 항목 ${findings.length}건 · 실행 의무 후보 ${obligations.length}건. 정보가 부족한 항목은 신고 불필요로 간주하지 않습니다.`
+          : "거래 정보가 준비되면 역할 A 규칙으로 판정합니다."
+      }
+    />
   );
 }
 
@@ -373,6 +426,43 @@ const SNAPSHOT_LABELS = {
   KNOWLEDGE_SOURCES: "출처 검증",
 };
 
+const RULE_REASON = /^[A-Z0-9_-]+:[A-Z0-9_]+: \S+$/;
+
+/** Why a human still has to look at this.
+ *
+ *  `review_reasons` carries two different things: sentences written for the
+ *  reader ("환율 시나리오를 산출하지 못해…") and one entry per undecided rule,
+ *  shaped `CASE:RULE_ID: status`. Joining all of them produced three thousand
+ *  characters of identifiers in which the readable sentences were invisible.
+ *
+ *  The rules are not dropped — they are already listed by title in the 지원제도
+ *  and 신고의무 cards above, which is where a reader can do something about
+ *  them. Here they are counted. */
+function ReviewReasons({ reasons }) {
+  const readable = reasons.filter((item) => !RULE_REASON.test(item));
+  const ruleCount = reasons.length - readable.length;
+
+  return (
+    <div className="review">
+      <p className="review-head">
+        <b>검토 필요</b>
+      </p>
+      {readable.map((item) => (
+        <p className="review-item" key={item}>
+          {item}
+        </p>
+      ))}
+      {ruleCount > 0 && (
+        <p className="review-item">
+          규칙 {ruleCount}건이 정보 부족으로 확정되지 않았습니다. 어떤 규칙인지는
+          위 <b>지원제도</b>·<b>신고의무</b>에 항목별로 나와 있습니다.
+        </p>
+      )}
+    </div>
+  );
+}
+
+
 function Evidence({ result }) {
   const market = result.evidence.find((item) => item.role === "market_data");
   const versions = result.calculation_versions ?? {};
@@ -380,7 +470,7 @@ function Evidence({ result }) {
     (item) => item.role === "rulepack"
   );
   return (
-    <section className="sec">
+    <section className="sec" id="sec-evidence">
       <div className="sec-head">
         <div>
           <p className="eyebrow">근거</p>
@@ -391,43 +481,48 @@ function Evidence({ result }) {
       <p className="basis" style={{ borderTop: "none", paddingTop: 0 }}>
         {market && (
           <>
-            <b>환율</b> 한국은행 ECOS · <b>스냅샷</b> {market.version} ·{" "}
-            <b>해시</b> {market.content_hash?.slice(0, 20)}… ·{" "}
+            <b>환율</b> 한국은행 ECOS · <b>계산</b> {versions.formula_version} ·{" "}
           </>
         )}
-        <b>계산 버전</b> {versions.formula_version}
+        <b>규칙</b> {rulepacks.length}개 규칙팩
       </p>
-      <p className="basis">
-        같은 답을 다시 만들어 내려면 아래가 모두 같아야 합니다. 하나라도
-        다르면 재현이 아니라 다른 계산입니다.
-      </p>
-      <ul className="versions">
-        {(versions.snapshots ?? []).map((item) => (
-          <li key={item.source_id}>
-            <span className="vk">{SNAPSHOT_LABELS[item.source_id] ?? item.source_id}</span>
-            <span className="vv">{item.version}</span>
-          </li>
-        ))}
-        {rulepacks.length > 0 && (
-          <li>
-            <span className="vk">적용 규칙</span>
-            <span className="vv">{rulepacks.length}개 규칙팩</span>
-          </li>
-        )}
-        {versions.input_fingerprint && (
-          <li>
-            <span className="vk">입력 지문</span>
-            <span className="vv mono">
-              {versions.input_fingerprint.replace("sha256:", "").slice(0, 16)}…
-            </span>
-          </li>
-        )}
-      </ul>
-      {result.review_required && (
-        <p className="unlock">
-          <b>검토 필요</b> — {result.review_reasons.join(" / ")}
+
+      {/* The full input identity is what a replay has to match, but it is
+          reference material — open when someone is checking, folded when they
+          are reading the answer. */}
+      <details className="fold">
+        <summary>재현에 필요한 입력</summary>
+        <ul className="versions">
+          {(versions.snapshots ?? []).map((item) => (
+            <li key={item.source_id}>
+              <span className="vk">
+                {SNAPSHOT_LABELS[item.source_id] ?? item.source_id}
+              </span>
+              <span className="vv">{item.version}</span>
+            </li>
+          ))}
+          {rulepacks.map((item) => (
+            <li key={item.path}>
+              <span className="vk">규칙팩</span>
+              <span className="vv">{item.path.split("/").pop()}</span>
+            </li>
+          ))}
+          {versions.input_fingerprint && (
+            <li>
+              <span className="vk">입력 지문</span>
+              <span className="vv mono">
+                {versions.input_fingerprint.replace("sha256:", "").slice(0, 16)}…
+              </span>
+            </li>
+          )}
+        </ul>
+        <p className="fold-note">
+          이 넷이 모두 같아야 같은 답이 나옵니다. 하나라도 다르면 재현이 아니라
+          다른 계산입니다.
         </p>
-      )}
+      </details>
+
+      {result.review_required && <ReviewReasons reasons={result.review_reasons} />}
     </section>
   );
 }

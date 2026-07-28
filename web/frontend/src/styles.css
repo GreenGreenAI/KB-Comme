@@ -64,8 +64,11 @@
     font-family: var(--mono); font-size: .75rem; font-style: normal;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
-  .nav nav span { color: inherit; }
-  .nav nav span.on { color: var(--accent); font-weight: 600; }
+  .nav-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; transition: color .15s ease; }
+  .nav-link:hover:not(:disabled) { color: var(--accent); }
+  /* Disabled, not hidden: the reader can see what a finished answer contains
+     before there is one to jump to. */
+  .nav-link:disabled { color: var(--ink-45); cursor: default; }
   .nav-cta {
     border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
     border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;
@@ -268,6 +271,43 @@
   .versions .vk { color: var(--ink-45); }
   .versions .vv { font-family: var(--mono); color: var(--ink-70); font-variant-numeric: tabular-nums; }
   .versions .mono { letter-spacing: .02em; }
+
+  /* One trade per row, read left to right the way the sentence was said. */
+  .cases { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; gap: .5rem; }
+  .cases li { display: grid; grid-template-columns: 8.5rem 1fr auto auto; align-items: baseline; gap: .75rem; padding: .55rem .7rem; background: var(--wash-2); border-radius: 8px; font-size: .8125rem; }
+  .cases .dir { font-weight: 600; }
+  .cases .dir.export { color: var(--accent-deep); }
+  .cases .dir.import { color: var(--ink); }
+  .cases .amt { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .cases .when, .cases .how { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
+
+  /* Two choices, side by side, when the sentence could belong to either trade. */
+  .choices { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
+  .choice { font: inherit; font-size: .8125rem; padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--rule); background: #fff; color: var(--ink); cursor: pointer; transition: border-color .15s ease, color .15s ease; }
+  .choice:hover { border-color: var(--accent); color: var(--accent); }
+
+  .review { margin: .85rem 0 0; padding-top: .6rem; border-top: 1px dashed var(--rule); }
+  .review-head { margin: 0 0 .35rem; font-size: .8125rem; }
+  .review-head b { color: var(--accent); }
+  .review-item { margin: .25rem 0 0; font-size: .8125rem; color: var(--ink-70); line-height: 1.6; }
+
+  /* A section with nothing to show yet: the reason still appears, on one
+     line, so refusing to guess does not cost a full card of height. */
+  .sec.blocked { padding: .85rem 1.15rem; border-style: dashed; }
+  .blocked-head { display: flex; align-items: baseline; gap: .6rem; margin: 0; flex-wrap: wrap; }
+  .blocked-head .eyebrow { margin: 0; }
+  .blocked-title { font-size: .9375rem; font-weight: 600; color: var(--ink-70); }
+  .blocked-head .state { margin-left: auto; }
+  .blocked-why { margin: .3rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.65; }
+
+  /* Reference material: present when checked for, folded when reading. */
+  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
+  .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform .15s ease; }
+  .fold[open] > summary::before { transform: rotate(90deg); }
+  .fold > summary:hover { color: var(--accent); }
+  .fold-note { margin: .5rem 0 0; font-size: .6875rem; color: var(--ink-45); line-height: 1.6; }
 
   .unlock { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink-70); }
   .unlock b { color: var(--accent); }

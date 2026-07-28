@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -24,7 +24,12 @@ from pydantic import BaseModel, Field
 from tradeflow.agent.intake import intake
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
-from tradeflow.tools.utterance import read_utterance
+from tradeflow.tools.utterance import (
+    AMBIGUOUS,
+    APPEND,
+    place_utterance,
+    read_utterance,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT_ROOT = REPO_ROOT / "data" / "snapshots"
@@ -57,6 +62,49 @@ class AnalyzeRequest(BaseModel):
     baseline_profit: str | None = None
     profit_floor: str | None = None
     as_of: str | None = None
+    #: Set only when the user has already answered "새 거래인가, 수정인가".
+    #: Left unset, an ambiguous sentence comes back as a question instead of
+    #: being resolved by a guess.
+    placement: Literal["append", "merge"] | None = None
+
+
+FIELD_LABELS = {
+    "direction": "거래 방향",
+    "amount": "금액",
+    "expected_payment_date": "결제일",
+}
+
+
+def _placement_question(
+    utterance: str,
+    heard: dict[str, Any],
+    supplied: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Ask whether a sentence adds a trade or corrects the current one.
+
+    The sentence restated something the latest trade already says, with a
+    different value, and in the same direction. "12월 3일에 15만 달러 수취" after
+    an export of 10만 is either a second shipment or a fix to the first, and
+    nothing in the words decides it. Answering by rule would either invent a
+    trade the company does not have or erase one it does.
+    """
+    differing = ", ".join(
+        FIELD_LABELS.get(field, field)
+        for field in place_utterance(heard, supplied).conflicts
+    )
+    return {
+        "status": "needs_placement",
+        "understood": heard,
+        "utterance": utterance,
+        "question": (
+            f"방금 말씀하신 내용이 앞의 거래와 {differing}에서 다릅니다. "
+            "새로운 거래인가요, 앞 거래를 고치신 건가요?"
+        ),
+        "options": [
+            {"placement": "append", "label": "새 거래로 추가"},
+            {"placement": "merge", "label": "앞 거래를 수정"},
+        ],
+    }
 
 
 def _money(raw: str | None, field_name: str) -> Decimal | None:
@@ -121,11 +169,32 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
     if request.utterance:
         heard = read_utterance(request.utterance, as_of=as_of)
         if heard:
-            # Fill only the slots the sentence stated and the form left blank;
-            # anything the user typed explicitly wins.
-            target = supplied[-1] if supplied else {}
-            merged = {**heard, **{k: v for k, v in target.items() if v}}
-            supplied = [*supplied[:-1], merged] if supplied else [merged]
+            action = request.placement or place_utterance(
+                heard,
+                supplied,
+                utterance=request.utterance,
+            ).action
+            if action == AMBIGUOUS:
+                return _placement_question(request.utterance, heard, supplied)
+            if action == APPEND:
+                supplied = [*supplied, dict(heard)]
+            else:
+                target = supplied[-1] if supplied else {}
+                if request.placement == "merge":
+                    # The user explicitly chose to correct the current trade,
+                    # so the newly stated values must win.
+                    merged = {
+                        **{k: v for k, v in target.items() if v},
+                        **heard,
+                    }
+                else:
+                    # During ordinary slot filling, values already entered in
+                    # the structured form remain authoritative.
+                    merged = {
+                        **heard,
+                        **{k: v for k, v in target.items() if v},
+                    }
+                supplied = [*supplied[:-1], merged] if supplied else [merged]
 
     reading = intake(
         supplied,

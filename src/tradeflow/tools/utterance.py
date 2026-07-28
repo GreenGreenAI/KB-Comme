@@ -10,9 +10,10 @@ the agent asks for it (§4.2[1]).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 # Verbs and nouns that betray which way the money moves.
 _EXPORT_HINTS = ("수출", "받기로", "받아", "받을", "들어와", "들어올", "입금", "수취")
@@ -31,6 +32,11 @@ _AMOUNT_SUFFIXED = re.compile(
 _YMD = re.compile(r"(\d{4})\s*[-/.년]\s*(\d{1,2})\s*[-/.월]\s*(\d{1,2})")
 _MD = re.compile(r"(\d{1,2})\s*[/.월]\s*(\d{1,2})")
 _MONTH_ONLY = re.compile(r"(\d{1,2})\s*월(?!\s*\d)")
+_ADDITIONAL_TRADE = re.compile(
+    r"(?:새\s*거래|추가|별도(?:로)?|(?:^|\s)또(?:\s|$)|"
+    r"(?:달러|불|usd)\s*도(?:\s|$))",
+    re.IGNORECASE,
+)
 
 
 def _direction(text: str) -> str | None:
@@ -111,3 +117,105 @@ def read_utterance(text: str, *, as_of: date) -> dict[str, Any]:
         slots["expected_payment_date"] = moment.isoformat()
 
     return slots
+
+
+#: Fields that describe *which* trade a sentence is about. A sentence that
+#: restates one of these against a different value is not filling a blank.
+IDENTIFYING_FIELDS = ("direction", "amount", "expected_payment_date")
+
+MERGE = "merge"
+APPEND = "append"
+AMBIGUOUS = "ambiguous"
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Where a newly heard sentence belongs among the trades already known.
+
+    `conflicts` names the fields that made the decision, so the caller can ask
+    a question the user can actually answer instead of "무엇을 말씀하신
+    건가요?".
+    """
+
+    action: str
+    conflicts: tuple[str, ...] = ()
+
+
+def place_utterance(
+    heard: Mapping[str, Any],
+    cases: Sequence[Mapping[str, Any]],
+    *,
+    utterance: str | None = None,
+) -> Placement:
+    """Decide whether a sentence adds a trade or completes the current one.
+
+    Merging every sentence into the latest case — the behaviour this replaces —
+    silently dropped the second trade of a company that both exports and
+    imports, which is the customer this product is for. The sentence was read
+    correctly and then discarded, so the user was told it had been understood
+    and shown an answer that ignored it.
+
+    The rule:
+
+    - nothing stated, or nothing already known → merge, there is no question
+    - the sentence only fills blanks → merge
+    - it contradicts an identifying field and the sentence explicitly says
+      this is additional → append
+    - otherwise a contradiction → ambiguous; it may be a correction
+
+    The last case is left for the user. "12월 3일에 15만 달러 수취" after an
+    export of 10만 is either a second shipment or a correction, and the data
+    cannot tell which. Guessing "append" invents a trade; guessing "merge"
+    destroys one. §1.1 says an agent that cannot decide from its input asks.
+    """
+    if not heard or not cases:
+        return Placement(MERGE)
+
+    target = cases[-1]
+    conflicts = tuple(
+        field
+        for field in IDENTIFYING_FIELDS
+        if _stated(heard, field)
+        and _stated(target, field)
+        and _differs(heard[field], target[field], field)
+    )
+
+    explicit_addition = bool(
+        utterance and _ADDITIONAL_TRADE.search(utterance)
+    )
+    if explicit_addition:
+        return Placement(APPEND, conflicts)
+    if not conflicts:
+        return Placement(MERGE)
+    return Placement(AMBIGUOUS, conflicts)
+
+
+def _stated(values: Mapping[str, Any], field: str) -> bool:
+    value = values.get(field)
+    return value is not None and value != ""
+
+
+def _differs(heard: Any, known: Any, field: str) -> bool:
+    if field == "direction":
+        return _direction_value(heard) != _direction_value(known)
+    if field == "amount":
+        try:
+            return Decimal(str(heard)) != Decimal(str(known))
+        except (ArithmeticError, ValueError):
+            return str(heard) != str(known)
+    return str(heard) != str(known)
+
+
+def _direction_value(value: Any) -> str:
+    """Compare directions across the vocabularies that reach this function.
+
+    The extractor returns "수출"/"수입" while a case already read by intake
+    carries "export"/"import". Comparing them as plain strings would make every
+    second sentence look like a direction change.
+    """
+    text = str(value).strip().lower()
+    if text in {"수출", "export"}:
+        return "export"
+    if text in {"수입", "import"}:
+        return "import"
+    return text

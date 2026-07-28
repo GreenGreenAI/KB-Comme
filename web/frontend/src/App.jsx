@@ -27,15 +27,23 @@ export default function App() {
     setTurns((prev) => [...prev, turn]);
   }
 
-  /** One exchange: send everything known, render what came back. */
-  async function send(utterance, patch = {}) {
+  /** One exchange: send everything known, render what came back.
+   *
+   *  `placement` is only set when the user has answered the "새 거래인가,
+   *  수정인가" question. Sending it unasked would reintroduce the guess the
+   *  server refuses to make. */
+  async function send(utterance, patch = {}, placement = null) {
+    // A slot answer always completes the trade currently being described,
+    // which is the last one.
     const nextCases = patch.case
-      ? [{ ...facts.cases[0], ...patch.case }]
+      ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
       : facts.cases;
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
     setFacts({ cases: nextCases, profile: nextProfile });
 
-    if (utterance) say({ who: "user", text: utterance });
+    // When `placement` is set the sentence is being resent after the user
+    // answered where it belongs, and it is already in the thread.
+    if (utterance && !placement) say({ who: "user", text: utterance });
     setView("work");
     setBusy(true);
 
@@ -45,20 +53,41 @@ export default function App() {
         utterance,
         ...nextProfile,
         as_of: today(),
+        ...(placement ? { placement } : {}),
       });
+
+      if (data.status === "needs_placement") {
+        // Nothing is recorded yet — the sentence has no home until the user
+        // says which trade it belongs to.
+        setPending(data);
+        say({ who: "agent", kind: "placement", ask: data });
+        return;
+      }
 
       // Anything the sentence stated is now a known fact, not a question.
       if (data.understood && Object.keys(data.understood).length > 0) {
         setFacts((prev) => ({
           ...prev,
-          cases: [{ ...data.understood, ...stripEmpty(prev.cases[0]) }],
+          cases: [
+            ...prev.cases.slice(0, -1),
+            { ...data.understood, ...stripEmpty(prev.cases.at(-1)) },
+          ],
         }));
       }
 
       if (data.status === "ready") {
+        // The server is the authority on how many trades there are now; it
+        // just decided whether the sentence added one.
+        setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
         setResult(data.result);
         setPending(null);
-        say({ who: "agent", kind: "result", result: data.result });
+        say({
+          who: "agent",
+          kind: "result",
+          result: data.result,
+          heard: data.understood ?? {},
+          spoken: Boolean(utterance),
+        });
       } else {
         setPending(data);
         say({ who: "agent", kind: "ask", ask: data });
@@ -72,7 +101,7 @@ export default function App() {
 
   return (
     <>
-      <Nav />
+      <Nav ready={Boolean(result)} />
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>
           <Entry onSend={(text) => send(text)} busy={busy} />
@@ -86,6 +115,9 @@ export default function App() {
                 busy={busy}
                 pending={pending}
                 onSlot={(patch) => send(null, patch)}
+                onPlace={(utterance, placement) =>
+                  send(utterance, {}, placement)
+                }
                 endRef={threadEnd}
               />
               <Composer onSend={(text) => send(text)} busy={busy} />
