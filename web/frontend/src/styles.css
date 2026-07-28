@@ -21,12 +21,19 @@
     --wash-2: color-mix(in srgb, var(--ink) 7%, #fff);
 
     /* One focus language for every field in the product.
-       The halo does the announcing; the line only deepens. A fully saturated
-       accent border around a large box reads as an error, not as focus — the
+       The line does the announcing; the halo only softens its edge. A fully
+       saturated accent border reads as an error rather than as focus — the
        composer is 1130px wide, and a hard coloured rectangle that size is what
-       a form says when something is wrong. */
+       a form says when something is wrong. So the line is muted and doubled
+       instead: weight carries it, not saturation.
+
+       The second pixel is a shadow, not border-width. Growing the border from
+       1px to 2px on focus would shrink the padding box under it and nudge the
+       text sideways every time the field is entered. A shadow is drawn outside
+       the box and moves nothing. */
     --focus-line: color-mix(in srgb, var(--accent) 65%, var(--rule));
-    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    --focus-ring: 0 0 0 1px var(--focus-line),
+                  0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
 
     --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
             0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
