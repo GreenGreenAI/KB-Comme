@@ -474,6 +474,24 @@
     display: flex; align-items: center; gap: .5rem; margin: 0;
     font-size: .8125rem; line-height: 1.5; color: var(--ink-70);
   }
+  /* Each step replaces the last, so the swap is what needs marking. It lifts
+     and brightens rather than fading in from nothing — a step nobody can read
+     is worse than one that arrives without ceremony. */
+  .step { animation: step-in .26s cubic-bezier(.22,.9,.3,1); }
+  @keyframes step-in {
+    from { opacity: .25; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* The sentence writes itself, a word at a time. Words start faint rather
+     than absent for the same reason: an animation that never advances holds
+     its opening frame, and at 0.2 that frame is still legible. */
+  .written .w { animation: word .3s ease backwards; animation-delay: calc(var(--i) * 45ms); }
+  .w.em { color: var(--accent); font-weight: 600; }
+  @keyframes word {
+    from { opacity: .2; }
+    to { opacity: 1; }
+  }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }
   .dots { display: inline-flex; gap: 3px; }
