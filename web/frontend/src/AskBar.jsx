@@ -35,7 +35,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
             value: option.placement,
             label: option.label,
           }))}
-          onPick={(value) => onPlace(pending.utterance, value)}
+          onPick={(value, label) => onPlace(pending.utterance, value, label)}
         />
       </Ask>
     );
@@ -58,7 +58,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
       <Ask key={`direction:${question}`} label={question}>
         <ChoiceList
           options={DIRECTION_OPTIONS}
-          onPick={(value) => onSlot({ case: { direction: value } })}
+          onPick={(value, label) => onSlot({ case: { direction: value } }, label)}
         />
       </Ask>
     );
@@ -132,7 +132,7 @@ function ChoiceList({ options, onPick }) {
     const index = Number(event.key) - 1;
     if (index >= 0 && index < options.length) {
       event.preventDefault();
-      onPick(options[index].value);
+      onPick(options[index].value, options[index].label);
       return;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -143,7 +143,7 @@ function ChoiceList({ options, onPick }) {
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      onPick(options[active].value);
+      onPick(options[active].value, options[active].label);
     }
   }
 
@@ -166,7 +166,7 @@ function ChoiceList({ options, onPick }) {
           className={`choice ${index === active ? "on" : ""}`}
           tabIndex={-1}
           onMouseEnter={() => setActive(index)}
-          onClick={() => onPick(option.value)}
+          onClick={() => onPick(option.value, option.label)}
         >
           <span className="choice-key">{index + 1}</span>
           <span className="choice-label">{option.label}</span>
@@ -193,7 +193,7 @@ function SlotField({ slot, onSlot }) {
 
   if (slot === "amount") return <AmountField onSlot={onSlot} />;
 
-  const submit = () => value && onSlot({ case: { [slot]: value } });
+  const submit = () => value && onSlot({ case: { [slot]: value } }, value);
 
   return (
     <div className="ask-row">
@@ -214,6 +214,8 @@ function SlotField({ slot, onSlot }) {
 
 const GROUPED = /\B(?=(\d{3})+(?!\d))/g;
 
+const group = (raw) => raw.replace(/^(\d+)/, (whole) => whole.replace(GROUPED, ","));
+
 /** An amount, shown the way it is read.
  *
  *  Six digits in a row are hard to check at a glance, which matters when the
@@ -224,16 +226,15 @@ const GROUPED = /\B(?=(\d{3})+(?!\d))/g;
 function AmountField({ onSlot }) {
   const [raw, setRaw] = useState("");
   const focus = useAutoFocus();
-  const submit = () => raw && onSlot({ case: { amount: raw } });
+  const submit = () =>
+    raw && onSlot({ case: { amount: raw } }, `${group(raw)} USD`);
 
   function onChange(event) {
     const digits = event.target.value.replace(/[^\d.]/g, "");
     setRaw(digits);
   }
 
-  const shown = raw
-    ? raw.replace(/^(\d+)/, (whole) => whole.replace(GROUPED, ","))
-    : "";
+  const shown = raw ? group(raw) : "";
   const spoken = raw ? readable(raw) : null;
 
   return (
@@ -278,7 +279,10 @@ function ProfitFields({ onSlot }) {
   const submit = () =>
     baseline &&
     floor &&
-    onSlot({ profile: { baseline_profit: baseline, profit_floor: floor } });
+    onSlot(
+      { profile: { baseline_profit: baseline, profit_floor: floor } },
+      `기준 영업이익 ${group(baseline)}원 · 목표 손익 하한 ${group(floor)}원`,
+    );
 
   return (
     <div className="ask-row">

@@ -29,6 +29,9 @@ const STEP_MS = 1000;
 const WRITE_CEILING_MS = 4000;
 
 
+/** How close the newest question sits to the top of the view. */
+const HEAD_GAP = 8;
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The steps an intake turn actually took.
@@ -78,53 +81,118 @@ export default function App() {
   const threadRef = useRef(null);
   const stick = useRef(true);
 
-  // Remember, before the new turn paints, whether the reader was at the
-  // bottom. Someone scrolled up reading an earlier answer should not be
-  // yanked to the newest one.
-  function rememberPosition() {
-    const el = threadRef.current;
-    if (!el) return;
-    stick.current = el.scrollHeight - el.clientHeight - el.scrollTop < 120;
+  /** Leave room under the conversation so the newest exchange can reach the
+   *  top of the view.
+   *
+   *  Without it a short exchange simply cannot be scrolled up — there is
+   *  nothing below it to scroll into — so it stays pinned to the bottom edge
+   *  and the answer is written downward out of sight. The spacer holds exactly
+   *  what is left over, so it disappears the moment an exchange is tall enough
+   *  to fill the thread on its own and never leaves a gap behind. */
+  function fitTail(el) {
+    const spacer = el.querySelector(".tail");
+    if (!spacer) return;
+    const heads = el.querySelectorAll(".turn.user");
+    const head = heads[heads.length - 1];
+    const last = spacer.previousElementSibling;
+    if (!head || !last) {
+      spacer.style.height = "0px";
+      return;
+    }
+    // Measured from the neighbour rather than from the spacer itself: reading
+    // the spacer's own box would mean zeroing it first, and a forced reflow
+    // every frame of the cascade.
+    const used = last.getBoundingClientRect().bottom - head.getBoundingClientRect().top;
+    spacer.style.height = `${Math.max(0, Math.round(el.clientHeight - used - HEAD_GAP))}px`;
   }
 
+  /** Where the bottom of the real conversation sits, in scroll coordinates.
+   *  Not scrollHeight — that includes the spacer, and easing into empty space
+   *  would carry the answer off the top of the view for no reason. */
+  function contentFoot(el) {
+    const spacer = el.querySelector(".tail");
+    if (!spacer) return el.scrollHeight;
+    return spacer.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+  }
+
+  const exchange = turns.filter((turn) => turn.who === "user").length;
+
+  /** The newest question goes to the top of the view when it is asked.
+   *
+   *  The answer is then written downward into empty space. Pinning to the
+   *  bottom instead started every answer at the bottom edge of the thread, so
+   *  the reader watched its first line leave while the rest arrived. */
   useLayoutEffect(() => {
     const el = threadRef.current;
     if (!el || !stick.current) return;
-    // Set scrollTop directly rather than scrollIntoView({behavior:"smooth"}):
-    // smooth scrolling does not run in a background tab, which left the thread
-    // pinned near the top with the newest answer out of sight.
-    el.scrollTop = el.scrollHeight;
-  }, [turns, busy]);
+    fitTail(el);
+    const max = el.scrollHeight - el.clientHeight;
+    const heads = el.querySelectorAll(".turn.user");
+    const head = heads[heads.length - 1];
+    if (!head) {
+      el.scrollTop = max;
+      return;
+    }
+    const top =
+      head.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.max(0, Math.min(top - HEAD_GAP, max));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchange]);
 
-  /** Follow the answer down as it writes itself.
+  /** Follow the exchange down as it arrives.
    *
-   *  The jump above happens once, when the turn is added — at which point the
-   *  turn is still empty. Everything that gives it height arrives over the next
-   *  couple of seconds, and without this the answer grows off the bottom of the
+   *  The anchor above happens once, when the question is asked — at which point
+   *  there is no answer yet. Everything that gives it height arrives over the
+   *  next few seconds, and without this the answer grows past the bottom of the
    *  thread while the reader watches the top of it.
    *
-   *  It eases toward the bottom rather than pinning to it, so the view moves at
-   *  the pace the answer is being written instead of snapping on every word.
-   *  And it yields immediately: if the thread is not where this last left it,
-   *  the reader has taken over, and following them back down would be a fight
-   *  over the scrollbar. */
+   *  It eases rather than pins, so the view moves at the pace the answer is
+   *  being written, and it stops at the foot of the conversation rather than at
+   *  the foot of the spacer.
+   *
+   *  What makes it yield is a real input — a wheel, a drag, a key. The previous
+   *  version watched scrollTop for a value it had not set, which cannot tell a
+   *  reader apart from a layout change; the request panel appearing and the
+   *  thinking line being replaced both move the scroll on their own, and the
+   *  follower read that as the reader taking over and let go. It then stayed
+   *  let go, so the next answer was written entirely off screen. */
   useEffect(() => {
     const el = threadRef.current;
-    if (!writing || !el || !stick.current) return undefined;
-    let mine = el.scrollTop;
+    if (!el) return undefined;
+
+    const release = () => {
+      stick.current = false;
+    };
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("touchmove", release, { passive: true });
+    el.addEventListener("keydown", release);
+
     const follow = setInterval(() => {
-      if (Math.abs(el.scrollTop - mine) > 2) {
-        stick.current = false;
+      fitTail(el);
+      if (!stick.current) {
         clearInterval(follow);
         return;
       }
-      const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-      if (gap < 0.5) return;
-      el.scrollTop += Math.max(gap * 0.16, 0.5);
-      mine = el.scrollTop;
+      const target = Math.min(
+        contentFoot(el) - el.clientHeight,
+        el.scrollHeight - el.clientHeight,
+      );
+      const delta = target - el.scrollTop;
+      if (delta <= 0.5) {
+        if (!busy && !writing) clearInterval(follow);
+        return;
+      }
+      el.scrollTop += Math.max(delta * 0.16, 0.5);
     }, 16);
-    return () => clearInterval(follow);
-  }, [writing]);
+
+    return () => {
+      clearInterval(follow);
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("touchmove", release);
+      el.removeEventListener("keydown", release);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, writing, turns.length]);
 
   function say(turn) {
     setTurns((prev) => [...prev, turn]);
@@ -135,7 +203,7 @@ export default function App() {
    *  `placement` is only set when the user has answered the "새 거래인가,
    *  수정인가" question. Sending it unasked would reintroduce the guess the
    *  server refuses to make. */
-  async function send(utterance, patch = {}, placement = null) {
+  async function send(utterance, patch = {}, placement = null, said = null) {
     // A slot answer always completes the trade currently being described,
     // which is the last one.
     const nextCases = patch.case
@@ -144,10 +212,19 @@ export default function App() {
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
     setFacts({ cases: nextCases, profile: nextProfile });
 
-    // When `placement` is set the sentence is being resent after the user
-    // answered where it belongs, and it is already in the thread.
-    rememberPosition();
-    if (utterance && !placement) say({ who: "user", text: utterance });
+    // What the user said, as the thread should carry it. A typed sentence is
+    // its own text. An answer given through the request panel says what was
+    // chosen or entered — the panel is gone a moment later, and without this
+    // the conversation read as the agent asking a question and then answering
+    // itself. When `placement` is set the original sentence is already in the
+    // thread; what is new is the answer about where it belongs.
+    const spoken = said ?? (placement ? null : utterance);
+
+    // Someone who just asked a question wants to see the answer, so following
+    // resumes with every send. Only the reader scrolling during the arrival
+    // turns it off again.
+    stick.current = true;
+    if (spoken) say({ who: "user", text: spoken });
     setView("work");
     setBusy(true);
 
@@ -251,9 +328,9 @@ export default function App() {
                       ? []
                       : result?.required_inputs?.hedge ?? []
                   }
-                  onSlot={(patch) => send(null, patch)}
-                  onPlace={(utterance, placement) =>
-                    send(utterance, {}, placement)
+                  onSlot={(patch, said) => send(null, patch, null, said)}
+                  onPlace={(utterance, placement, said) =>
+                    send(utterance, {}, placement, said)
                   }
                 />
               )}
