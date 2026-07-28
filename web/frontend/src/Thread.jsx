@@ -179,9 +179,16 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         {turn.ask.issues?.map((issue) => (
           <p key={issue.field}>{issue.reason}</p>
         ))}
-        {turn.ask.questions.map((question) => (
-          <p key={question}>{question}</p>
-        ))}
+        {/* §4.2[1] wrote this, over the slots the reader found missing. The
+            list is what the screen falls back to — three questions stacked at
+            someone who said hello, which is what this replaced. */}
+        {turn.ask.spoken ? (
+          <p>{turn.ask.spoken}</p>
+        ) : (
+          turn.ask.questions.map((question) => (
+            <p key={question}>{question}</p>
+          ))
+        )}
       </div>
     );
   }

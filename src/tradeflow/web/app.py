@@ -332,6 +332,16 @@ def analyze_endpoint(
         return {
             "status": "needs_input",
             "understood": heard,
+            # §4.2[1] in words. `questions` stays — the request panel pairs a
+            # field with its own wording, and this one sentence covers all
+            # three at once. What is asked for is still decided by the slot
+            # reader; only the phrasing comes from the model, and an empty
+            # `spoken` leaves the screen listing `questions` as before.
+            "spoken": synthesizer.ask_for(
+                list(reading.missing),
+                understood=heard,
+                question=request.utterance,
+            ).summary,
             "questions": list(reading.questions),
             # Field and wording paired, so the screen asks for the thing it is
             # quoting the question for.

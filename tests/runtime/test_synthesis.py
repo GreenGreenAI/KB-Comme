@@ -87,6 +87,30 @@ class FigureTests(unittest.TestCase):
         self.assertEqual(figures({}), [])
 
 
+class IntakePhrasingTests(unittest.TestCase):
+    """§4.2[1]: the model supplies Korean, the slot reader supplies the list."""
+
+    def test_asking_may_repeat_what_the_user_wrote(self) -> None:
+        """Echoing "10만 달러" back to the person who just said it is
+        confirmation, not the rounding §4.2[9] forbids."""
+        allowed = ["amount: 100000", "10만 달러 수출이요"]
+        self.assertEqual(check("수출 10만 달러의 결제일을 알려주세요.", allowed), "")
+
+    def test_a_number_from_neither_the_user_nor_the_parse_is_caught(self) -> None:
+        allowed = ["amount: 100000", "10만 달러 수출이요"]
+        self.assertIn("146,630,000", check("146,630,000원이 됩니다.", allowed))
+
+    def test_nothing_missing_means_nothing_to_ask(self) -> None:
+        written = Synthesizer(api_key="x").ask_for([])
+        self.assertFalse(written.accepted)
+
+    def test_no_key_falls_back_to_the_question_list(self) -> None:
+        """An empty `spoken` is what makes the screen list `questions` instead,
+        so declining has to be silent and total."""
+        written = Synthesizer(api_key="").ask_for(["amount"])
+        self.assertEqual(written.summary, "")
+
+
 class WithoutAKeyTests(unittest.TestCase):
     def test_no_key_declines_rather_than_raising(self) -> None:
         """The product answers without prose. Refusing to start because an

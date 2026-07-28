@@ -1,4 +1,17 @@
-"""§4.2[9] 응답 합성 — the one field a language model may write.
+"""The sentences a language model may write, and the conditions on them.
+
+Two of them. §4.2[9] turns finished figures into an explanation, and §4.2[1]
+turns a list of missing slots into a question. Neither decides anything: the
+figures are already computed when the first runs, and *which* slots are missing
+is already decided when the second runs. The model supplies Korean, not
+judgement.
+
+That division is why this is safe at all, and it is enforced rather than
+requested — see `check` below.
+
+---
+
+§4.2[9] 응답 합성 — the one field a language model may write.
 
 The spec gives this agent no tools and one strict rule:
 
@@ -24,6 +37,7 @@ snapshotted and dated. This fetches no facts. It is handed them.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -175,6 +189,45 @@ def figures(result: dict[str, Any]) -> list[str]:
     return written
 
 
+INTAKE_INSTRUCTION = """\
+당신은 수출입 기업의 환위험 분석을 돕습니다. 아직 계산에 필요한 정보가
+부족한 상태이고, 무엇이 부족한지는 이미 정해져 있습니다. 당신의 일은 그것을
+자연스러운 한국어로 옮기는 것뿐입니다.
+
+규칙:
+- 「물어야 할 것」을 늘리거나 줄이지 마세요. 목록에 있는 것만 물으세요.
+- 「이미 파악한 것」은 다시 묻지 마세요.
+- 숫자를 만들지 마세요. 이미 파악한 값만 그대로 쓸 수 있습니다.
+- 계산 결과를 추측하거나 언급하지 마세요. 아직 계산하지 않았습니다.
+- 사용자가 인사를 했다면 짧게 받고 본론으로 가세요.
+- 한두 문장. 심문이 아니라 안내처럼.
+"""
+
+INTAKE_SCHEMA = {
+    "name": "intake",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "sentence": {"type": "string", "description": "사용자에게 보여줄 한두 문장."},
+            "asked_fields": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "이 문장이 실제로 물은 항목의 이름. 목록에서 고르세요.",
+            },
+        },
+        "required": ["sentence", "asked_fields"],
+        "additionalProperties": False,
+    },
+}
+
+FIELD_WORDS = {
+    "amount": "거래 금액 (달러)",
+    "expected_payment_date": "대금을 주고받기로 한 날짜",
+    "direction": "수출인지 수입인지",
+}
+
+
 class Synthesizer:
     """The §4.2[9] agent, or nothing at all when there is no key.
 
@@ -234,8 +287,6 @@ class Synthesizer:
                 temperature=TEMPERATURE,
                 max_tokens=400,
             )
-            import json
-
             written = json.loads(completion.choices[0].message.content or "{}")
         except Exception as failure:  # noqa: BLE001 — any failure is the same failure
             # The network, the key, the schema, the JSON. None of them change
@@ -249,4 +300,79 @@ class Synthesizer:
         broken = check(sentence, figures)
         if broken:
             return Synthesis(sentence, False, broken)
+        return Synthesis(sentence, True)
+
+    def ask_for(
+        self,
+        missing: list[str],
+        *,
+        understood: dict[str, Any] | None = None,
+        question: str | None = None,
+    ) -> Synthesis:
+        """§4.2[1]: say what is still needed, in words rather than in a list.
+
+        The slots come in already chosen — §4.2[1] fixes both the priority
+        (`amount` → `expected_payment_date` → `direction`) and the cap of three,
+        and reading a sentence for values is `read_utterance`'s job, not this
+        one's. Handing that decision to a model would make what the product asks
+        for vary between two identical situations.
+
+        This is the path a session almost always starts on. The spec says so:
+        "대상 사용자는 자신의 환노출액을 인지하지 못하는 집단이므로, 대부분의
+        세션이 불완전한 입력으로 시작한다." Wiring the model only into the
+        finished answer left the most-seen screen reciting fixed strings at
+        someone who had said hello.
+        """
+        if not self.available or not missing:
+            return Synthesis("", False, "합성할 수 없습니다")
+
+        known = understood or {}
+        wanted = [FIELD_WORDS.get(field, field) for field in missing]
+        prompt = (
+            f"{INTAKE_INSTRUCTION}\n물어야 할 것:\n"
+            + "\n".join(f"- {word}" for word in wanted)
+            + (
+                "\n\n이미 파악한 것:\n"
+                + "\n".join(f"- {key}: {value}" for key, value in known.items())
+                if known
+                else "\n\n이미 파악한 것: 없음"
+            )
+            + (f"\n\n사용자가 방금 한 말: {question}" if question else "")
+        )
+        try:
+            completion = self._open().chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_schema", "json_schema": INTAKE_SCHEMA},
+                temperature=TEMPERATURE,
+                max_tokens=300,
+            )
+            written = json.loads(completion.choices[0].message.content or "{}")
+        except Exception as failure:  # noqa: BLE001
+            return Synthesis("", False, f"되묻기 합성 실패: {type(failure).__name__}")
+
+        sentence = str(written.get("sentence", "")).strip()
+        if not sentence:
+            return Synthesis("", False, "빈 문장")
+
+        # Asking may repeat; answering must report. What the user themselves
+        # wrote is quotable here — echoing "10만 달러" back to the person who
+        # just said it is confirmation, not the rounding §4.2[9] forbids, and
+        # rejecting it made the question read as if it had not been heard. A
+        # third number, belonging to neither the user nor the parse, is still
+        # the model filling a slot instead of asking for it.
+        allowed = [f"{key}: {value}" for key, value in known.items()]
+        if question:
+            allowed.append(question)
+        broken = check(sentence, allowed)
+        if broken:
+            return Synthesis(sentence, False, broken)
+
+        # Self-reported, and treated as such: it catches a model that wandered
+        # off the list, not one that lies about staying on it. The guarantee
+        # that matters is upstream — `missing` was decided by the slot reader.
+        claimed = {str(field) for field in written.get("asked_fields", [])}
+        stray = claimed - set(missing) - set(wanted)
+        if stray:
+            return Synthesis(sentence, False, "묻지 않기로 한 항목: " + ", ".join(sorted(stray)))
         return Synthesis(sentence, True)
