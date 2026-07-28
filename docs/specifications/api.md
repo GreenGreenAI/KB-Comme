@@ -51,7 +51,7 @@ API가 도입될 때 각 엔드포인트에 다음을 정의한다.
 - source·hash·schema·kind·freshness 검증을 모두 통과한 거래 스냅샷만 분석한다.
 - `as_of`는 실행일보다 미래일 수 없고, 관측·취득일이 `as_of`보다 늦은 스냅샷은
   과거 분석에 사용할 수 없다. 날짜 비교 기준 시간대는 `Asia/Seoul`이다.
-- 응답은 현재 `DecisionPacket` schema 1.5의 JSON 표현이며 모든 Decimal은 문자열이다.
+- 응답은 현재 `DecisionPacket` schema 1.6의 JSON 표현이며 모든 Decimal은 문자열이다.
   신청 행동에는 `document_set_ids`, 항상 필요한 `required_documents`, 그리고
   필수·조건부·택일 구조를 보존한 `document_requirements`가 포함된다.
 

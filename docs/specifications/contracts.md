@@ -69,8 +69,23 @@ LLM 출력은 `SynthesisResult`로 구조화한다. 설명문은 비권위적이
 - 통합 결과의 `rule_ids`, 미충족요건, 문서, 절차, source/claim ID는
   최초 등장 순서로 모두 보존한다.
 - 판정 분류·통합을 추가한 schema는 `1.3`, K-SURE 상품 ID를 보존한 계약은
-  `1.4`이다. 현재 `1.5`는 `document_set_ids`와 필수·조건부·택일
-  `document_requirements`를 실행계획에 보존한다.
+  `1.4`이다. `1.5`는 `document_set_ids`와 필수·조건부·택일
+  `document_requirements`를 실행계획에 보존한다. 현재 `1.6`은 명시적
+  champion, 모델 버전, 헤지비율, 시나리오 범위, shortfall과 비용을
+  `hedge_decisions`에 보존한다.
+
+## 헤지 모델 결과 계약
+
+- 계산 계층은 `HedgeDecisionInput`의 구조를 충족하는 결정론적 결과만 전달한다.
+- 결과가 하나 이상이면 정확히 하나의 `champion_model_id`를 명시한다.
+- 같은 패킷에 동일 `model_id`를 두 번 넣을 수 없다.
+- `recommended_ratio`, adverse/forecast rate, breach probability,
+  expected shortfall과 estimated cost는 LLM이 변경할 수 없는 numeric claim이다.
+- 합성 결과의 모델 ID·버전·champion 여부·상태는 패킷과 정확히 일치해야 한다.
+- challenger 비교 결과를 함께 담을 수 있지만, `is_champion=false` 결과는 운영
+  추천으로 승격되지 않는다.
+- 런타임이 이 계약을 호출하는 작업은 역할 B가 수행하며, 계약 추가만으로 기존
+  `analyze_hedge()` 호출 경로가 자동 교체되지는 않는다.
 
 ## 신청서류 계약
 
