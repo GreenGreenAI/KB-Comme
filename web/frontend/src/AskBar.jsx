@@ -12,6 +12,9 @@ import { useEffect, useRef, useState } from "react";
  *  conversation. This keeps the *control*.
  */
 
+/** A hair over the .ask-in animation in styles.css. */
+const ASK_IN_MS = 420;
+
 const FALLBACK_QUESTION = {
   amount: "거래 금액이 얼마인가요?",
   expected_payment_date: "대금을 주고받기로 한 날짜가 언제인가요?",
@@ -26,7 +29,7 @@ const DIRECTION_OPTIONS = [
 export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
   if (pending?.status === "needs_placement") {
     return (
-      <Ask label="어느 거래인가요">
+      <Ask key="placement" label="어느 거래인가요">
         <ChoiceList
           options={pending.options.map((option) => ({
             value: option.placement,
@@ -52,7 +55,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (slot === "direction") {
     return (
-      <Ask label={question}>
+      <Ask key={`direction:${question}`} label={question}>
         <ChoiceList
           options={DIRECTION_OPTIONS}
           onPick={(value) => onSlot({ case: { direction: value } })}
@@ -63,7 +66,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (slot) {
     return (
-      <Ask label={question}>
+      <Ask key={`slot:${slot}`} label={question}>
         <SlotField slot={slot} onSlot={onSlot} />
       </Ask>
     );
@@ -71,7 +74,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (requiredInputs?.length > 0) {
     return (
-      <Ask label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
+      <Ask key="profit" label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
         <ProfitFields onSlot={onSlot} />
       </Ask>
     );
@@ -80,9 +83,30 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
   return null;
 }
 
+/** The request panel, and the way it comes in.
+ *
+ *  It arrives with the same gesture the answer uses — it is the end of the
+ *  agent's turn, not a separate piece of chrome that appeared underneath.
+ *
+ *  The class comes back off once the fade has had its time. An animation that
+ *  is applied but never advances holds its opening frame, and here that frame
+ *  is an invisible panel with the only controls the user needs in it. Every
+ *  call site keys this on the question, so a new question is a new panel and
+ *  arrives rather than silently swapping its contents.
+ */
 function Ask({ label, children }) {
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), ASK_IN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="ask" role="group" aria-label={label}>
+    <div
+      className={entered ? "ask" : "ask ask-in"}
+      role="group"
+      aria-label={label}
+    >
       <p className="ask-label">{label}</p>
       {children}
     </div>

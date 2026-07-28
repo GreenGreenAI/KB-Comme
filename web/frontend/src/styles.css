@@ -342,6 +342,17 @@
     border-radius: 12px;
     background: color-mix(in srgb, var(--accent) 4%, #fff);
   }
+  /* It comes in the way the answer does, and from just below where it lands —
+     the request is the end of the agent's turn, not a piece of chrome that
+     appeared under it. AskBar takes the class off again once the fade has had
+     its time, so a stalled animation cannot leave the panel invisible with
+     the only controls the user needs inside it. */
+  .ask-in { animation: ask-in .36s cubic-bezier(.16,.84,.44,1); }
+  @keyframes ask-in {
+    from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+
   /* The question itself, not a field name. The thread has scrolled on by the
      time the user looks down here, so the panel repeats what is being asked
      rather than labelling the box "금액 (USD)". */
@@ -519,7 +530,7 @@
      for a reader who has asked for less of it — the content simply is where
      it belongs, at once. */
   @media (prefers-reduced-motion: reduce) {
-    .arrive, .written.writing .w, .step { animation: none; }
+    .arrive, .written.writing .w, .step, .ask-in { animation: none; }
   }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }

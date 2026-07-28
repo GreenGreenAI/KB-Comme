@@ -3,17 +3,16 @@ import { won, pct } from "./api.js";
 
 /** How an answer arrives: top to bottom, one part after the next.
  *
- *  Read as a budget rather than as scattered constants — the trace lands
- *  first, the sentence writes itself, and the figures follow it down the card.
+ *  Read as a budget rather than as scattered constants — the sentence writes
+ *  itself, and the figures follow it down the card.
  *
  *  Every gap here is shorter than the fade it starts, and deliberately so. A
  *  part that finished arriving before the next one began would read as a
  *  series of separate pops; overlapping them means eight or nine words are
  *  always mid-fade, and the sentence washes in instead of clicking into place.
  */
-const TRACE_MS = 90;
+const OPENING_MS = 120;
 const WORD_MS = 52;
-const AFTER_SENTENCE_MS = 140;
 const BLOCK_MS = 165;
 const ARRIVE_MS = 520;   // matches the .arrive animation in styles.css
 
@@ -214,24 +213,26 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
   const asksProfit = !hedge && hedgeInputs.length > 0;
 
-  // The order the turn arrives in, as a gap before each unit. Trace lines,
-  // then the sentence a word at a time, then the blocks below it.
+  // The order the turn arrives in, as a gap before each unit: the sentence a
+  // word at a time, then the blocks below it.
+  //
+  // The trace is not in here. It is a list of which tools ran, not part of the
+  // answer, and staging it made the reader watch a receipt being printed
+  // before the answer would start. It is simply there.
   const timeline = useMemo(() => {
-    const gaps = trace.map(() => TRACE_MS);
-    for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? AFTER_SENTENCE_MS : WORD_MS);
+    const gaps = [];
+    for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
     // card, band, folds, and the line that follows them
     const blocks = 2 + (result.market_scenario ? 1 : 0) + (asksProfit ? 1 : 0);
     for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
     return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trace.length, words, asksProfit]);
+  }, [words, asksProfit]);
 
   const [shown, settled] = useCascade(timeline, live);
   // One switch for the whole turn: while it is arriving the parts carry the
   // motion class, and once it has settled they carry nothing.
   const arrive = settled ? "" : " arrive";
-  const afterTrace = trace.length;
-  const afterWords = afterTrace + words;
 
   // The turn knows when it has finished landing; nothing else can. Block count
   // depends on what the plan produced and the sentence length varies, so a
@@ -247,25 +248,23 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     <div className="turn agent">
       <span className="who">TradeFlow</span>
 
-      {trace.length > 0 && shown > 0 && (
+      {trace.length > 0 && (
         <div className="trace">
-          {trace.slice(0, shown).map((name) => (
-            <span className={`ok${arrive}`} key={name}>
+          {trace.map((name) => (
+            <span className="ok" key={name}>
               {WORKER_LABEL[name] ?? name}
             </span>
           ))}
         </div>
       )}
 
-      {/* The sentence arrives a word at a time, after the trace has landed.
-          Written as segments rather than JSX so words can be mounted one by
-          one; emphasis rides along on the segment. */}
-      {shown > afterTrace && (
-        <Written segments={line} shown={shown - afterTrace} settled={settled} />
-      )}
+      {/* The sentence arrives a word at a time. Written as segments rather than
+          JSX so words can be mounted one by one; emphasis rides along on the
+          segment. */}
+      {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
 
-      {shown > afterWords && (
-        <Answer result={result} order={order} shown={shown - afterWords} arrive={arrive} />
+      {shown > words && (
+        <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
       )}
 
       {/* Asked once, and only in words. The fields live in the bar above the

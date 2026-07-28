@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
@@ -95,6 +95,36 @@ export default function App() {
     // pinned near the top with the newest answer out of sight.
     el.scrollTop = el.scrollHeight;
   }, [turns, busy]);
+
+  /** Follow the answer down as it writes itself.
+   *
+   *  The jump above happens once, when the turn is added — at which point the
+   *  turn is still empty. Everything that gives it height arrives over the next
+   *  couple of seconds, and without this the answer grows off the bottom of the
+   *  thread while the reader watches the top of it.
+   *
+   *  It eases toward the bottom rather than pinning to it, so the view moves at
+   *  the pace the answer is being written instead of snapping on every word.
+   *  And it yields immediately: if the thread is not where this last left it,
+   *  the reader has taken over, and following them back down would be a fight
+   *  over the scrollbar. */
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!writing || !el || !stick.current) return undefined;
+    let mine = el.scrollTop;
+    const follow = setInterval(() => {
+      if (Math.abs(el.scrollTop - mine) > 2) {
+        stick.current = false;
+        clearInterval(follow);
+        return;
+      }
+      const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+      if (gap < 0.5) return;
+      el.scrollTop += Math.max(gap * 0.16, 0.5);
+      mine = el.scrollTop;
+    }, 16);
+    return () => clearInterval(follow);
+  }, [writing]);
 
   function say(turn) {
     setTurns((prev) => [...prev, turn]);
