@@ -3,6 +3,7 @@ import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
+import Login from "./Login.jsx";
 import { analyze } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -78,6 +79,12 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
   const [writing, setWriting] = useState(false);
+  // The app opens signed in. There is no account system behind the form yet,
+  // so landing on it would put a door in front of the product with nothing on
+  // the other side; the state worth opening in is the one the rest of this is
+  // designed around, where the company's own facts are already known. 로그아웃
+  // is how the sign-in screen is reached.
+  const [signedIn, setSignedIn] = useState(true);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
@@ -294,7 +301,14 @@ export default function App() {
       {/* Home returns to the opening screen without discarding anything. The
           conversation is still there, and typing continues it — a brand click
           should not be able to destroy work the user cannot get back. */}
-      <Nav onHome={() => setView("entry")} />
+      <Nav
+        onHome={() => setView("entry")}
+        signedIn={signedIn}
+        onSignOut={() => setSignedIn(false)}
+      />
+      {!signedIn ? (
+        <Login onSignIn={() => setSignedIn(true)} />
+      ) : (
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>
           <Entry onSend={(text) => send(text)} busy={busy} />
@@ -339,6 +353,7 @@ export default function App() {
           </section>
         </div>
       </div>
+      )}
     </>
   );
 }

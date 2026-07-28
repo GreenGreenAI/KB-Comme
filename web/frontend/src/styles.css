@@ -143,6 +143,152 @@
     margin: .1rem .65rem .5rem; font-size: .6875rem; color: var(--ink-45); line-height: 1.55;
   }
 
+  /* ---------- sign in ---------- */
+  /* Two halves: why an account is worth having, and the form. The copy side
+     is given the wider column because it is the part that has to be read; the
+     form is a fixed, familiar width and does not want to be larger. */
+  .signin {
+    width: min(1180px, calc(100% - 2.5rem)); margin: 0 auto;
+    padding: clamp(2rem, 7vh, 5rem) 0 3rem;
+    display: grid; grid-template-columns: 1fr 25.5rem; gap: clamp(2rem, 6vw, 5rem);
+    /* Its own scroll, because the page has none. `html, body` are locked to
+       the viewport so the conversation never grows a second scrollbar — which
+       means a form taller than a short window would simply be cut off with no
+       way to reach the button. `safe` gives up centring rather than centring
+       something too tall and pushing its head off the top. */
+    align-items: safe center;
+    height: calc(100dvh - 5.25rem); overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+  }
+  .signin-say { display: flex; flex-direction: column; gap: 1.15rem; }
+  /* Heavier than the entry hero. That one opens onto an empty input and wants
+     to be quiet; this one is competing with a form for the first look, and a
+     300-weight line loses that. */
+  .signin .hero { font-size: clamp(2.4rem, 4.6vw, 3.5rem); font-weight: 700; }
+  .signin .hero b { font-weight: 700; }
+  .signin-points {
+    margin: .35rem 0 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: .55rem;
+    color: var(--ink-70); font-size: .9375rem;
+  }
+  /* Drawn rather than a bullet character: a list marker inherits the text
+     colour and cannot carry the accent without colouring the line with it. */
+  .signin-points li { display: flex; align-items: baseline; gap: .65rem; }
+  .signin-points li::before {
+    content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent); transform: translateY(-2px);
+  }
+
+  .signin-card {
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 18px;
+    box-shadow: var(--lift-lg); padding: 1.9rem 1.75rem 1.6rem;
+    display: flex; flex-direction: column; gap: .85rem;
+    /* One piece, arriving a beat after the first line of the copy. Its
+       contents do not stagger — a field that fades in is a field the hand has
+       to wait for, and the cursor is already in this box. */
+    animation: card-in .55s cubic-bezier(.16,.84,.44,1) 140ms backwards;
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(16px) scale(.985); }
+    to { opacity: 1; transform: none; }
+  }
+  .signin-card h2 { margin: 0; font-size: 1.375rem; letter-spacing: -.02em; }
+  .signin-sub { margin: -.5rem 0 .35rem; color: var(--ink-45); font-size: .875rem; }
+
+  .field { display: flex; flex-direction: column; gap: .4rem; }
+  .field-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .75rem;
+    font-size: .8125rem; font-weight: 600; color: var(--ink-70);
+  }
+  .field-top a { color: var(--ink-45); font-weight: 400; text-decoration: none; }
+  .field-top a:hover { color: var(--accent); }
+  .field input, .field-box {
+    width: 100%; background: var(--tint); border: 1px solid transparent;
+    border-radius: 10px; padding: .7rem .85rem; font-size: .9375rem;
+    transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+  }
+  .field input { outline: none; }
+  .field input::placeholder { color: var(--ink-45); }
+  /* The box takes the focus ring so the reveal button inside it is included —
+     a ring around only the text half would read as two controls. */
+  .field-box { display: flex; align-items: center; gap: .5rem; padding-right: .5rem; }
+  .field-box input { background: none; border: 0; padding: 0; border-radius: 0; }
+  .field > input:focus, .field-box:focus-within {
+    background: var(--paper); border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  .peek {
+    flex: none; background: none; border: 0; cursor: pointer; padding: .25rem .4rem;
+    font-size: .75rem; color: var(--ink-45); border-radius: 6px;
+  }
+  .peek:hover { color: var(--accent); background: var(--tint); }
+
+  /* The native box is kept for the keyboard and for the label click; what is
+     drawn is the square beside it. */
+  .check {
+    display: flex; align-items: center; gap: .55rem; cursor: pointer;
+    font-size: .875rem; color: var(--ink-70); margin: .15rem 0 .3rem;
+  }
+  .check input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .tickbox {
+    flex: none; width: 17px; height: 17px; border-radius: 5px;
+    border: 1.5px solid var(--rule); background: var(--paper);
+    display: grid; place-items: center;
+    transition: background .14s ease, border-color .14s ease;
+  }
+  .tickbox::after {
+    content: ""; width: 9px; height: 5px; margin-top: -2px;
+    border-left: 2px solid var(--paper); border-bottom: 2px solid var(--paper);
+    transform: rotate(-45deg) scale(.6); opacity: 0;
+    transition: transform .16s cubic-bezier(.16,.84,.44,1), opacity .12s ease;
+  }
+  .check input:checked + .tickbox { background: var(--accent); border-color: var(--accent); }
+  .check input:checked + .tickbox::after { transform: rotate(-45deg) scale(1); opacity: 1; }
+  .check input:focus-visible + .tickbox { box-shadow: 0 0 0 3px var(--accent-tint); }
+
+  .signin-go {
+    background: var(--accent); color: var(--paper); border: 0; cursor: pointer;
+    border-radius: 10px; padding: .8rem 1rem; font-size: .9375rem; font-weight: 600;
+    transition: background .14s ease, transform .1s ease;
+  }
+  .signin-go:hover { background: var(--accent-deep); }
+  .signin-go:active { transform: scale(.99); }
+
+  /* A rule with a word in it, drawn as one element so the two halves can never
+     fall out of alignment. */
+  .or {
+    display: flex; align-items: center; gap: .8rem; margin: .5rem 0 .1rem;
+    font-size: .75rem; color: var(--ink-45);
+  }
+  .or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--rule-faint); }
+
+  .signin-alt {
+    background: var(--paper); border: 1px solid var(--rule); cursor: pointer;
+    border-radius: 10px; padding: .72rem 1rem; font-size: .9375rem; font-weight: 600;
+    transition: border-color .14s ease, color .14s ease, transform .1s ease;
+  }
+  .signin-alt:hover { border-color: var(--accent); color: var(--accent); }
+  .signin-alt:active { transform: scale(.99); }
+
+  .signin-legal {
+    margin: .6rem 0 0; font-size: .75rem; line-height: 1.6; color: var(--ink-45);
+  }
+  .signin-legal a { color: var(--accent); text-decoration: none; }
+  .signin-legal a:hover { text-decoration: underline; }
+
+  /* One column below the split: the copy still reads first, the form follows. */
+  @media (max-width: 900px) {
+    .signin {
+      grid-template-columns: 1fr; gap: 2.25rem;
+      padding-top: clamp(1.5rem, 5vh, 3rem);
+    }
+    .signin-card { max-width: 25.5rem; width: 100%; }
+  }
+
+  /* The invitation for someone with no account. Sits where the avatar does. */
+  .nav-invite { display: flex; align-items: center; gap: .85rem; }
+  .nav-invite span { font-size: .875rem; color: var(--ink-70); }
+
   /* ---------- state machine ---------- */
   .stage { display: grid; }
   .view { grid-area: 1 / 1; transition: opacity .28s ease, transform .28s ease; }
@@ -533,7 +679,8 @@
      for a reader who has asked for less of it — the content simply is where
      it belongs, at once. */
   @media (prefers-reduced-motion: reduce) {
-    .arrive, .written.writing .w, .step, .ask-in { animation: none; }
+    .arrive, .written.writing .w, .step, .ask-in,
+    .reveal, .signin-card { animation: none; }
   }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }

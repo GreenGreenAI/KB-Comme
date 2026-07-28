@@ -3,18 +3,19 @@ import { useEffect, useRef, useState } from "react";
 /** Kept in step with the .menu transition in styles.css. */
 const MENU_EXIT_MS = 150;
 
-/** Signed out shows a way in; signed in shows who you are. The menu is built
- *  from this product's own concepts — what is saved here is what the intake
- *  agent no longer has to ask for.
+/** Signed out offers a way to get an account; signed in shows who you are.
+ *  The menu is built from this product's own concepts — what is saved here is
+ *  what the intake agent no longer has to ask for.
  *
- *  The screen opens signed in. There is no authentication yet and no sign-in
- *  page to send anyone to, so a button offering one would lead nowhere; the
- *  state worth showing is the one the rest of the product is designed around,
- *  where the company's own facts are already known. The signed-out branch is
- *  kept rather than deleted — it is what the real sign-in page will return to,
- *  and the menu's 로그아웃 still reaches it. */
-export default function Nav({ onHome }) {
-  const [signedIn, setSignedIn] = useState(true);
+ *  Whether anyone is signed in is App's to know, not this bar's: the sign-in
+ *  page is a view of the app, and a header cannot decide which view the app is
+ *  showing. The bar only reports the state and offers the way out of it.
+ *
+ *  Signed out, the bar has no 로그인 button. The whole screen already is the
+ *  sign-in form, and a button that scrolls you to what you are looking at is
+ *  noise — what is missing at that moment is a way in for someone with no
+ *  account at all. */
+export default function Nav({ onHome, signedIn, onSignOut }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
 
@@ -57,6 +58,11 @@ export default function Nav({ onHome }) {
           pointer so they do not read as dead text — but the cursor stays an
           arrow and aria-disabled says what a hover cannot. A link that looks
           like a link and goes nowhere is worse than one that says "준비 중". */}
+      {/* The areas belong to the signed-in product. Showing them over a
+          sign-in form would list rooms nobody can enter yet. Left out rather
+          than hidden: the `hidden` attribute loses to this bar's own
+          `display: flex`, so it would have shown anyway. */}
+      {signedIn && (
       <nav aria-label="주요 영역">
         <span className="nav-link on" aria-current="page">분석</span>
         {["지원제도", "신고의무", "근거"].map((area) => (
@@ -70,12 +76,16 @@ export default function Nav({ onHome }) {
           </span>
         ))}
       </nav>
+      )}
 
       <div className="account" ref={box}>
         {!signedIn ? (
-          <button className="nav-cta" type="button" onClick={() => setSignedIn(true)}>
-            로그인
-          </button>
+          <div className="nav-invite">
+            <span>계정이 없으신가요?</span>
+            <button className="nav-cta" type="button">
+              가입 신청
+            </button>
+          </div>
         ) : (
           <>
             <button
@@ -115,7 +125,7 @@ export default function Nav({ onHome }) {
                   onClick={(e) => {
                     e.preventDefault();
                     setOpen(false);
-                    setSignedIn(false);
+                    onSignOut();
                   }}
                 >
                   로그아웃
