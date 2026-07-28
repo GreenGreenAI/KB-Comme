@@ -483,23 +483,26 @@
     to { opacity: 1; transform: none; }
   }
 
-  /* The sentence writes itself, a word at a time. Words start faint rather
-     than absent for the same reason: an animation that never advances holds
-     its opening frame, and at 0.2 that frame is still legible. */
   /* One gesture for every part of an arriving answer: the trace lines, the
-     card's rows, the band. Each carries its own delay so the answer lands top
-     to bottom instead of the middle writing itself under a finished card. */
-  .arrive { animation: arrive .34s cubic-bezier(.22,.9,.3,1) backwards; }
+     sentence's words, the card, the band.
+
+     Movement only — nothing here touches opacity. Arrival is mounting: a part
+     that has not arrived is not in the document, so there is nothing to fade
+     up from, and a fade would only put a ghost of the finished answer on
+     screen ahead of itself. It also makes the failure mode cheap: an
+     animation that is applied but never advances holds its opening frame, and
+     that frame is legible text a few pixels low rather than invisible text. */
+  .arrive { animation: arrive .34s cubic-bezier(.22,.9,.3,1); }
   @keyframes arrive {
-    from { opacity: .2; transform: translateY(5px); }
-    to { opacity: 1; transform: none; }
+    from { transform: translateY(5px); }
+    to { transform: none; }
   }
 
-  .written .w { animation: word .3s ease backwards; }
+  .written .w { display: inline-block; animation: word .24s ease; }
   .w.em { color: var(--accent); font-weight: 600; }
   @keyframes word {
-    from { opacity: .2; }
-    to { opacity: 1; }
+    from { transform: translateY(3px); }
+    to { transform: none; }
   }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }
