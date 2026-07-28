@@ -277,11 +277,6 @@
     display: flex; align-items: center; gap: .7rem;
     padding: .45rem .55rem .55rem 1rem;
   }
-  .ctx {
-    font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .ctx b { color: var(--ink-70); font-weight: 600; }
   .keys {
     margin-left: auto; display: flex; align-items: center; gap: .3rem;
     font-size: .6875rem; color: var(--ink-45); white-space: nowrap;
