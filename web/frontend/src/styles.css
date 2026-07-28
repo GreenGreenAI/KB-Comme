@@ -220,7 +220,7 @@
      "roughly 40 characters".
      Only direct children are capped. The band's scale labels and the figure
      row are also <p>/<dl>, and they must keep the full width. */
-  .turn.agent > p, .answer-note, .fold-note, .composer-hint { max-width: 40em; }
+  .turn.agent > p, .answer-note, .fold-note { max-width: 40em; }
   .who { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); }
   .turn.agent p { margin: 0; }
   .turn.agent p + p { margin-top: .65rem; }
@@ -248,44 +248,104 @@
   .quick button { cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 999px; padding: .25rem .8rem; font-size: .8125rem; }
   .quick button:hover { border-color: var(--accent); }
 
-  /* The top row of the input box, not a box above it.
-     Two same-width rounded panels stacked on each other read as separate
-     parts; the request belongs to the thing the user types into, so it shares
-     its border and is divided from the text row by a hairline only. */
+  /* ---------- the input surface ---------- */
+  /* One box. The request the agent is waiting on is its top row, the text
+     area its middle, and the footer carries what the session computes against
+     plus how to send. Two same-width rounded panels stacked on each other read
+     as separate parts, which is what this replaced. */
+  .composer { border-top: 1px solid var(--rule-faint); padding: .85rem 1.5rem 1.15rem; }
+  .composer-box {
+    background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent);
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+  /* The whole surface responds, not just the field inside it — the box is
+     what the user is aiming at. */
+  .composer-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .composer-box textarea {
+    display: block; width: 100%; border: none; background: none; resize: none;
+    outline: none; font-size: .9375rem; line-height: 1.6;
+    padding: .8rem 1rem .1rem; max-height: 168px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+  }
+  .composer-box textarea::placeholder { color: var(--ink-45); }
+
+  .composer-foot {
+    display: flex; align-items: center; gap: .7rem;
+    padding: .45rem .55rem .55rem 1rem;
+  }
+  .ctx {
+    font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ctx b { color: var(--ink-70); font-weight: 600; }
+  .keys {
+    margin-left: auto; display: flex; align-items: center; gap: .3rem;
+    font-size: .6875rem; color: var(--ink-45); white-space: nowrap;
+  }
+  .keys kbd {
+    font-family: var(--mono); font-size: .625rem; line-height: 1;
+    padding: .2rem .35rem; border: 1px solid var(--rule);
+    border-bottom-width: 2px; border-radius: 5px; color: var(--ink-70);
+    background: var(--paper);
+  }
+  .keys kbd + kbd { margin-left: .5rem; }
+  .send {
+    flex: none; width: 30px; height: 30px; border-radius: 9px; border: none;
+    display: grid; place-items: center; font-size: .875rem; cursor: pointer;
+    background: var(--accent); color: #fff;
+    transition: background .15s ease, transform .12s ease, opacity .15s ease;
+  }
+  .send:hover:not(:disabled) { background: var(--accent-deep); }
+  .send:active:not(:disabled) { transform: scale(.92); }
+  /* Dimmed rather than hidden: the target stays where the hand expects it. */
+  .send:disabled { background: var(--rule); color: var(--paper); cursor: default; }
+
+  /* ---------- the request row ---------- */
+  /* Marked by an edge rather than a panel: it belongs to this box, and the
+     stripe says which part of it is waiting on the user. */
   .askbar {
     display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-    padding: .5rem .85rem;
-    border-bottom: 1px solid var(--rule);
+    padding: .55rem .95rem .55rem .8rem;
+    border-bottom: 1px solid var(--rule-faint);
+    border-left: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 5%, #fff);
   }
   /* No entry animation here. `rise` shifts its subject down 8px on the opening
      frame, and inside this box that lands on the text row — the one place the
-     8px offset is not harmless. The hairline is enough to announce the row. */
-  .ask-label { font-size: .75rem; color: var(--accent-deep); font-weight: 600; margin-right: .1rem; }
+     8px offset is not harmless. */
+  .ask-label {
+    font-size: .6875rem; font-weight: 600; color: var(--accent-deep);
+    letter-spacing: .01em; margin-right: .15rem;
+  }
   .askbar input, .askbar select {
     font-family: var(--mono); font-size: .8125rem; background: var(--paper);
     border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem;
-    min-width: 0; flex: 0 1 11rem;
+    min-width: 0; flex: 0 1 11rem; outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
   }
-  .askbar button {
+  .askbar input:focus, .askbar select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .askbar > button:not(.choice) {
     cursor: pointer; background: var(--accent); color: #fff; border: none;
-    border-radius: 8px; padding: .4rem .95rem; font-size: .8125rem;
+    border-radius: 8px; padding: .38rem .9rem; font-size: .8125rem;
     transition: background .15s ease, transform .12s ease;
   }
-  .askbar button:hover { background: var(--accent-deep); }
-  .askbar button:active { transform: scale(.97); }
+  .askbar > button:not(.choice):hover { background: var(--accent-deep); }
+  .askbar > button:not(.choice):active { transform: scale(.97); }
   .ask-choices { display: flex; gap: .4rem; flex-wrap: wrap; }
-  .askbar .choice { background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; padding: .35rem .85rem; }
-  .askbar .choice:hover { background: var(--paper); border-color: var(--accent); color: var(--accent); }
-
-  .composer { border-top: 1px solid var(--rule-faint); padding: .9rem 1.5rem 1.1rem; }
-  .composer-box {
-    background: var(--tint); border: 1px solid var(--rule);
-    border-radius: 12px; overflow: hidden;
+  .askbar .choice {
+    background: var(--paper); color: var(--ink); border: 1px solid var(--rule);
+    border-radius: 999px; padding: .32rem .85rem; font-size: .8125rem; cursor: pointer;
   }
-  .composer-row { display: flex; gap: .6rem; align-items: flex-end; padding: .55rem .6rem .55rem .85rem; }
-  .composer-box textarea { flex: 1; border: none; background: none; resize: none; outline: none; min-height: 1.6rem; font-size: .9375rem; }
-  .composer-box .send { width: 32px; height: 32px; font-size: .9rem; }
-  .composer-hint { margin: .55rem 0 0; font-size: .6875rem; color: var(--ink-45); }
+  .askbar .choice:hover { border-color: var(--accent); color: var(--accent); }
+
 
 
   /* ---------- the answer, inside the message ---------- */
