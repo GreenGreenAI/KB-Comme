@@ -36,6 +36,7 @@ class SourceMonitorResult:
     response_sha256: str
     missing_markers: tuple[str, ...]
     storage_policy: str
+    error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +50,7 @@ class SourceMonitorResult:
             "response_sha256": self.response_sha256,
             "missing_markers": list(self.missing_markers),
             "storage_policy": self.storage_policy,
+            "error": self.error,
         }
 
 
@@ -134,9 +136,60 @@ def fetch_and_check(
         )
 
 
+def check_all(
+    specs: tuple[SourceMonitorSpec, ...],
+    *,
+    opener: Callable[..., Any] = urlopen,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> tuple[SourceMonitorResult, ...]:
+    """Check every source, isolating the ones that cannot be reached.
+
+    A single unreachable host must not decide the freshness of the other
+    fourteen. `www.koreaexim.go.kr` currently serves an incomplete certificate
+    chain, and letting that abort the run would leave every rule fail-closed
+    over an issue on one server. An unreachable source is recorded as
+    `unreachable`, which downstream reads as "not verified" — never as
+    "verified".
+    """
+    results: list[SourceMonitorResult] = []
+    for spec in specs:
+        try:
+            results.append(fetch_and_check(spec, opener=opener, now=now))
+        except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+            results.append(
+                SourceMonitorResult(
+                    source_id=spec.source_id,
+                    checked_at=now(),
+                    status="unreachable",
+                    http_status=0,
+                    final_url=spec.url,
+                    content_type="",
+                    content_length=0,
+                    response_sha256="",
+                    missing_markers=(),
+                    storage_policy=spec.storage_policy,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            )
+    return tuple(results)
+
+
+def verification_payload(results: tuple[SourceMonitorResult, ...]) -> dict[str, Any]:
+    """The snapshot body: one verdict per source, and nothing from the page.
+
+    `storage_policy` in the manifest forbids retaining response bodies until
+    each source's redistribution terms are checked, so only the fingerprint and
+    the marker verdict are kept.
+    """
+    return {
+        "schema_version": "1.0",
+        "results": [item.as_dict() for item in results],
+    }
+
+
 def report_json(results: tuple[SourceMonitorResult, ...]) -> str:
     return json.dumps(
-        {"schema_version": "1.0", "results": [item.as_dict() for item in results]},
+        verification_payload(results),
         ensure_ascii=False,
         indent=2,
     )

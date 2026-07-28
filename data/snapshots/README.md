@@ -96,6 +96,45 @@ PYTHONPATH=src python -m tradeflow.integration.ecos 20160101 20260724
 이 값은 기준·분석용이며 은행이 기업에 제시한 실행 가능 호가가 아닙니다. `JPY(100)`
 같은 고시단위를 임의로 버리지 않고 raw 단위와 배수를 함께 보존합니다.
 
+### `KNOWLEDGE_SOURCES`
+
+지식 규칙이 인용하는 **공식 출처가 아직 그 내용 그대로인지** 확인한 기록입니다.
+다른 스냅샷과 달리 데이터를 담지 않고 검증 결과만 담습니다.
+
+이 스냅샷이 필요한 이유는 규칙 엔진의 판정 순서 때문입니다. `KnowledgeRepository`는
+조건을 보기 **전에** 출처 상태를 보고, `ACTIVE`가 아닌 출처를 인용한 규칙은
+사용자가 무엇을 답하든 자동 판정에서 제외합니다. 검증 기록이 런타임에 닿지 않으면
+전 규칙이 `EXPERT_CONFIRMATION_REQUIRED`로 떨어져 답이 비어버립니다.
+
+`knowledge/source_monitors.json`의 `required_markers`는 시행일·조문 번호처럼 그
+버전을 특정하는 문자열입니다. 페이지에서 마커가 사라졌다면 우리가 읽고 규칙을 만든
+그 텍스트가 아니게 된 것이므로 해당 출처를 `STALE`로 기록합니다.
+
+| 결과 상태 | 런타임 해석 | 뜻 |
+|---|---|---|
+| `verified` | `FRESH` | 마커가 모두 있음 |
+| `changed_or_unavailable` | `STALE` | 받아봤더니 마커가 없음 |
+| `unreachable` | *(매핑에서 제외)* → `FRESHNESS_UNKNOWN` | 받아보지 못함 |
+
+`unreachable`을 `STALE`로 적지 않는 것은 의도된 구분입니다. 둘 다 자동 판정을
+멈추지만, 전자는 출처에 대해 우리가 아무것도 관측하지 못했다는 뜻이고 후자는
+바뀌었다는 관측입니다. 서버 인증서 문제를 법령 개정처럼 보고할 수는 없습니다.
+
+```bash
+PYTHONPATH=src python scripts/check_sources.py --write
+```
+
+`--write`는 전체 매니페스트를 요구합니다. 일부만 조회한 결과를 기록하면 조회하지
+않은 출처가 판정 없는 상태로 남아 사실상 `FRESHNESS_UNKNOWN`이 되는데, 이는 검증
+실패와 구분되지 않기 때문입니다. 한 출처가 실패해도 나머지는 기록됩니다 —
+`www.koreaexim.go.kr`은 현재 중간 인증서를 누락해 `unreachable`로 남습니다.
+
+원문은 저장하지 않습니다. 매니페스트의 `storage_policy`가 출처별 재배포 조건을
+확인하기 전까지 응답 본문 보존을 금지하므로, HTTP 지문과 마커 판정만 남깁니다.
+
+`observed_at`은 조회 시각입니다. 검증은 그 순간의 페이지 상태에 대한 관측이므로
+관측 시각과 수집 시각이 같습니다. 30일이 지난 검증 기록은 읽는 쪽에서 거부합니다.
+
 ## 소비 규칙
 
 ### `BIZINFO_SUPPORT_API`
