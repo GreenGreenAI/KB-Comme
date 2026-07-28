@@ -99,12 +99,11 @@
     },
     {
       "source_id": "KOREAEXIM_REFERENCE_FX",
-      "url": "https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C&searchselect=&searchword=",
+      "url": "https://www.data.go.kr/data/3068846/openapi.do",
       "storage_policy": "metadata_and_fingerprint_only",
       "required_markers": [
-        "https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON",
-        "AP01 : 환율",
-        "DEAL_BAS_R",
+        "한국수출입은행 환율 정보",
+        "oapi.koreaexim.go.kr",
         "2026.4.30"
       ]
     },

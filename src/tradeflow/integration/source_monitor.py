@@ -145,9 +145,8 @@ def check_all(
     """Check every source, isolating the ones that cannot be reached.
 
     A single unreachable host must not decide the freshness of the other
-    fourteen. `www.koreaexim.go.kr` currently serves an incomplete certificate
-    chain, and letting that abort the run would leave every rule fail-closed
-    over an issue on one server. An unreachable source is recorded as
+    sources. Letting one network failure abort the run would leave every rule
+    fail-closed over an unrelated server. An unreachable source is recorded as
     `unreachable`, which downstream reads as "not verified" — never as
     "verified".
     """
