@@ -200,49 +200,13 @@ function AgentTurn({ turn, live, first, previous }) {
         </div>
       )}
 
-      {first && market && swing !== null ? (
-        <p>
-          계산했습니다.{" "}
-          <strong>
-            결제일까지 불리한 환율이 {won(market.adverse_rate)}원일 수 있고
-          </strong>
-          , 그러면 받는 금액이 지금보다{" "}
-          <strong>
-            {won(swing)}원{" "}
-            {market.adverse_cashflow_direction === "decrease"
-              ? "적어집니다"
-              : "많아집니다"}.
-          </strong>
-        </p>
-      ) : hedgeIsNew ? (
-        <p>
-          손익분기 환율은 <strong>{won(hedge.breakeven_rate)}원</strong>이고, 최소{" "}
-          <strong>{pct(hedge.optimal_ratio)}</strong>만 헤지하면 목표 이익을 지킬 수
-          있습니다.
-        </p>
-      ) : tradesChanged ? (
-        <p>거래 {tradeCount}건으로 다시 계산했습니다.</p>
-      ) : opened.length > 0 ? (
-        <p>{opened.map((name) => WORKER_LABEL[name] ?? name).join(" · ")}까지 채웠습니다.</p>
-      ) : unread ? (
-        <p>
-          그 문장에서는 거래 정보를 읽지 못해 계산이 달라지지 않았습니다. 금액 ·
-          결제일 · 수출입 여부는 문장으로 알려주실 수 있습니다.
-        </p>
-      ) : (
-        <p>다시 계산했습니다.</p>
-      )}
-
-      {first && !hedge && hedgeInputs.length === 0 && result.workers.skipped.hedge && (
-        <p>{result.workers.skipped.hedge}</p>
-      )}
-
-      {hedgeIsNew && hedge?.status === "HEDGE_INSUFFICIENT" && (
-        <p>
-          전액을 헤지해도 목표 이익을 지킬 수 없습니다. 헤지 비율을 임의로
-          제시하지 않고 다른 방법을 함께 검토해야 합니다.
-        </p>
-      )}
+      {/* The sentence arrives a word at a time. Written as segments rather
+          than JSX so each word can carry its own delay; emphasis rides along
+          on the segment. */}
+      <Written live={live} segments={sentence({
+        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
+        opened, unread,
+      })} />
 
       <Answer result={result} order={order} />
 
@@ -275,6 +239,74 @@ const SECTION_LABEL = {
  *
  *  Only the headline figures are open. Everything else is a fold — this is a
  *  chat message, and a message that takes four screens is not one. */
+/** The agent's line for this turn, as segments. */
+function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
+  if (first && market && swing !== null) {
+    const direction =
+      market.adverse_cashflow_direction === "decrease" ? "적어집니다" : "많아집니다";
+    return [
+      { text: "계산했습니다." },
+      { text: `결제일까지 불리한 환율이 ${won(market.adverse_rate)}원일 수 있고,`, strong: true },
+      { text: "그러면 받는 금액이 지금보다" },
+      { text: `${won(swing)}원 ${direction}.`, strong: true },
+    ];
+  }
+  if (hedgeIsNew) {
+    return [
+      { text: "손익분기 환율은" },
+      { text: `${won(hedge.breakeven_rate)}원`, strong: true },
+      { text: "이고, 최소" },
+      { text: pct(hedge.optimal_ratio), strong: true },
+      { text: "만 헤지하면 목표 이익을 지킬 수 있습니다." },
+    ];
+  }
+  if (tradesChanged) return [{ text: `거래 ${tradeCount}건으로 다시 계산했습니다.` }];
+  if (opened.length > 0) {
+    return [{ text: `${opened.map((n) => WORKER_LABEL[n] ?? n).join(" · ")}까지 채웠습니다.` }];
+  }
+  if (unread) {
+    return [{
+      text: "그 문장에서는 거래 정보를 읽지 못해 계산이 달라지지 않았습니다. " +
+            "금액 · 결제일 · 수출입 여부는 문장으로 알려주실 수 있습니다.",
+    }];
+  }
+  return [{ text: "다시 계산했습니다." }];
+}
+
+/** Words appearing in order, as if being written.
+ *
+ *  They fade in from dim rather than from nothing. An animation that is
+ *  applied but not advancing holds its opening frame, and a sentence whose
+ *  opening frame is invisible is a sentence that can fail to arrive. At 0.2 it
+ *  is faint but readable, so the worst case costs the effect and not the text.
+ *
+ *  Only the newest turn writes itself. Re-animating the history every time
+ *  React re-renders would make the whole conversation flicker.
+ */
+function Written({ segments, live }) {
+  let index = 0;
+  return (
+    <p className={live ? "written" : ""}>
+      {segments.map((segment, s) =>
+        segment.text.split(" ").map((word) => {
+          const i = index;
+          index += 1;
+          return (
+            <span
+              className={`w ${segment.strong ? "em" : ""}`}
+              style={{ "--i": i }}
+              key={`${s}-${i}`}
+            >
+              {word}{" "}
+            </span>
+          );
+        })
+      )}
+    </p>
+  );
+}
+
+
 function Answer({ result, order }) {
   const cash = result.cashflow_analysis;
   const market = result.market_scenario;

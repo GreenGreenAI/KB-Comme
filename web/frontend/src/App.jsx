@@ -20,6 +20,11 @@ const today = () => new Date().toISOString().slice(0, 10);
  *  timer goes. */
 const STEP_MS = 1000;
 
+/** How long the answer takes to write itself before the request bar returns.
+ *  Asking for the next value while the sentence is still arriving reads as the
+ *  agent interrupting itself. */
+const WRITE_MS = 900;
+
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -66,6 +71,7 @@ export default function App() {
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
+  const [writing, setWriting] = useState(false);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
@@ -151,6 +157,8 @@ export default function App() {
         setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
         setResult(data.result);
         setPending(null);
+        setWriting(true);
+        setTimeout(() => setWriting(false), WRITE_MS);
         say({
           who: "agent",
           kind: "result",
@@ -195,9 +203,13 @@ export default function App() {
             />
             {/* Directly above the input, and its own panel. A choice list is
                 several lines tall; inside the text box it read as the box
-                having swallowed something. */}
+                having swallowed something.
+
+                It waits for the answer to finish writing itself. Asking for
+                the next value while the sentence is still arriving reads as
+                the agent interrupting itself. */}
             <div className="dock">
-              {!busy && (
+              {!busy && !writing && (
                 <AskBar
                   pending={pending}
                   requiredInputs={
