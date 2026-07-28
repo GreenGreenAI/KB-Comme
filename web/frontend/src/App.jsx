@@ -20,10 +20,13 @@ const today = () => new Date().toISOString().slice(0, 10);
  *  timer goes. */
 const STEP_MS = 1000;
 
-/** How long the answer takes to write itself before the request bar returns.
- *  Asking for the next value while the sentence is still arriving reads as the
- *  agent interrupting itself. */
-const WRITE_MS = 900;
+/** How long an answer takes to finish arriving before the request bar returns.
+ *
+ *  The answer now lands top to bottom — trace, sentence, figures, band, folds
+ *  — so this covers the whole cascade, not just the sentence. Asking for the
+ *  next value while the card is still filling in reads as the agent
+ *  interrupting itself. Kept in step with the delay budget in Thread.jsx. */
+const WRITE_MS = 1500;
 
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

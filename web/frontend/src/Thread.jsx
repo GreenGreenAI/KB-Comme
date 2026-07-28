@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { won, pct } from "./api.js";
 
+/** How an answer arrives: top to bottom, one part after the next.
+ *
+ *  Read as a budget rather than as scattered constants — the trace lands
+ *  first, the sentence writes itself, and the figures follow it down the
+ *  card. Nothing starts from nothing: every part opens at 0.2 so an animation
+ *  that never advances costs the motion and not the content.
+ */
+const TRACE_MS = 70;
+const WORD_MS = 45;
+const AFTER_SENTENCE_MS = 90;
+const BLOCK_MS = 130;
+
 const DEFAULT_ORDER = [
   "exposure",
   "market_scenario",
@@ -186,29 +198,38 @@ function AgentTurn({ turn, live, first, previous }) {
     !tradesChanged &&
     opened.length === 0;
 
+  const line = sentence({
+    first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
+    opened, unread,
+  });
+  const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
+  const sentenceStart = trace.length * TRACE_MS;
+  const answerStart = sentenceStart + words * WORD_MS + AFTER_SENTENCE_MS;
+
   return (
     <div className="turn agent">
       <span className="who">TradeFlow</span>
 
       {trace.length > 0 && (
         <div className="trace">
-          {trace.map((name) => (
-            <span className="ok" key={name}>
+          {trace.map((name, index) => (
+            <span
+              className={`ok ${live ? "arrive" : ""}`}
+              style={{ animationDelay: `${index * TRACE_MS}ms` }}
+              key={name}
+            >
               {WORKER_LABEL[name] ?? name}
             </span>
           ))}
         </div>
       )}
 
-      {/* The sentence arrives a word at a time. Written as segments rather
-          than JSX so each word can carry its own delay; emphasis rides along
-          on the segment. */}
-      <Written live={live} segments={sentence({
-        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
-        opened, unread,
-      })} />
+      {/* The sentence arrives a word at a time, after the trace has landed.
+          Written as segments rather than JSX so each word can carry its own
+          delay; emphasis rides along on the segment. */}
+      <Written live={live} segments={line} start={sentenceStart} />
 
-      <Answer result={result} order={order} />
+      <Answer result={result} order={order} live={live} start={answerStart} />
 
       {/* Asked once, and only in words. The fields live in the bar above the
           composer so they stay reachable after the thread scrolls on. */}
@@ -273,6 +294,11 @@ function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, trad
   return [{ text: "다시 계산했습니다." }];
 }
 
+/** Merge a base class with the arrival props, so a block can have both. */
+function withClass(props, base) {
+  return { ...props, className: [base, props.className].filter(Boolean).join(" ") };
+}
+
 /** Words appearing in order, as if being written.
  *
  *  They fade in from dim rather than from nothing. An animation that is
@@ -283,7 +309,7 @@ function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, trad
  *  Only the newest turn writes itself. Re-animating the history every time
  *  React re-renders would make the whole conversation flicker.
  */
-function Written({ segments, live }) {
+function Written({ segments, live, start = 0 }) {
   let index = 0;
   return (
     <p className={live ? "written" : ""}>
@@ -294,7 +320,7 @@ function Written({ segments, live }) {
           return (
             <span
               className={`w ${segment.strong ? "em" : ""}`}
-              style={{ "--i": i }}
+              style={{ animationDelay: `${start + i * WORD_MS}ms` }}
               key={`${s}-${i}`}
             >
               {word}{" "}
@@ -307,7 +333,16 @@ function Written({ segments, live }) {
 }
 
 
-function Answer({ result, order }) {
+function Answer({ result, order, live, start = 0 }) {
+  // Each block of the card follows the one above it.
+  let block = 0;
+  const next = () => {
+    const delay = start + block * BLOCK_MS;
+    block += 1;
+    return live
+      ? { className: "arrive", style: { animationDelay: `${delay}ms` } }
+      : {};
+  };
   const cash = result.cashflow_analysis;
   const market = result.market_scenario;
   const hedge = result.hedge_analysis;
@@ -321,7 +356,7 @@ function Answer({ result, order }) {
 
   return (
     <div className="answer">
-      <dl className="figrow">
+      <dl {...withClass(next(), "figrow")}>
         <div>
           <dt>순노출</dt>
           <dd>
@@ -344,15 +379,15 @@ function Answer({ result, order }) {
       </dl>
 
       {Number(natural) > 0 && Number(matched) === 0 && (
-        <p className="answer-note">
+        <p {...withClass(next(), "answer-note")}>
           상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
         </p>
       )}
 
-      {market && <RateBand market={market} hedge={hedge} />}
+      {market && <RateBand market={market} hedge={hedge} wrap={next()} />}
 
       {/* Sections follow the order §4.2[2]'s intent reading produced. */}
-      <div className="folds">
+      <div {...withClass(next(), "folds")}>
         {order
           .filter((section) => section !== "exposure" && section !== "market_scenario")
           .map((section) => {
@@ -397,7 +432,7 @@ function Answer({ result, order }) {
 }
 
 /** Where the rate can land by the last payment date, drawn to scale. */
-function RateBand({ market, hedge }) {
+function RateBand({ market, hedge, wrap = {} }) {
   const lower = Number(market.band_lower);
   const upper = Number(market.band_upper);
   const spot = Number(market.spot_rate);
@@ -415,7 +450,7 @@ function RateBand({ market, hedge }) {
   const at = (v) => ((v - min) / (max - min)) * 100;
 
   return (
-    <div className="rate">
+    <div {...withClass(wrap, "rate")}>
       <div className="rate-track">
         <span
           className="rate-fill"
