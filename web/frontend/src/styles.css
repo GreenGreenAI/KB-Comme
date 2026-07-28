@@ -60,18 +60,28 @@
     backdrop-filter: blur(14px);
     border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--lift);
   }
-  .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.02em; }
+  /* The one thing in the bar that actually goes somewhere. It stays visually
+     still on hover — the wordmark is the product's name before it is a
+     control, and dimming it on the way past made the bar feel unsettled. The
+     pointer cursor and the press feedback are enough to say it is clickable. */
+  .brand {
+    display: flex; align-items: center; gap: .5rem; font-weight: 700;
+    letter-spacing: -.02em; background: none; border: 0; padding: 0;
+    cursor: pointer; color: inherit; transition: opacity .12s ease;
+  }
+  .brand:active { opacity: .6; }
   .brand i {
     width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
     border: 1.5px solid var(--accent); color: var(--accent);
     font-family: var(--mono); font-size: .75rem; font-style: normal;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
-  .nav-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; transition: color .15s ease; }
-  .nav-link:hover:not(:disabled) { color: var(--accent); }
-  /* Disabled, not hidden: the reader can see what a finished answer contains
-     before there is one to jump to. */
-  .nav-link:disabled { color: var(--ink-45); cursor: default; }
+  .nav-link { color: inherit; transition: color .15s ease; }
+  .nav-link.on { color: var(--accent); font-weight: 600; }
+  /* Alive to the pointer, but the cursor stays an arrow: there is no page to
+     click through to yet, and a pointer finger would promise one. */
+  .nav-link.soon { color: var(--ink-45); cursor: default; }
+  .nav-link.soon:hover { color: var(--ink-70); }
   .nav-cta {
     border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
     border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;
@@ -96,6 +106,19 @@
     box-shadow: var(--lift-lg); padding: .35rem; text-align: left; z-index: 50;
   }
   .menu[hidden] { display: none; }
+  /* Grows from the avatar it belongs to, and leaves the same way.
+     Duration is mirrored by MENU_EXIT_MS in Nav.jsx — the menu must stay
+     mounted for exactly as long as it takes to go. */
+  .menu { transform-origin: top right; animation: menu-in .15s cubic-bezier(.22,.9,.3,1); }
+  .menu.out { animation: menu-out .15s ease forwards; pointer-events: none; }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-6px) scale(.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes menu-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-4px) scale(.985); }
+  }
   .menu-id {
     display: flex; gap: .6rem; align-items: center;
     padding: .6rem .65rem .7rem; border-bottom: 1px solid var(--rule-faint); margin-bottom: .35rem;
@@ -131,23 +154,25 @@
     padding: clamp(3.5rem, 11vh, 8rem) 0 5rem; text-align: center;
     display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
   }
-  .badge {
-    display: inline-flex; align-items: center; gap: .5rem;
-    background: color-mix(in srgb, var(--paper) 84%, transparent);
-    border: 1px solid var(--rule); border-radius: 999px;
-    padding: .3rem .85rem .3rem .35rem; font-size: .8125rem; color: var(--ink-70);
-    box-shadow: var(--lift);
-  }
-  .badge em {
-    font-style: normal; background: var(--tint-strong); color: var(--ink);
-    border-radius: 999px; padding: .12rem .5rem;
-    font-family: var(--mono); font-size: .625rem; letter-spacing: .08em;
-  }
   h1.hero {
     margin: .3rem 0 0; font-size: clamp(2.6rem, 5.6vw, 4.2rem); font-weight: 300;
     letter-spacing: -.045em; line-height: 1.08; text-wrap: balance;
   }
+  /* The two lines are separate elements now, one per beat of the reveal, so
+     each needs its own line rather than the <br> that used to divide them. */
+  h1.hero > span, h1.hero > b { display: block; }
   h1.hero b { font-weight: 600; color: var(--accent); }
+
+  /* The opening arrives in the order it is read.
+     Unlike the entry motion inside the conversation, this one does fade: it
+     plays once on first paint, when the page is by definition in front of the
+     reader. `backwards` is what holds each line back during its delay — the
+     stagger is the effect, so it cannot be dropped. */
+  .reveal { animation: enter .52s cubic-bezier(.22,.9,.3,1) backwards; }
+  @keyframes enter {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
   .standfirst { margin: 0; max-width: 34rem; color: var(--ink-70); font-size: 1.0625rem; }
 
   .prompt {
@@ -162,17 +187,18 @@
   }
   .prompt textarea::placeholder { color: var(--ink-45); }
   .prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-  .toggles { display: flex; align-items: center; gap: .5rem; }
-  .toggle {
-    display: inline-flex; align-items: center; gap: .45rem; cursor: pointer;
-    border: 1px solid var(--rule); border-radius: 999px; background: var(--paper);
-    padding: .32rem .7rem; font-size: .8125rem; color: var(--ink-70);
+  /* What the keyboard can do from here, in the space the two toggles used to
+     take. Those toggles were decoration — neither was wired to anything. */
+  .prompt-hint {
+    margin: 0; display: flex; align-items: center; gap: .4rem;
+    font-size: .75rem; color: var(--ink-45);
   }
-  .toggle i { width: 26px; height: 15px; border-radius: 999px; background: var(--accent); position: relative; flex: none; }
-  .toggle i::after { content: ""; position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
-  .toggle.off i { background: var(--rule); }
-  .toggle.off i::after { right: auto; left: 2px; }
-  .toggle.off { color: var(--ink-45); }
+  .prompt-hint kbd {
+    font-family: var(--mono); font-size: .6875rem; line-height: 1;
+    padding: .22rem .4rem; border: 1px solid var(--rule);
+    border-bottom-width: 2px; border-radius: 5px; color: var(--ink-70);
+    background: var(--paper);
+  }
   /* Every action the user can take carries the same colour, so "this is a
      control" never has to be worked out twice. */
   .send {
@@ -195,7 +221,8 @@
   :root { --chrome: 104px; }
 
   .chat {
-    width: min(860px, calc(100% - 2.5rem));
+    /* Matches the nav exactly, so the two edges line up. */
+    width: min(1180px, calc(100% - 2.5rem));
     height: calc(100dvh - var(--chrome));
     margin: 1.1rem auto 0;
     display: flex; flex-direction: column; min-height: 0;
@@ -213,6 +240,16 @@
   .thread::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 99px; border: 3px solid var(--paper); }
   .composer { flex: none; }
   .turn { display: flex; flex-direction: column; gap: .35rem; }
+
+  /* Prose gets a measure; data does not.
+     The chat matches the nav at 1180px, which is right for the figure row and
+     the rate band — they use the width to separate values. Running text does
+     not: at that width the eye loses the start of the next line. Hangul
+     syllables are full-width, so 1em is about one character and this reads as
+     "roughly 40 characters".
+     Only direct children are capped. The band's scale labels and the figure
+     row are also <p>/<dl>, and they must keep the full width. */
+  .turn.agent > p, .answer-note, .fold-note { max-width: 40em; }
   .who { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); }
   .turn.agent p { margin: 0; }
   .turn.agent p + p { margin-top: .65rem; }
@@ -229,29 +266,174 @@
   .trace .wait::before { content: "· "; color: var(--accent); }
   .trace .wait { color: var(--accent); }
 
-  .slotline { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .55rem; }
-  .slotline input {
-    font-family: var(--mono); font-size: .875rem; background: var(--paper);
-    border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem; width: 10rem;
+
+  /* ---------- the input surface ---------- */
+  /* One box. The request the agent is waiting on is its top row, the text
+     area its middle, and the footer carries what the session computes against
+     plus how to send. Two same-width rounded panels stacked on each other read
+     as separate parts, which is what this replaced. */
+  /* No rule between the thread and the input. The two are one surface, and a
+     line across it read as a seam. What keeps them apart is the fade below:
+     text passing under the input dissolves instead of being cut, so the edge
+     is felt without being drawn. */
+  .dock { flex: none; padding: .35rem 1.5rem 1.15rem; }
+  .thread {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   }
-  .slotline button { cursor: pointer; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: .4rem .95rem; font-size: .8125rem; }
-  .slotline button:hover { background: var(--accent-deep); }
-  .quick { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
-  .quick button { cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 999px; padding: .25rem .8rem; font-size: .8125rem; }
-  .quick button:hover { border-color: var(--accent); }
+  .composer { flex: none; }
+  .composer-box {
+    background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent);
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+  /* The whole surface responds, not just the field inside it — the box is
+     what the user is aiming at. */
+  .composer-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .composer-box textarea {
+    display: block; width: 100%; border: none; background: none; resize: none;
+    outline: none; font-size: .9375rem; line-height: 1.6;
+    padding: .8rem 1rem .1rem; max-height: 168px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+  }
+  .composer-box textarea::placeholder { color: var(--ink-45); }
 
-  .composer { border-top: 1px solid var(--rule-faint); padding: .9rem 1.5rem 1.1rem; }
-  .composer-box { display: flex; gap: .6rem; align-items: flex-end; background: var(--tint); border: 1px solid var(--rule); border-radius: 12px; padding: .55rem .6rem .55rem .85rem; }
-  .composer-box textarea { flex: 1; border: none; background: none; resize: none; outline: none; min-height: 1.6rem; font-size: .9375rem; }
-  .composer-box .send { width: 32px; height: 32px; font-size: .9rem; }
-  .composer-hint { margin: .55rem 0 0; font-size: .6875rem; color: var(--ink-45); }
+  .composer-foot {
+    display: flex; align-items: center; gap: .7rem;
+    padding: .45rem .55rem .55rem 1rem;
+  }
+  .keys {
+    margin-left: auto; display: flex; align-items: center; gap: .3rem;
+    font-size: .6875rem; color: var(--ink-45); white-space: nowrap;
+  }
+  .keys kbd {
+    font-family: var(--mono); font-size: .625rem; line-height: 1;
+    padding: .2rem .35rem; border: 1px solid var(--rule);
+    border-bottom-width: 2px; border-radius: 5px; color: var(--ink-70);
+    background: var(--paper);
+  }
+  .keys kbd + kbd { margin-left: .5rem; }
+  .send {
+    flex: none; width: 30px; height: 30px; border-radius: 9px; border: none;
+    display: grid; place-items: center; font-size: .875rem; cursor: pointer;
+    background: var(--accent); color: #fff;
+    transition: background .15s ease, transform .12s ease, opacity .15s ease;
+  }
+  .send:hover:not(:disabled) { background: var(--accent-deep); }
+  .send:active:not(:disabled) { transform: scale(.92); }
+  /* Dimmed rather than hidden: the target stays where the hand expects it. */
+  .send:disabled { background: var(--rule); color: var(--paper); cursor: default; }
 
+  /* ---------- the request ---------- */
+  /* Marked by an edge rather than a panel: it belongs to this box, and the
+     stripe says which part of it is waiting on the user. */
+  /* Its own panel, directly above the input.
+     It was briefly a row inside the input box. That works for a single field,
+     but a choice list is several lines tall and reads as the box having
+     swallowed something — so it stands on its own and simply sits close. */
+  .ask {
+    display: flex; flex-direction: column; gap: .5rem;
+    margin-bottom: .5rem; padding: .7rem .85rem .75rem;
+    border: 1px solid var(--rule); border-left: 2px solid var(--accent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 4%, #fff);
+  }
+  /* The question itself, not a field name. The thread has scrolled on by the
+     time the user looks down here, so the panel repeats what is being asked
+     rather than labelling the box "금액 (USD)". */
+  .ask-label {
+    margin: 0; font-size: .875rem; font-weight: 600; color: var(--ink);
+    line-height: 1.5;
+  }
+  .ask-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+  /* An amount, shown the way it is read: the currency sits in the field
+     rather than in a label, so the number is never alone. */
+  .money {
+    display: inline-flex; align-items: baseline; gap: .4rem;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 9px;
+    padding: .3rem .65rem;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .money:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .money i, .money em {
+    font-style: normal; font-family: var(--mono); font-size: .75rem;
+    color: var(--ink-45);
+  }
+  .money input {
+    border: none; background: none; outline: none; padding: 0;
+    width: 8.5rem; font-family: var(--mono); font-size: 1rem;
+    font-variant-numeric: tabular-nums; color: var(--ink); text-align: right;
+  }
+  .money-read { font-size: .75rem; color: var(--ink-45); }
+
+  /* Stacked, keyboard-first. Each option is a different thing to do, so they
+     are read rather than scanned; side-by-side pills invite a click before
+     the second one has been read. */
+  .choices { display: grid; gap: 2px; outline: none; }
+  .choice {
+    /* Four tracks, because ::before is a grid item too. Giving it its own
+       column keeps the hint out of the 1.1rem caret track, where it wrapped
+       one character per line. */
+    display: grid; grid-template-columns: .8rem auto auto 1fr;
+    align-items: baseline; gap: .5rem;
+    width: 100%; text-align: left; cursor: pointer;
+    padding: .38rem .6rem .38rem .3rem; border: none; border-radius: 8px;
+    background: none; color: var(--ink); font-size: .8125rem;
+    transition: background .12s ease, color .12s ease;
+  }
+  /* The caret is drawn, not typed. A glyph like the pointing chevron is
+     missing from enough system fonts to render as tofu, and this one carries
+     the selection. */
+  .choice::before {
+    content: ""; justify-self: center; align-self: center;
+    width: 0; height: 0; opacity: 0;
+    border-left: 4px solid var(--accent);
+    border-top: 3.5px solid transparent;
+    border-bottom: 3.5px solid transparent;
+    transition: opacity .12s ease;
+  }
+  .choice.on { background: color-mix(in srgb, var(--accent) 11%, #fff); }
+  .choice.on::before { opacity: 1; }
+  .choice-key {
+    font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
+    border: 1px solid var(--rule); border-radius: 4px; padding: .05rem .3rem;
+  }
+  .choice.on .choice-key { border-color: var(--accent); color: var(--accent-deep); }
+  .choice-label { font-weight: 600; }
+  .choice-hint { font-size: .6875rem; color: var(--ink-45); }
+  .choices:focus-visible .choice.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .ask-row > input, .ask input:not(.money input), .ask select {
+    font-family: var(--mono); font-size: .8125rem; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem;
+    min-width: 0; flex: 0 1 11rem; outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .ask input:focus, .ask select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .ask-row > button, .ask > button {
+    cursor: pointer; background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: .38rem .9rem; font-size: .8125rem;
+    transition: background .15s ease, transform .12s ease;
+  }
+  .ask-row > button:hover:not(:disabled), .ask > button:hover:not(:disabled) { background: var(--accent-deep); }
+  .ask-row > button:active:not(:disabled) { transform: scale(.97); }
+  .ask-row > button:disabled { background: var(--rule); color: var(--paper); cursor: default; }
 
   /* ---------- the answer, inside the message ---------- */
   .answer {
     margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
     border-radius: 12px; background: var(--wash-2);
-    animation: rise .34s cubic-bezier(.22,.9,.3,1);
   }
   .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
   .figrow > div { min-width: 0; }
@@ -265,7 +447,9 @@
   .answer-note { margin: .6rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.6; }
   .answer-note b { color: var(--accent); font-weight: 600; }
 
-  /* rate band */
+  /* Where the rate can land by the last payment date. Not animated: the width
+     is the data, and a width that arrives late is a figure that was briefly
+     wrong. */
   .rate { margin-top: .9rem; padding-top: .8rem; border-top: 1px dashed var(--rule); }
   .rate-track { position: relative; height: 12px; border-radius: 99px; background: var(--tint); overflow: hidden; }
   .rate-fill { position: absolute; top: 0; bottom: 0; background: var(--tint-strong); }
@@ -273,8 +457,8 @@
   .rate-be { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--accent); }
   .rate-legend {
     display: flex; justify-content: space-between; align-items: baseline;
-    margin: .35rem 0 0; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
-    font-variant-numeric: tabular-nums;
+    margin: .35rem 0 0; font-family: var(--mono); font-size: .6875rem;
+    color: var(--ink-45); font-variant-numeric: tabular-nums;
   }
   .rate-legend b { color: var(--ink); font-size: .75rem; }
 
@@ -284,6 +468,40 @@
 
   /* ---------- thinking ---------- */
   .thinking { animation: rise .22s ease; }
+  /* One step at a time. The finished list lives under the answer, in the
+     trace — repeating it here only moved the conversation while waiting. */
+  .step {
+    display: flex; align-items: center; gap: .5rem; margin: 0;
+    font-size: .8125rem; line-height: 1.5; color: var(--ink-70);
+  }
+  /* Each step replaces the last, so the swap is what needs marking. It lifts
+     and brightens rather than fading in from nothing — a step nobody can read
+     is worse than one that arrives without ceremony. */
+  .step { animation: step-in .26s cubic-bezier(.22,.9,.3,1); }
+  @keyframes step-in {
+    from { opacity: .25; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* The sentence writes itself, a word at a time. Words start faint rather
+     than absent for the same reason: an animation that never advances holds
+     its opening frame, and at 0.2 that frame is still legible. */
+  /* One gesture for every part of an arriving answer: the trace lines, the
+     card's rows, the band. Each carries its own delay so the answer lands top
+     to bottom instead of the middle writing itself under a finished card. */
+  .arrive { animation: arrive .34s cubic-bezier(.22,.9,.3,1) backwards; }
+  @keyframes arrive {
+    from { opacity: .2; transform: translateY(5px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .written .w { animation: word .3s ease backwards; }
+  .w.em { color: var(--accent); font-weight: 600; }
+  @keyframes word {
+    from { opacity: .2; }
+    to { opacity: 1; }
+  }
+
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }
   .dots { display: inline-flex; gap: 3px; }
   .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse 1.25s ease-in-out infinite; }
@@ -306,8 +524,7 @@
 
   .turn { animation: rise .3s cubic-bezier(.22,.9,.3,1); }
 
-  .choice, .quick button, .slotline button { transition: transform .12s ease, border-color .15s ease, background .15s ease, color .15s ease; }
-  .choice:active, .quick button:active { transform: scale(.97); }
+  .choice:active { transform: scale(.97); }
   .send { transition: transform .12s ease, background .15s ease; }
   .send:active:not(:disabled) { transform: scale(.92); }
   .fold > summary { transition: color .15s ease; }
@@ -320,40 +537,16 @@
   }
 
   /* panel */
-  .panel { padding: 1.1rem 1.3rem 1.6rem; display: flex; flex-direction: column; gap: .8rem; }
-  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--rule-faint); }
-  .panel-title { margin: 0; font-size: .9375rem; font-weight: 700; }
-  .progress { display: flex; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
-  .pips { display: flex; gap: 3px; }
-  .pip { width: 16px; height: 4px; border-radius: 2px; background: var(--rule); }
   .pip.on { background: var(--ink); }
 
-  .sec { border: 1px solid var(--rule); border-radius: 10px; padding: 1rem 1.1rem; background: var(--paper); }
   /* Locked sections are outlined and dashed rather than tinted a different
      hue — with one palette, the border carries the state. */
-  .sec.locked { border-style: dashed; border-color: var(--soft); background: transparent; }
-  .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-  .eyebrow { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); margin: 0; }
-  .sec h3 { margin: .12rem 0 0; font-size: 1rem; letter-spacing: -.01em; }
-  .sec.locked h3 { color: var(--ink-45); }
 
-  .state { font-family: var(--mono); font-size: .625rem; letter-spacing: .06em; padding: .12rem .5rem; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
-  .state.done { background: var(--tint-strong); color: var(--ink); }
-  .state.need { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
   .state.soon { background: transparent; color: var(--ink-45); border-style: dashed; border-color: var(--soft); }
 
-  .figs { display: flex; flex-wrap: wrap; gap: 1rem 1.9rem; margin-top: .85rem; }
-  .fig { display: flex; flex-direction: column; gap: .08rem; }
-  .fig-l { font-size: .75rem; color: var(--ink-70); }
-  .fig-v { font-family: var(--mono); font-size: 1.45rem; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
   /* The single most chromatic value is spent here: the figure that should be
      looked at before any other. */
-  .fig-v.alarm { color: var(--accent); }
-  .fig-v small { font-size: .8125rem; font-weight: 500; color: var(--ink-70); letter-spacing: 0; }
-  .fig-s { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
 
-  .basis { font-family: var(--mono); font-size: .625rem; color: var(--ink-45); border-top: 1px dashed var(--rule); padding-top: .5rem; margin: .85rem 0 0; line-height: 1.75; }
-  .basis b { font-weight: 600; color: var(--ink-70); }
   /* The inputs an answer can be replayed from. Read as a lookup, not prose,
      so the labels stay in one column and the values line up beside them. */
   .versions { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .3rem; }
@@ -363,32 +556,12 @@
   .versions .mono { letter-spacing: .02em; }
 
   /* One trade per row, read left to right the way the sentence was said. */
-  .cases { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; gap: .5rem; }
-  .cases li { display: grid; grid-template-columns: 8.5rem 1fr auto auto; align-items: baseline; gap: .75rem; padding: .55rem .7rem; background: var(--wash-2); border-radius: 8px; font-size: .8125rem; }
-  .cases .dir { font-weight: 600; }
-  .cases .dir.export { color: var(--accent-deep); }
-  .cases .dir.import { color: var(--ink); }
-  .cases .amt { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .cases .when, .cases .how { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
 
-  /* Two choices, side by side, when the sentence could belong to either trade. */
-  .choices { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
-  .choice { font: inherit; font-size: .8125rem; padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--rule); background: #fff; color: var(--ink); cursor: pointer; transition: border-color .15s ease, color .15s ease; }
-  .choice:hover { border-color: var(--accent); color: var(--accent); }
 
-  .review { margin: .85rem 0 0; padding-top: .6rem; border-top: 1px dashed var(--rule); }
-  .review-head { margin: 0 0 .35rem; font-size: .8125rem; }
-  .review-head b { color: var(--accent); }
-  .review-item { margin: .25rem 0 0; font-size: .8125rem; color: var(--ink-70); line-height: 1.6; }
 
   /* A section with nothing to show yet: the reason still appears, on one
      line, so refusing to guess does not cost a full card of height. */
-  .sec.blocked { padding: .85rem 1.15rem; border-style: dashed; }
-  .blocked-head { display: flex; align-items: baseline; gap: .6rem; margin: 0; flex-wrap: wrap; }
-  .blocked-head .eyebrow { margin: 0; }
-  .blocked-title { font-size: .9375rem; font-weight: 600; color: var(--ink-70); }
-  .blocked-head .state { margin-left: auto; }
-  .blocked-why { margin: .3rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.65; }
 
   /* Reference material: present when checked for, folded when reading. */
   .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
@@ -399,21 +572,11 @@
   .fold > summary:hover { color: var(--accent); }
   .fold-note { margin: .5rem 0 0; font-size: .6875rem; color: var(--ink-45); line-height: 1.6; }
 
-  .unlock { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink-70); }
-  .unlock b { color: var(--accent); }
 
-  .band { position: relative; height: 5.4rem; margin-top: 1rem; }
-  .band-fill { position: absolute; top: 1.95rem; height: 1.6rem; background: var(--tint-strong); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); border-radius: 2px; }
-  .band-mid { position: absolute; top: 1.95rem; height: 1.6rem; width: 2px; background: var(--ink); }
-  .tick { position: absolute; font-family: var(--mono); font-size: .625rem; line-height: 1.3; white-space: nowrap; transform: translateX(-50%); color: var(--ink-45); }
-  .tick b { display: block; font-size: .75rem; color: var(--ink); }
-  .tick.up { top: 0; } .tick.dn { top: 3.85rem; }
 
-  .back { display: block; margin: 0 auto; background: none; border: none; cursor: pointer; color: var(--ink-45); font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; padding: .5rem; }
   footer { text-align: center; font-size: .6875rem; color: var(--ink-45); padding: 1rem 1.5rem 2.5rem; }
 
 /* ---------- comparison table ---------- */
-.scroller { overflow-x: auto; margin-top: .9rem; }
 table { border-collapse: collapse; width: 100%; min-width: 26rem; font-size: .8125rem; }
 th, td { padding: .55rem .5rem; text-align: right; border-bottom: 1px solid var(--rule-faint); }
 th:first-child, td:first-child { text-align: left; }
