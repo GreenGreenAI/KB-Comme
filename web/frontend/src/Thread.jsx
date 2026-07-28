@@ -334,7 +334,10 @@ function Written({ segments, live, start = 0 }) {
 
 
 function Answer({ result, order, live, start = 0 }) {
-  // Each block of the card follows the one above it.
+  // The card arrives with its first figures, not before them. Drawing the grey
+  // box first left an empty panel sitting on screen waiting to be filled,
+  // which read as something still loading rather than as an answer being
+  // written. Blocks after the first follow it down.
   let block = 0;
   const next = () => {
     const delay = start + block * BLOCK_MS;
@@ -354,9 +357,13 @@ function Answer({ result, order, live, start = 0 }) {
   const matched = cash.maturity_matched_amount?.[0]?.amount;
   const skipped = result.workers?.skipped ?? {};
 
+  const card = next();
+
   return (
-    <div className="answer">
-      <dl {...withClass(next(), "figrow")}>
+    // The figures ride inside the card's own arrival — a second animation on
+    // them would stack transforms and make them drift twice.
+    <div {...withClass(card, "answer")}>
+      <dl className="figrow">
         <div>
           <dt>순노출</dt>
           <dd>
