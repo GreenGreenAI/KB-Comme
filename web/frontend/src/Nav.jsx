@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 /** Signed out shows a way in; signed in shows who you are. The menu is built
  *  from this product's own concepts — what is saved here is what the intake
- *  agent no longer has to ask for. */
+ *  agent no longer has to ask for.
+ *
+ *  The screen opens signed in. There is no authentication yet and no sign-in
+ *  page to send anyone to, so a button offering one would lead nowhere; the
+ *  state worth showing is the one the rest of the product is designed around,
+ *  where the company's own facts are already known. The signed-out branch is
+ *  kept rather than deleted — it is what the real sign-in page will return to,
+ *  and the menu's 로그아웃 still reaches it. */
 export default function Nav() {
-  const [signedIn, setSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState(true);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
 
