@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "champion_model_id": "rolling_normal_profit_floor",
+  "models": [
+    {
+      "model_id": "rolling_normal_profit_floor",
+      "version": "1.0",
+      "status": "champion",
+      "family": "parametric_normal",
+      "objective": "minimum_ratio_subject_to_adverse_profit_floor",
+      "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
+      "parameters": {
+        "window": 60,
+        "confidence_level": 0.95,
+        "drift": 0
+      },
+      "references": [
+        "https://www.bis.org/basel_framework/chapter/MAR/30.htm",
+        "https://doi.org/10.1086/260062"
+      ]
+    },
+    {
+      "model_id": "historical_profit_floor",
+      "version": "1.0",
+      "status": "challenger",
+      "family": "historical_simulation",
+      "objective": "minimum_ratio_subject_to_adverse_profit_floor",
+      "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
+      "parameters": {
+        "window": 250,
+        "confidence_level": 0.95,
+        "resampling": "overlapping_horizon_returns"
+      },
+      "references": [
+        "https://www.bis.org/bcbs/publ/d457.htm"
+      ]
+    },
+    {
+      "model_id": "ewma_profit_floor",
+      "version": "1.0",
+      "status": "challenger",
+      "family": "ewma_normal",
+      "objective": "minimum_ratio_subject_to_adverse_profit_floor",
+      "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
+      "parameters": {
+        "window": 250,
+        "confidence_level": 0.95,
+        "decay": 0.94,
+        "drift": 0
+      },
+      "references": [
+        "https://www.msci.com/documents/10199/5915b101-4206-4ba0-aee2-3449d5c7e95a"
+      ]
+    },
+    {
+      "model_id": "garch_fhs_profit_floor",
+      "version": "1.0",
+      "status": "challenger",
+      "family": "garch_filtered_historical",
+      "objective": "minimum_ratio_subject_to_adverse_profit_floor",
+      "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
+      "parameters": {
+        "window": 250,
+        "confidence_level": 0.95,
+        "innovation_distribution": "empirical_standardized_residuals"
+      },
+      "references": [
+        "https://doi.org/10.1016/0304-4076(86)90063-1"
+      ]
+    },
+    {
+      "model_id": "historical_cvar",
+      "version": "1.0",
+      "status": "challenger",
+      "family": "historical_cvar",
+      "objective": "minimum_expected_shortfall_then_minimum_ratio",
+      "implementation": "tradeflow.tools.hedge_models.HistoricalCvarModel",
+      "parameters": {
+        "window": 250,
+        "confidence_level": 0.95,
+        "ratio_step": "0.01"
+      },
+      "references": [
+        "https://doi.org/10.21314/JOR.2000.038"
+      ]
+    },
+    {
+      "model_id": "minimum_variance_forward",
+      "version": "1.0",
+      "status": "data_blocked",
+      "family": "minimum_variance",
+      "objective": "minimum_variance_ratio",
+      "implementation": "tradeflow.tools.hedge_models.minimum_variance_hedge_ratio",
+      "parameters": {
+        "window": 250,
+        "ratio_bounds": [
+          0,
+          1
+        ]
+      },
+      "references": [
+        "https://doi.org/10.1111/j.1540-6261.1979.tb02077.x"
+      ],
+      "blockers": [
+        "paired historical company-applicable forward quotes are not collected"
+      ]
+    }
+  ],
+  "promotion_policy": {
+    "minimum_origins": 100,
+    "maximum_model_failures": 0,
+    "maximum_calibration_error": 0.03,
+    "minimum_es_improvement": 0.02,
+    "minimum_quantile_loss_improvement": 0.01,
+    "maximum_floor_breach_increase": 0.0,
+    "maximum_cost_increase": 0.1,
+    "maximum_turnover_increase": "0.05",
+    "require_observed_forward_quotes": true,
+    "required_approvals": [
+      "knowledge_domain",
+      "platform_runtime",
+      "domain_expert"
+    ]
+  },
+  "fallback_policy": {
+    "automatic_challenger_fallback": false,
+    "on_champion_failure": "return_insufficient_information",
+    "reason": "a failing model must not silently change the decision method"
+  }
+}
