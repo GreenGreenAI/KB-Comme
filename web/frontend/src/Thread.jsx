@@ -93,11 +93,12 @@ function AgentTurn({ turn, live, onSlot, first }) {
             {
               {
                 exposure: "순노출·자금공백 산출",
+                source_verification: "공식 출처 검증 확인",
                 market_scenario: "변동성 추정 — 최근 60영업일",
                 hedge: "헤지비율 산출",
                 support: "지원제도 규칙 판정",
                 compliance: "신고의무 규칙 판정",
-              }[name]
+              }[name] ?? name
             }
           </span>
         ))}

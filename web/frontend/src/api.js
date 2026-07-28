@@ -1,4 +1,11 @@
-/** The one call this app makes. */
+/** What the server is running on, for the entry badge. */
+export async function health() {
+  const response = await fetch("/api/health");
+  if (!response.ok) throw new Error(`서버가 ${response.status}로 응답했습니다.`);
+  return response.json();
+}
+
+/** The one call this app makes to get an answer. */
 export async function analyze(body) {
   const response = await fetch("/api/analyze", {
     method: "POST",

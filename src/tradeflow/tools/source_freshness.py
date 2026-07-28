@@ -93,13 +93,18 @@ def freshness_from_payload(
     return freshness
 
 
-def load_source_freshness(
+def load_source_verification(
     root: Path | str,
     *,
     as_of: datetime,
     policy: FreshnessPolicy = DEFAULT_POLICY,
-) -> dict[str, Freshness]:
-    """Read the latest verification snapshot under `root`."""
+) -> tuple[SnapshotRef, dict[str, Freshness]]:
+    """Read the latest verification snapshot, keeping its identity.
+
+    The reference travels with the freshness because the verification decides
+    whether the rules judge at all, which makes it part of what an answer has
+    to record to be reproducible (§6.2).
+    """
     try:
         path = latest_snapshot_path(root, SOURCE_ID)
     except (SnapshotNotFoundError, FileNotFoundError) as exc:
@@ -109,4 +114,17 @@ def load_source_freshness(
         ) from exc
 
     ref, payload = read_snapshot(path)
-    return freshness_from_payload(payload, as_of=as_of, ref=ref, policy=policy)
+    return ref, freshness_from_payload(
+        payload, as_of=as_of, ref=ref, policy=policy
+    )
+
+
+def load_source_freshness(
+    root: Path | str,
+    *,
+    as_of: datetime,
+    policy: FreshnessPolicy = DEFAULT_POLICY,
+) -> dict[str, Freshness]:
+    """Read the latest verification snapshot under `root`."""
+    _ref, freshness = load_source_verification(root, as_of=as_of, policy=policy)
+    return freshness

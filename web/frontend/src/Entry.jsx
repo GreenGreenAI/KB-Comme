@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { health } from "./api.js";
 
 const STARTERS = [
   "10월 24일에 수출대금 10만 달러 받기로 했어요",
@@ -10,6 +12,23 @@ const STARTERS = [
 export default function Entry({ onSend, busy }) {
   const [text, setText] = useState("");
 
+  // The badge names the data the next answer will actually be built on, so it
+  // is read from the server rather than written into the page. A hardcoded
+  // date here silently became a false claim the day the snapshot moved.
+  const [asOf, setAsOf] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    health()
+      .then((info) => {
+        const versions = info.fx_snapshots ?? [];
+        if (alive && versions.length) setAsOf(versions[versions.length - 1]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   function submit(value) {
     const trimmed = (value ?? text).trim();
     if (!trimmed || busy) return;
@@ -19,7 +38,8 @@ export default function Entry({ onSend, busy }) {
   return (
     <div className="entry-wrap">
       <span className="badge">
-        <em>연동</em> 한국은행 ECOS 매매기준율 · 2026-07-24 기준
+        <em>연동</em> 한국은행 ECOS 매매기준율
+        {asOf ? ` · ${asOf} 기준` : ""}
       </span>
 
       <h1 className="hero">
