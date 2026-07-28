@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
-import Panel from "./Panel.jsx";
 import { analyze } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -17,10 +16,25 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
-  const threadEnd = useRef(null);
+  const threadRef = useRef(null);
+  const stick = useRef(true);
 
-  useEffect(() => {
-    threadEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  // Remember, before the new turn paints, whether the reader was at the
+  // bottom. Someone scrolled up reading an earlier answer should not be
+  // yanked to the newest one.
+  function rememberPosition() {
+    const el = threadRef.current;
+    if (!el) return;
+    stick.current = el.scrollHeight - el.clientHeight - el.scrollTop < 120;
+  }
+
+  useLayoutEffect(() => {
+    const el = threadRef.current;
+    if (!el || !stick.current) return;
+    // Set scrollTop directly rather than scrollIntoView({behavior:"smooth"}):
+    // smooth scrolling does not run in a background tab, which left the thread
+    // pinned near the top with the newest answer out of sight.
+    el.scrollTop = el.scrollHeight;
   }, [turns, busy]);
 
   function say(turn) {
@@ -43,6 +57,7 @@ export default function App() {
 
     // When `placement` is set the sentence is being resent after the user
     // answered where it belongs, and it is already in the thread.
+    rememberPosition();
     if (utterance && !placement) say({ who: "user", text: utterance });
     setView("work");
     setBusy(true);
@@ -107,29 +122,23 @@ export default function App() {
           <Entry onSend={(text) => send(text)} busy={busy} />
         </div>
 
+        {/* The chat is the product surface. It is sized to the viewport and
+            scrolls inside itself, so the page never grows a second scrollbar
+            as the conversation lengthens. */}
         <div className={`view work ${view === "entry" ? "away" : ""}`}>
-          <div className="work-wrap">
-            <section className="col">
-              <Thread
-                turns={turns}
-                busy={busy}
-                pending={pending}
-                onSlot={(patch) => send(null, patch)}
-                onPlace={(utterance, placement) =>
-                  send(utterance, {}, placement)
-                }
-                endRef={threadEnd}
-              />
-              <Composer onSend={(text) => send(text)} busy={busy} />
-            </section>
-            <Panel result={result} pending={pending} facts={facts} />
-          </div>
+          <section className="chat">
+            <Thread
+              turns={turns}
+              busy={busy}
+              pending={pending}
+              onSlot={(patch) => send(null, patch)}
+              onPlace={(utterance, placement) => send(utterance, {}, placement)}
+              threadRef={threadRef}
+            />
+            <Composer onSend={(text) => send(text)} busy={busy} />
+          </section>
         </div>
       </div>
-      <footer>
-        TradeFlow MVP · 의사결정 지원 도구이며 투자 권유가 아닙니다 · 최종 판단과
-        책임은 이용자에게 있습니다
-      </footer>
     </>
   );
 }

@@ -1,5 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { won, pct } from "./api.js";
+
+const DEFAULT_ORDER = [
+  "exposure",
+  "market_scenario",
+  "hedge",
+  "support",
+  "compliance",
+];
 
 const WORKER_LABEL = {
   exposure: "순노출·자금공백 산출",
@@ -19,9 +27,9 @@ const SLOT_LABEL = {
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, pending, onSlot, onPlace, endRef }) {
+export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRef }) {
   return (
-    <div className="thread">
+    <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
         <div className="turn agent">
           <span className="who">TradeFlow</span>
@@ -53,19 +61,48 @@ export default function Thread({ turns, busy, pending, onSlot, onPlace, endRef }
         ),
       )}
 
-      {busy && (
-        <div className="turn agent">
-          <span className="who">TradeFlow</span>
-          <div className="trace">
-            <span className="wait">계산 중…</span>
-          </div>
-        </div>
-      )}
-
-      <div ref={endRef} />
+      {busy && <Thinking />}
     </div>
   );
 }
+
+/** What the agent is doing, while it is doing it.
+ *
+ *  A local analysis returns in about 45ms, so an indicator shown immediately
+ *  would flash and read as a glitch. It fades in after a delay instead: a fast
+ *  answer never shows one, and a slow one is explained. No artificial wait is
+ *  added — the delay only governs when the element becomes visible.
+ *
+ *  The label does not claim per-worker progress. The API answers in a single
+ *  response, so a staged "노출 계산 중 → 환율 확인 중" would be theatre; what
+ *  actually ran is listed in the trace once the answer arrives. When synthesis
+ *  starts taking seconds (§4.2[9]) this is where real stages belong.
+ */
+function Thinking() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 180);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div className="turn agent thinking" aria-live="polite">
+      <span className="who">TradeFlow</span>
+      <p className="think">
+        <span className="dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        계산하고 있습니다
+      </p>
+    </div>
+  );
+}
+
 
 function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
   if (turn.kind === "error") {
@@ -122,6 +159,7 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
   const hedge = result.hedge_analysis;
   const swing = market?.adverse_cashflow_amount ?? null;
   const hedgeInputs = result.required_inputs?.hedge ?? [];
+  const order = result.execution_plan?.section_order ?? DEFAULT_ORDER;
 
   // Only what this turn changed. Re-rendering the full trace every turn made
   // three exchanges carry eighteen identical lines, and the repetition buried
@@ -189,6 +227,19 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
         <p>다시 계산했습니다.</p>
       )}
 
+      {first && !hedge && hedgeInputs.length === 0 && result.workers.skipped.hedge && (
+        <p>{result.workers.skipped.hedge}</p>
+      )}
+
+      {hedgeIsNew && hedge?.status === "HEDGE_INSUFFICIENT" && (
+        <p>
+          전액을 헤지해도 목표 이익을 지킬 수 없습니다. 헤지 비율을 임의로
+          제시하지 않고 다른 방법을 함께 검토해야 합니다.
+        </p>
+      )}
+
+      <Answer result={result} order={order} />
+
       {/* Asked once. Repeating the request every turn read as if the answer
           had not been received. */}
       {!hedge && hedgeInputs.length > 0 && live && (
@@ -200,17 +251,155 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
           <ProfitInput onSlot={onSlot} />
         </>
       )}
+    </div>
+  );
+}
 
-      {first && !hedge && hedgeInputs.length === 0 && result.workers.skipped.hedge && (
-        <p>{result.workers.skipped.hedge}</p>
-      )}
+const SECTION_LABEL = {
+  exposure: "노출",
+  market_scenario: "환율",
+  hedge: "헤지",
+  support: "지원제도",
+  compliance: "신고의무",
+};
 
-      {hedgeIsNew && hedge?.status === "HEDGE_INSUFFICIENT" && (
-        <p>
-          전액을 헤지해도 목표 이익을 지킬 수 없습니다. 헤지 비율을 임의로
-          제시하지 않고 다른 방법을 함께 검토해야 합니다.
+/** The figures, inside the message that produced them.
+ *
+ *  They used to live in a side panel. Moving them here keeps one reading
+ *  order: the answer is where the answer was asked for, and an older turn's
+ *  numbers stay attached to the question that produced them instead of being
+ *  overwritten by the next one.
+ *
+ *  Only the headline figures are open. Everything else is a fold — this is a
+ *  chat message, and a message that takes four screens is not one. */
+function Answer({ result, order }) {
+  const cash = result.cashflow_analysis;
+  const market = result.market_scenario;
+  const hedge = result.hedge_analysis;
+  if (!cash) return null;
+
+  const net = cash.net_exposure?.[0]?.amount;
+  const gap = cash.funding_gap?.[0]?.peak_amount;
+  const natural = cash.natural_hedge_amount?.[0]?.amount;
+  const matched = cash.maturity_matched_amount?.[0]?.amount;
+  const skipped = result.workers?.skipped ?? {};
+
+  return (
+    <div className="answer">
+      <dl className="figrow">
+        <div>
+          <dt>순노출</dt>
+          <dd>
+            {Number(net) > 0 ? "+" : ""}
+            {won(net)} <small>USD</small>
+          </dd>
+        </div>
+        <div>
+          <dt>자금 공백</dt>
+          <dd className={Number(gap) > 0 ? "alarm" : ""}>
+            {won(gap)} <small>USD</small>
+          </dd>
+        </div>
+        <div>
+          <dt>자연헤지</dt>
+          <dd>
+            {won(natural)} <small>USD</small>
+          </dd>
+        </div>
+      </dl>
+
+      {Number(natural) > 0 && Number(matched) === 0 && (
+        <p className="answer-note">
+          상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
         </p>
       )}
+
+      {market && <RateBand market={market} hedge={hedge} />}
+
+      {/* Sections follow the order §4.2[2]'s intent reading produced. */}
+      <div className="folds">
+        {order
+          .filter((section) => section !== "exposure" && section !== "market_scenario")
+          .map((section) => {
+            const reason = skipped[section === "hedge" ? "hedge" : section];
+            if (section === "hedge" && hedge) {
+              return (
+                <details className="fold" key={section}>
+                  <summary>
+                    헤지 · 손익분기 {won(hedge.breakeven_rate)}원 · 최소{" "}
+                    {pct(hedge.optimal_ratio)}
+                  </summary>
+                  <p className="fold-note">
+                    적자 전환 확률 {pct(hedge.loss_probability, 1)} · 불리한 환율{" "}
+                    {won(hedge.adverse_rate)}원 기준
+                  </p>
+                </details>
+              );
+            }
+            if (!reason) return null;
+            return (
+              <details className="fold" key={section}>
+                <summary>{SECTION_LABEL[section]} · 알려주시면 판정</summary>
+                <p className="fold-note">{reason}</p>
+              </details>
+            );
+          })}
+
+        <details className="fold">
+          <summary>근거 · 재현에 필요한 입력</summary>
+          <ul className="versions">
+            {(result.calculation_versions?.snapshots ?? []).map((item) => (
+              <li key={item.source_id}>
+                <span className="vk">{item.source_id}</span>
+                <span className="vv">{item.version}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+/** Where the rate can land by the last payment date, drawn to scale. */
+function RateBand({ market, hedge }) {
+  const lower = Number(market.band_lower);
+  const upper = Number(market.band_upper);
+  const spot = Number(market.spot_rate);
+  const be = hedge?.breakeven_rate ? Number(hedge.breakeven_rate) : null;
+
+  // The track spans the band exactly, so the numbers printed at each end are
+  // the numbers at each end. Padding is added only to bring a breakeven rate
+  // that falls outside the band into view — otherwise the labels would sit
+  // where the band does not reach.
+  const outside = be !== null && (be < lower || be > upper);
+  const span = upper - lower || Math.max(Math.abs(spot) * 0.01, 1);
+  const pad = outside ? span * 0.12 : 0;
+  const min = Math.min(lower, ...(outside ? [be] : [])) - pad;
+  const max = Math.max(upper, ...(outside ? [be] : [])) + pad;
+  const at = (v) => ((v - min) / (max - min)) * 100;
+
+  return (
+    <div className="rate">
+      <div className="rate-track">
+        <span
+          className="rate-fill"
+          style={{ left: `${at(lower)}%`, width: `${at(upper) - at(lower)}%` }}
+        />
+        <span className="rate-now" style={{ left: `${at(spot)}%` }} />
+        {be !== null && (
+          <span className="rate-be" style={{ left: `${at(be)}%` }} />
+        )}
+      </div>
+      <p className="rate-legend">
+        <span>{won(lower)}</span>
+        <b>현재 {won(spot)}</b>
+        <span>{won(upper)}</span>
+      </p>
+      <p className="answer-note">
+        {market.horizon_business_days}영업일 · 신뢰 {pct(market.confidence_level, 0)}{" "}
+        · 변동성 {pct(market.volatility_annualized, 2)} · 드리프트 0 고정
+      </p>
     </div>
   );
 }
