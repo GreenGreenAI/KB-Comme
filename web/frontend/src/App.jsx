@@ -20,13 +20,13 @@ const today = () => new Date().toISOString().slice(0, 10);
  *  timer goes. */
 const STEP_MS = 1000;
 
-/** How long an answer takes to finish arriving before the request bar returns.
+/** Fallback for the request bar, in case the turn never reports its arrival.
  *
- *  The answer now lands top to bottom — trace, sentence, figures, band, folds
- *  — so this covers the whole cascade, not just the sentence. Asking for the
- *  next value while the card is still filling in reads as the agent
- *  interrupting itself. Kept in step with the delay budget in Thread.jsx. */
-const WRITE_MS = 1500;
+ *  The turn itself says when it has finished landing — its length depends on
+ *  the sentence and on how many blocks the plan produced, so only it can know.
+ *  This is the ceiling that keeps the bar from being stranded if that signal
+ *  is missed. */
+const WRITE_CEILING_MS = 4000;
 
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -161,7 +161,7 @@ export default function App() {
         setResult(data.result);
         setPending(null);
         setWriting(true);
-        setTimeout(() => setWriting(false), WRITE_MS);
+        setTimeout(() => setWriting(false), WRITE_CEILING_MS);
         say({
           who: "agent",
           kind: "result",
@@ -202,6 +202,7 @@ export default function App() {
               turns={turns}
               busy={busy}
               thinking={thinking}
+              onArrived={() => setWriting(false)}
               threadRef={threadRef}
             />
             {/* Directly above the input, and its own panel. A choice list is

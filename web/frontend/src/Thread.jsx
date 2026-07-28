@@ -12,6 +12,7 @@ const TRACE_MS = 70;
 const WORD_MS = 45;
 const AFTER_SENTENCE_MS = 90;
 const BLOCK_MS = 130;
+const ARRIVE_MS = 340;   // matches the .arrive animation in styles.css
 
 const DEFAULT_ORDER = [
   "exposure",
@@ -33,7 +34,7 @@ const WORKER_LABEL = {
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, thinking, threadRef }) {
+export default function Thread({ turns, busy, thinking, onArrived, threadRef }) {
   return (
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
@@ -54,6 +55,7 @@ export default function Thread({ turns, busy, thinking, threadRef }) {
             key={index}
             turn={turn}
             live={index === turns.length - 1 && !busy}
+            onArrived={onArrived}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             previous={
               turns
@@ -137,7 +139,7 @@ function Dots() {
 }
 
 
-function AgentTurn({ turn, live, first, previous }) {
+function AgentTurn({ turn, live, first, previous, onArrived }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
@@ -206,6 +208,23 @@ function AgentTurn({ turn, live, first, previous }) {
   const sentenceStart = trace.length * TRACE_MS;
   const answerStart = sentenceStart + words * WORD_MS + AFTER_SENTENCE_MS;
 
+  // One counter for everything below the sentence, owned by the turn. The
+  // card advances it as it lays its blocks out, and whatever follows the card
+  // picks up where it stopped — React runs sibling component bodies in order,
+  // so the count is already correct by the time the trailing line asks.
+  const cascade = counter(answerStart, live);
+
+  // The turn knows how long it takes to arrive; nothing else can. Block count
+  // depends on what the plan produced and the sentence length varies, so a
+  // constant elsewhere would drift out of step with the cascade it describes.
+  useEffect(() => {
+    if (!live || !onArrived) return;
+    const total = cascade.end() + ARRIVE_MS;
+    const timer = setTimeout(onArrived, total);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
   return (
     <div className="turn agent">
       <span className="who">TradeFlow</span>
@@ -229,15 +248,15 @@ function AgentTurn({ turn, live, first, previous }) {
           delay; emphasis rides along on the segment. */}
       <Written live={live} segments={line} start={sentenceStart} />
 
-      <Answer result={result} order={order} live={live} start={answerStart} />
+      <Answer result={result} order={order} cascade={cascade} />
 
       {/* Asked once, and only in words. The fields live in the bar above the
           composer so they stay reachable after the thread scrolls on. */}
       {!hedge && hedgeInputs.length > 0 && live && (
-        <p>
+        <Trailing cascade={cascade}>
           기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
           입력하지 않은 하한을 임의로 만들지 않습니다.
-        </p>
+        </Trailing>
       )}
     </div>
   );
@@ -294,6 +313,32 @@ function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, trad
   return [{ text: "다시 계산했습니다." }];
 }
 
+/** Hands out the next arrival slot below the sentence.
+ *
+ *  A shared counter rather than a delay per component: the card's height
+ *  varies with what the plan produced, and anything after it has to start
+ *  where the card stopped rather than at a number guessed in advance.
+ */
+function counter(start, live) {
+  let block = 0;
+  const next = () => {
+    const delay = start + block * BLOCK_MS;
+    block += 1;
+    return live
+      ? { className: "arrive", style: { animationDelay: `${delay}ms` } }
+      : {};
+  };
+  // When the last slot handed out begins. Read after render, once every block
+  // has taken its turn.
+  next.end = () => start + Math.max(block - 1, 0) * BLOCK_MS;
+  return next;
+}
+
+/** A line that follows the answer card, taking the next slot after it. */
+function Trailing({ cascade, children }) {
+  return <p {...cascade()}>{children}</p>;
+}
+
 /** Merge a base class with the arrival props, so a block can have both. */
 function withClass(props, base) {
   return { ...props, className: [base, props.className].filter(Boolean).join(" ") };
@@ -333,19 +378,12 @@ function Written({ segments, live, start = 0 }) {
 }
 
 
-function Answer({ result, order, live, start = 0 }) {
+function Answer({ result, order, cascade }) {
   // The card arrives with its first figures, not before them. Drawing the grey
   // box first left an empty panel sitting on screen waiting to be filled,
   // which read as something still loading rather than as an answer being
   // written. Blocks after the first follow it down.
-  let block = 0;
-  const next = () => {
-    const delay = start + block * BLOCK_MS;
-    block += 1;
-    return live
-      ? { className: "arrive", style: { animationDelay: `${delay}ms` } }
-      : {};
-  };
+  const next = cascade;
   const cash = result.cashflow_analysis;
   const market = result.market_scenario;
   const hedge = result.hedge_analysis;
