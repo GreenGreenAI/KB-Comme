@@ -20,6 +20,14 @@
     --wash: color-mix(in srgb, var(--soft) 16%, #fff);
     --wash-2: color-mix(in srgb, var(--ink) 7%, #fff);
 
+    /* One focus language for every field in the product.
+       The halo does the announcing; the line only deepens. A fully saturated
+       accent border around a large box reads as an error, not as focus — the
+       composer is 1130px wide, and a hard coloured rectangle that size is what
+       a form says when something is wrong. */
+    --focus-line: color-mix(in srgb, var(--accent) 65%, var(--rule));
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+
     --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
             0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
     --lift-lg: 0 2px 4px color-mix(in srgb, var(--ink) 8%, transparent),
@@ -213,9 +221,14 @@
      a ring around only the text half would read as two controls. */
   .field-box { display: flex; align-items: center; gap: .5rem; padding-right: .5rem; }
   .field-box input { background: none; border: 0; padding: 0; border-radius: 0; }
+  /* Three things move together, and none of them alone is the signal. The
+     fill lifts to white, the transparent resting border takes the softened
+     line, and the halo appears. Dropping the line entirely made focus
+     invisible on a white card; keeping it at full accent made a lone coloured
+     rectangle that read as a validation error. */
   .field > input:focus, .field-box:focus-within {
-    background: var(--paper); border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-tint);
+    background: var(--paper); border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .peek {
     flex: none; background: none; border: 0; cursor: pointer; padding: .25rem .4rem;
@@ -244,7 +257,7 @@
   }
   .check input:checked + .tickbox { background: var(--accent); border-color: var(--accent); }
   .check input:checked + .tickbox::after { transform: rotate(-45deg) scale(1); opacity: 1; }
-  .check input:focus-visible + .tickbox { box-shadow: 0 0 0 3px var(--accent-tint); }
+  .check input:focus-visible + .tickbox { box-shadow: var(--focus-ring); }
 
   .signin-go {
     background: var(--accent); color: var(--paper); border: 0; cursor: pointer;
@@ -440,8 +453,8 @@
   /* The whole surface responds, not just the field inside it — the box is
      what the user is aiming at. */
   .composer-box:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .composer-box textarea {
     display: block; width: 100%; border: none; background: none; resize: none;
@@ -520,8 +533,8 @@
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .money:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .money i, .money em {
     font-style: normal; font-family: var(--mono); font-size: .75rem;
@@ -578,8 +591,8 @@
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .ask input:focus, .ask select:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .ask-row > button, .ask > button {
     cursor: pointer; background: var(--accent); color: #fff; border: none;
