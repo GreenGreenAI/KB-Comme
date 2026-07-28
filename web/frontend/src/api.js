@@ -90,6 +90,83 @@ export async function readAnalysis(runId) {
   return response.json();
 }
 
+async function documentRequest(url, init, fallback) {
+  const response = await ask(url, init);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail?.reason ?? fallback);
+  }
+  return response.json();
+}
+
+function fileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("문서 파일을 읽지 못했습니다."));
+    reader.onload = () => {
+      const encoded = String(reader.result).split(",", 2)[1];
+      if (!encoded) {
+        reject(new Error("문서 파일을 읽지 못했습니다."));
+        return;
+      }
+      resolve(encoded);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function uploadTradeDocument(caseId, file) {
+  const contentBase64 = await fileAsBase64(file);
+  const payload = await documentRequest(
+    `/api/trade-cases/${encodeURIComponent(caseId)}/documents`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        content_base64: contentBase64,
+      }),
+    },
+    "문서를 업로드하지 못했습니다.",
+  );
+  return payload.document;
+}
+
+export async function listTradeDocuments(caseId) {
+  const payload = await documentRequest(
+    `/api/trade-cases/${encodeURIComponent(caseId)}/documents`,
+    undefined,
+    "문서 목록을 불러오지 못했습니다.",
+  );
+  return payload.documents;
+}
+
+export async function confirmDocumentFields(documentId, fields) {
+  const payload = await documentRequest(
+    `/api/documents/${encodeURIComponent(documentId)}/confirm-fields`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields }),
+    },
+    "추출 필드를 확인 저장하지 못했습니다.",
+  );
+  return payload.document;
+}
+
+export async function checkTradeDocuments(caseId, expectedFields) {
+  return documentRequest(
+    `/api/trade-cases/${encodeURIComponent(caseId)}/document-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expected_fields: expectedFields }),
+    },
+    "문서 정합성을 검사하지 못했습니다.",
+  );
+}
+
 export const won = (value) =>
   value === null || value === undefined || value === ""
     ? "—"

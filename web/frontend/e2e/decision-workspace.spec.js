@@ -116,3 +116,124 @@ test("a trade reaches the full decision workspace", async ({ page }) => {
   await page.getByText("근거와 재현 정보").click();
   await expect(page.getByRole("link", { name: "공식 출처 열기" })).toBeVisible();
 });
+
+test("a signed-in tenant reviews an extracted trade document", async ({ page }) => {
+  const extracted = {
+    document_id: "DOC-E2E",
+    case_id: "EXPORT-001",
+    filename: "invoice.txt",
+    content_type: "text/plain",
+    byte_size: 80,
+    content_hash: "sha256:document",
+    document_type: "commercial_invoice",
+    extraction_state: "extracted",
+    created_at: "2026-07-29T00:00:00+09:00",
+    extraction: {
+      issues: [],
+      fields: [{
+        field_name: "amount",
+        extracted_value: "100,000",
+        normalized_value: "100000",
+        confidence: 0.96,
+        location: { page: null, line: 3, start: 8, end: 15 },
+        confirmed: false,
+        confirmed_value: null,
+      }],
+    },
+  };
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/auth/me") {
+      await route.fulfill({
+        json: {
+          account: {
+            account_id: "ACCOUNT-E2E",
+            organization_id: "COMPANY-E2E",
+            role: "company_admin",
+            email: "e2e@example.com",
+            company_name: "E2E 기업",
+            facts: {},
+          },
+        },
+      });
+      return;
+    }
+    if (path === "/api/analyses") {
+      await route.fulfill({ json: { analyses: [] } });
+      return;
+    }
+    if (path === "/api/analyze") {
+      await route.fulfill({
+        json: {
+          status: "ready",
+          understood: {},
+          analysis_run_id: "RUN-E2E",
+          result,
+        },
+      });
+      return;
+    }
+    if (path === "/api/trade-cases/EXPORT-001/documents") {
+      await route.fulfill({
+        json: request.method() === "GET"
+          ? { documents: [] }
+          : { document: extracted },
+      });
+      return;
+    }
+    if (path === "/api/documents/DOC-E2E/confirm-fields") {
+      await route.fulfill({
+        json: {
+          document: {
+            ...extracted,
+            extraction: {
+              ...extracted.extraction,
+              fields: [{
+                ...extracted.extraction.fields[0],
+                confirmed: true,
+                confirmed_value: "99000",
+              }],
+            },
+          },
+        },
+      });
+      return;
+    }
+    if (path === "/api/trade-cases/EXPORT-001/document-check") {
+      await route.fulfill({
+        json: {
+          case_id: "EXPORT-001",
+          document_count: 1,
+          document_types: ["commercial_invoice"],
+          review_required: true,
+          findings: [{
+            kind: "trade_document_mismatch",
+            field: "amount",
+            reason: "확정 거래 정보와 문서 값이 일치하지 않습니다.",
+          }],
+        },
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, json: {} });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", {
+    name: "10월 24일에 수출대금 10만 달러 받기로 했어요",
+  }).click();
+  await expect(page.getByRole("heading", { name: "거래 문서 검토" })).toBeVisible();
+
+  await page.getByLabel("문서 선택").setInputFiles({
+    name: "invoice.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Commercial Invoice\nAmount: USD 100000"),
+  });
+  await page.getByRole("button", { name: "업로드·추출" }).click();
+  await expect(page.getByText("상업송장")).toBeVisible();
+  await page.getByLabel(/금액/).fill("99000");
+  await page.getByRole("button", { name: "추출 필드 확인 저장" }).click();
+  await page.getByRole("button", { name: "거래·문서 정합성 검사" }).click();
+  await expect(page.getByText("사람의 확인이 필요한 불일치")).toBeVisible();
+});

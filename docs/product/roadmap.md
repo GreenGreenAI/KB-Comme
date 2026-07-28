@@ -13,12 +13,12 @@ last-reviewed: 2026-07-29
 | Phase 1 | 거래·계산 기반 | 현금흐름·순노출 계산과 회귀 테스트 | 완료 |
 | Phase 2 | 금융지원·규정 탐색 | 공식 출처 기반 후보·신고 판정, 근거 패킷 | 구현 완료, 독립 전문가 승인 대기 |
 | Phase 3 | 실행·검토 Workspace | 기업·RM 검토 흐름, 행동계획, 감사 기록, tenant 이력 | MVP 구현 완료 |
-| Phase 4 | 문서·신용장 | 문서 추출, 신용장 조건·불일치 분석 | 후속 |
+| Phase 4 | 문서·신용장 | 문서 추출, 신용장 조건·불일치 분석 | 기반 구현 완료 |
 | Phase 5 | 외부 실행 연동 | 승인된 시스템별 안전한 제출·주문 통합 | 후속 |
 
 ## 현재 Phase의 종료 조건
 
-Phase 2–3의 코드 종료 조건은 충족됐다.
+Phase 2–4의 현재 코드 종료 조건은 충족됐다.
 
 - 결정론적 노출·시장·지원·규정·헤지 흐름
 - DecisionPacket과 LLM 합성 경계
@@ -28,6 +28,10 @@ Phase 2–3의 코드 종료 조건은 충족됐다.
 - 계정·세션·기업 프로필·tenant별 분석 이력
 - 모델 검증 결과 영속화와 3역할 승격 workflow
 - Python, React component, production build, 대표 browser E2E
+- 암호화 문서 업로드, PDF·이미지 OCR 경계, 필드 원문 위치·사용자 확인
+- 거래·문서 간 불일치와 신용장 필수조건 fail-closed 검토
+- 조직 RBAC, hash 세션, 로그인 제한, append-only 감사 chain
+- PostgreSQL 운영 저장소와 실제 PostgreSQL CI 통합 테스트
 
 운영 종료 조건 중 다음은 외부 권한이 필요하다.
 

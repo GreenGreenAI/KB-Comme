@@ -41,7 +41,7 @@ const WORKER_LABEL = {
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, thinking, onArrived, threadRef }) {
+export default function Thread({ turns, account, busy, thinking, onArrived, threadRef }) {
   return (
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
@@ -61,6 +61,7 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
           <AgentTurn
             key={index}
             turn={turn}
+            signedIn={Boolean(account)}
             live={index === turns.length - 1 && !busy}
             onArrived={onArrived}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
@@ -152,7 +153,7 @@ function Dots() {
 }
 
 
-function AgentTurn({ turn, live, first, previous, onArrived }) {
+function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
@@ -285,7 +286,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
 
       {shown > words && (
         first ? (
-          <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
+          <Answer
+            result={result}
+            order={order}
+            shown={shown - words}
+            arrive={arrive}
+            signedIn={signedIn}
+          />
         ) : (
           <ResultUpdate
             previous={previous}
@@ -293,6 +300,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             order={order}
             shown={shown - words}
             arrive={arrive}
+            signedIn={signedIn}
           />
         )
       )}
@@ -549,19 +557,32 @@ export function ResultChangeSummary({ previous, result }) {
   );
 }
 
-export function ResultUpdate({ previous, result, order, shown, arrive = "" }) {
+export function ResultUpdate({
+  previous,
+  result,
+  order,
+  shown,
+  arrive = "",
+  signedIn = false,
+}) {
   return (
     <div className={`result-update${arrive}`}>
       <ResultChangeSummary previous={previous} result={result} />
       <details className="full-result">
         <summary>전체 결과 보기</summary>
-        <Answer result={result} order={order} shown={shown} arrive="" />
+        <Answer
+          result={result}
+          order={order}
+          shown={shown}
+          arrive=""
+          signedIn={signedIn}
+        />
       </details>
     </div>
   );
 }
 
-function Answer({ result, order, shown, arrive }) {
+function Answer({ result, order, shown, arrive, signedIn = false }) {
   // The card arrives with its first figures, not before them. Drawing the grey
   // box first left an empty panel waiting to be filled, which read as
   // something still loading rather than as an answer being written.
@@ -642,7 +663,9 @@ function Answer({ result, order, shown, arrive }) {
           })}
         </div>
       )}
-      {shown > (market ? 2 : 1) ? <DecisionWorkspace result={result} /> : null}
+      {shown > (market ? 2 : 1) ? (
+        <DecisionWorkspace result={result} signedIn={signedIn} />
+      ) : null}
     </div>
   );
 }

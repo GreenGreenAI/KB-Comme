@@ -488,6 +488,7 @@ export default function App() {
           <section className="chat">
             <Thread
               turns={turns}
+              account={account}
               busy={busy}
               thinking={thinking}
               onArrived={() => setWriting(false)}

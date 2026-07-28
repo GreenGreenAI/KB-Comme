@@ -18,4 +18,6 @@ web/frontend/playwright-report/
 
 # Accounts are seeded locally, never committed — the file holds password hashes.
 data/accounts.db
+data/.document-key
+data/documents/
 data/governance/*.db

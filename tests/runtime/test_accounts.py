@@ -1,5 +1,7 @@
 import time
 import unittest
+import contextlib
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -90,6 +92,32 @@ class StoreTests(unittest.TestCase):
     def test_an_unknown_token_is_nobody(self) -> None:
         self.assertIsNone(self.store.read_session("made-up"))
         self.assertIsNone(self.store.read_session(None))
+
+    def test_repeated_failures_temporarily_lock_even_the_correct_password(self) -> None:
+        now = datetime.now(timezone.utc)
+        for offset in range(5):
+            self.assertIsNone(
+                self.store.authenticate(
+                    "kim@hanbit.co.kr",
+                    "wrong",
+                    now=now + timedelta(seconds=offset),
+                )
+            )
+
+        self.assertIsNone(
+            self.store.authenticate(
+                "kim@hanbit.co.kr",
+                "tradeflow-demo",
+                now=now + timedelta(minutes=1),
+            )
+        )
+        self.assertIsNotNone(
+            self.store.authenticate(
+                "kim@hanbit.co.kr",
+                "tradeflow-demo",
+                now=now + timedelta(minutes=16),
+            )
+        )
 
 
 class ProfileTests(unittest.TestCase):
@@ -190,6 +218,116 @@ class TenantAnalysisStoreTests(unittest.TestCase):
         self.assertIsNone(self.store.read_analysis(self.beta, alpha_run))
         stored = self.store.read_analysis(self.alpha, alpha_run)
         self.assertEqual("알파", stored["result"]["company_profile"]["company_name"])
+
+
+class OrganizationRbacAuditTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._dir = TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.path = Path(self._dir.name) / "accounts.db"
+        self.store = AccountStore(self.path)
+        self.admin = self.store.create(
+            "admin@example.com",
+            "pw",
+            company_name="Alpha",
+            account_id="ACCOUNT-ADMIN",
+            organization_id="ORG-ALPHA",
+            role="company_admin",
+        )
+        self.user = self.store.create(
+            "user@example.com",
+            "pw",
+            company_name="Alpha",
+            account_id="ACCOUNT-USER",
+            organization_id="ORG-ALPHA",
+            role="company_user",
+        )
+        self.other = self.store.create(
+            "other@example.com",
+            "pw",
+            company_name="Beta",
+            account_id="ACCOUNT-OTHER",
+            organization_id="ORG-BETA",
+            role="company_admin",
+        )
+
+    def test_permissions_are_least_privilege_and_profile_uses_organization(self) -> None:
+        self.assertTrue(self.admin.can("audit:read"))
+        self.assertFalse(self.user.can("audit:read"))
+        self.assertTrue(self.user.can("document:upload"))
+        self.assertFalse(
+            self.store.create(
+                "rm@example.com",
+                "pw",
+                company_name="Bank",
+                role="rm",
+            ).can("analysis:read")
+        )
+        self.assertEqual("ORG-ALPHA", self.user.profile().company_id)
+
+    def test_analysis_history_is_shared_inside_org_but_not_across_orgs(self) -> None:
+        run_id = self.store.save_analysis(
+            self.user,
+            {
+                "packet_id": "packet:1",
+                "company_profile": {"company_name": "Alpha"},
+                "trade_timeline": [],
+            },
+        )
+
+        self.assertIsNotNone(self.store.read_analysis(self.admin, run_id))
+        self.assertIsNone(self.store.read_analysis(self.other, run_id))
+
+    def test_profile_fact_update_is_shared_by_every_account_in_the_org(self) -> None:
+        self.store.update_facts(self.admin, {"company.size": "small"})
+
+        self.assertEqual(
+            "small",
+            self.store.find(self.user.account_id).facts["company.size"],
+        )
+        self.assertNotIn("company.size", self.store.find(self.other.account_id).facts)
+
+    def test_session_database_contains_only_a_token_hash(self) -> None:
+        token = self.store.open_session(self.admin)
+        with contextlib.closing(sqlite3.connect(self.path)) as db:
+            stored = db.execute("SELECT token FROM sessions").fetchone()[0]
+
+        self.assertNotEqual(token, stored)
+        self.assertNotIn(token, stored)
+        self.assertIsNotNone(self.store.read_session(token))
+
+    def test_audit_chain_is_tenant_scoped_hash_chained_and_immutable(self) -> None:
+        first = self.store.append_audit(
+            self.admin,
+            action="document.upload",
+            target_type="document",
+            target_id="DOC-1",
+            details={"content_hash": "sha256:test"},
+        )
+        second = self.store.append_audit(
+            self.user,
+            action="document.read",
+            target_type="document",
+            target_id="DOC-1",
+        )
+        self.store.append_audit(
+            self.other,
+            action="analysis.create",
+            target_type="analysis",
+            target_id="RUN-2",
+        )
+
+        events = self.store.list_audit(self.admin)
+        self.assertEqual(2, len(events))
+        self.assertEqual(first["event_hash"], second["previous_hash"])
+        self.assertTrue(self.store.verify_audit_chain("ORG-ALPHA"))
+        with contextlib.closing(sqlite3.connect(self.path)) as db:
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    "UPDATE audit_events SET action = 'tampered'"
+                    " WHERE event_id = ?",
+                    (first["event_id"],),
+                )
 
 
 if __name__ == "__main__":

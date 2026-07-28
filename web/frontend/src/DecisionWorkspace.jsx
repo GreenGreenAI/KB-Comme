@@ -1,3 +1,5 @@
+import DocumentPanel from "./DocumentPanel.jsx";
+
 const STATUS = {
   eligible: "요건 충족",
   conditionally_eligible: "조건부 후보",
@@ -293,12 +295,13 @@ export function EvidenceSummary({ result }) {
   );
 }
 
-export default function DecisionWorkspace({ result }) {
+export default function DecisionWorkspace({ result, signedIn = false }) {
   return (
     <div className="decision-workspace">
       <ReviewBanner result={result} />
       <CompanySummary profile={result.company_profile} />
       <TradeTimeline trades={result.trade_timeline ?? []} />
+      <DocumentPanel trades={result.trade_timeline ?? []} signedIn={signedIn} />
       <SupportCandidates result={result} />
       <ComplianceFindings result={result} />
       <MissingInputQueue result={result} />
