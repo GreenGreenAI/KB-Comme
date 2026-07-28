@@ -67,11 +67,8 @@
     font-family: var(--mono); font-size: .75rem; font-style: normal;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
-  .nav-link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; transition: color .15s ease; }
-  .nav-link:hover:not(:disabled) { color: var(--accent); }
-  /* Disabled, not hidden: the reader can see what a finished answer contains
-     before there is one to jump to. */
-  .nav-link:disabled { color: var(--ink-45); cursor: default; }
+  .nav nav a { text-decoration: none; color: inherit; }
+  .nav nav a.on { color: var(--accent); font-weight: 600; }
   .nav-cta {
     border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
     border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;

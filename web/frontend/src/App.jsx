@@ -116,7 +116,7 @@ export default function App() {
 
   return (
     <>
-      <Nav ready={Boolean(result)} />
+      <Nav />
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>
           <Entry onSend={(text) => send(text)} busy={busy} />
