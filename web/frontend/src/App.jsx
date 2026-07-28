@@ -9,18 +9,28 @@ import { analyze, signOut, whoami } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** How long each reasoning step is shown.
+/** How long the whole reasoning phase lasts, at the least.
  *
- *  The deterministic analysis returns in about 45ms; synthesis over a language
- *  model will not. This paces the mockup the way the finished product will
- *  behave, so the screen is designed against the timing it will actually have
- *  rather than against a timing that disappears the moment the API lands.
+ *  A floor on the wait, not an addition to it. The step names are a replay —
+ *  by the time the server has said which workers ran, they have run — so the
+ *  time already spent waiting is time the trace has already had. What is left
+ *  of this budget is what the replay gets.
  *
- *  Only the pacing is simulated. The steps themselves are read from the
- *  execution plan the server really produced, so nothing is shown as running
- *  that did not run. When streaming replaces this, the step list stays and the
- *  timer goes. */
-const STEP_MS = 1000;
+ *  Before this, the two were added: the request took its own time and then the
+ *  steps took a fixed second each on top. Connecting §4.2[9] made that visible
+ *  — synthesis really costs 1.2–1.8s, so an eight-second wait appeared for
+ *  work that had finished in two.
+ *
+ *  The effect is that the screen's rhythm stays the same whether or not the
+ *  language model is reachable. Only the share of it that is real changes.
+ *
+ *  The steps themselves are read from the execution plan the server really
+ *  produced, so nothing is shown as running that did not run. */
+const TRACE_MS = 3000;
+
+/** No step passes faster than this, however little budget is left. A name that
+ *  flashes is a name nobody read, and the trace exists to be read. */
+const STEP_FLOOR_MS = 120;
 
 /** Fallback for the request bar, in case the turn never reports its arrival.
  *
@@ -51,11 +61,17 @@ function stepsForAsk(data, utterance) {
   return steps;
 }
 
-/** Walk a step list, holding each one on screen for its turn. */
-async function walk(steps, show) {
+/** Walk a step list, fitting the replay into whatever the wait has left.
+ *
+ *  `spent` is how long the request actually took. A slow answer has already
+ *  shown the reader that work was happening, so its trace is brief; a fast one
+ *  has shown nothing yet, so its trace takes the time. */
+async function walk(steps, show, spent = 0) {
+  const left = Math.max(0, TRACE_MS - spent);
+  const each = Math.max(STEP_FLOOR_MS, left / Math.max(steps.length, 1));
   for (let index = 0; index < steps.length; index += 1) {
     show({ steps, index });
-    await wait(STEP_MS);
+    await wait(each);
   }
   show(null);
 }
@@ -268,6 +284,7 @@ export default function App() {
     setBusy(true);
 
     try {
+      const started = performance.now();
       const data = await analyze({
         cases: nextCases,
         utterance,
@@ -275,12 +292,13 @@ export default function App() {
         as_of: today(),
         ...(placement ? { placement } : {}),
       });
+      const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
       // them from the session, so the screen cannot show one company while the
       // analysis runs for another.
 
       if (data.status === "needs_placement") {
-        await walk(stepsForAsk(data, utterance), setThinking);
+        await walk(stepsForAsk(data, utterance), setThinking, spent);
         // Nothing is recorded yet — the sentence has no home until the user
         // says which trade it belongs to.
         setPending(data);
@@ -302,7 +320,7 @@ export default function App() {
       if (data.status === "ready") {
         // Walk the plan's steps before showing the answer. The result is
         // already in hand — this paces the reveal, it does not wait on work.
-        await walk(stepsFor(data.result), setThinking);
+        await walk(stepsFor(data.result), setThinking, spent);
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
@@ -319,7 +337,7 @@ export default function App() {
           spoken: Boolean(utterance),
         });
       } else {
-        await walk(stepsForAsk(data, utterance), setThinking);
+        await walk(stepsForAsk(data, utterance), setThinking, spent);
         setPending(data);
         say({ who: "agent", kind: "ask", ask: data });
       }
