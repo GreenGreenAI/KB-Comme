@@ -12,10 +12,10 @@ import { useEffect, useRef, useState } from "react";
  *  conversation. This keeps the *control*.
  */
 
-const SLOT_LABEL = {
-  amount: "금액 (USD)",
-  expected_payment_date: "결제 예정일",
-  direction: "수출인가요, 수입인가요",
+const FALLBACK_QUESTION = {
+  amount: "거래 금액이 얼마인가요?",
+  expected_payment_date: "대금을 주고받기로 한 날짜가 언제인가요?",
+  direction: "수출 건인가요, 수입 건인가요?",
 };
 
 const DIRECTION_OPTIONS = [
@@ -38,11 +38,21 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
     );
   }
 
-  const slot = pending?.status === "needs_input" ? pending.missing?.[0] : null;
+  // Field and wording come paired from intake. Reading the field from one
+  // list and the question from another put a direction chooser under a
+  // question about the date.
+  const asked =
+    pending?.status === "needs_input"
+      ? pending.asked?.[0] ?? (pending.missing?.[0]
+          ? { field: pending.missing[0], question: null }
+          : null)
+      : null;
+  const slot = asked?.field ?? null;
+  const question = asked?.question ?? FALLBACK_QUESTION[slot] ?? slot;
 
   if (slot === "direction") {
     return (
-      <Ask label={SLOT_LABEL.direction}>
+      <Ask label={question}>
         <ChoiceList
           options={DIRECTION_OPTIONS}
           onPick={(value) => onSlot({ case: { direction: value } })}
@@ -53,7 +63,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (slot) {
     return (
-      <Ask label={SLOT_LABEL[slot] ?? slot} inline>
+      <Ask label={question}>
         <SlotField slot={slot} onSlot={onSlot} />
       </Ask>
     );
@@ -61,7 +71,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (requiredInputs?.length > 0) {
     return (
-      <Ask label="손익 기준" inline>
+      <Ask label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
         <ProfitFields onSlot={onSlot} />
       </Ask>
     );
@@ -70,10 +80,10 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
   return null;
 }
 
-function Ask({ label, inline = false, children }) {
+function Ask({ label, children }) {
   return (
-    <div className={`ask ${inline ? "ask-inline" : ""}`} role="group" aria-label={label}>
-      <span className="ask-label">{label}</span>
+    <div className="ask" role="group" aria-label={label}>
+      <p className="ask-label">{label}</p>
       {children}
     </div>
   );
@@ -156,26 +166,86 @@ function useAutoFocus() {
 function SlotField({ slot, onSlot }) {
   const [value, setValue] = useState("");
   const focus = useAutoFocus();
+
+  if (slot === "amount") return <AmountField onSlot={onSlot} />;
+
   const submit = () => value && onSlot({ case: { [slot]: value } });
 
   return (
-    <>
+    <div className="ask-row">
       <input
         ref={focus}
         type={slot === "expected_payment_date" ? "date" : "text"}
-        inputMode={slot === "amount" ? "decimal" : undefined}
         value={value}
-        placeholder={slot === "amount" ? "100,000" : undefined}
-        aria-label={SLOT_LABEL[slot] ?? slot}
+        aria-label={slot}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
       />
-      <button type="button" onClick={submit}>
+      <button type="button" onClick={submit} disabled={!value}>
         확인
       </button>
-    </>
+    </div>
   );
 }
+
+const GROUPED = /\B(?=(\d{3})+(?!\d))/g;
+
+/** An amount, shown the way it is read.
+ *
+ *  Six digits in a row are hard to check at a glance, which matters when the
+ *  number decides every figure below it. Separators go in as the user types
+ *  and come back out before the value is sent — the API takes a plain number,
+ *  and formatting is a reading aid, not data.
+ */
+function AmountField({ onSlot }) {
+  const [raw, setRaw] = useState("");
+  const focus = useAutoFocus();
+  const submit = () => raw && onSlot({ case: { amount: raw } });
+
+  function onChange(event) {
+    const digits = event.target.value.replace(/[^\d.]/g, "");
+    setRaw(digits);
+  }
+
+  const shown = raw
+    ? raw.replace(/^(\d+)/, (whole) => whole.replace(GROUPED, ","))
+    : "";
+  const spoken = raw ? readable(raw) : null;
+
+  return (
+    <div className="ask-row">
+      <span className="money">
+        <i>$</i>
+        <input
+          ref={focus}
+          inputMode="decimal"
+          value={shown}
+          placeholder="100,000"
+          aria-label="금액 (USD)"
+          onChange={onChange}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
+        <em>USD</em>
+      </span>
+      {/* The same number in words. A mistyped zero is invisible in digits and
+          obvious here. */}
+      {spoken && <span className="money-read">{spoken}</span>}
+      <button type="button" onClick={submit} disabled={!raw}>
+        확인
+      </button>
+    </div>
+  );
+}
+
+function readable(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value === 0) return null;
+  if (value >= 100000000) return `${trim(value / 100000000)}억 달러`;
+  if (value >= 10000) return `${trim(value / 10000)}만 달러`;
+  return null;
+}
+
+const trim = (n) => Number(n.toFixed(2)).toLocaleString("ko-KR");
 
 function ProfitFields({ onSlot }) {
   const [baseline, setBaseline] = useState("");
@@ -187,7 +257,7 @@ function ProfitFields({ onSlot }) {
     onSlot({ profile: { baseline_profit: baseline, profit_floor: floor } });
 
   return (
-    <>
+    <div className="ask-row">
       <input
         ref={focus}
         inputMode="decimal"
@@ -204,9 +274,9 @@ function ProfitFields({ onSlot }) {
         onChange={(e) => setFloor(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
       />
-      <button type="button" onClick={submit}>
+      <button type="button" onClick={submit} disabled={!baseline || !floor}>
         계산
       </button>
-    </>
+    </div>
   );
 }

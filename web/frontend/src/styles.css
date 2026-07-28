@@ -310,12 +310,37 @@
     border-radius: 12px;
     background: color-mix(in srgb, var(--accent) 4%, #fff);
   }
-  /* A single value fits on the label's line; a list does not. */
-  .ask-inline { flex-direction: row; align-items: center; flex-wrap: wrap; gap: .5rem; }
+  /* The question itself, not a field name. The thread has scrolled on by the
+     time the user looks down here, so the panel repeats what is being asked
+     rather than labelling the box "금액 (USD)". */
   .ask-label {
-    font-size: .6875rem; font-weight: 600; color: var(--accent-deep);
-    letter-spacing: .01em;
+    margin: 0; font-size: .875rem; font-weight: 600; color: var(--ink);
+    line-height: 1.5;
   }
+  .ask-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+  /* An amount, shown the way it is read: the currency sits in the field
+     rather than in a label, so the number is never alone. */
+  .money {
+    display: inline-flex; align-items: baseline; gap: .4rem;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 9px;
+    padding: .3rem .65rem;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .money:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .money i, .money em {
+    font-style: normal; font-family: var(--mono); font-size: .75rem;
+    color: var(--ink-45);
+  }
+  .money input {
+    border: none; background: none; outline: none; padding: 0;
+    width: 8.5rem; font-family: var(--mono); font-size: 1rem;
+    font-variant-numeric: tabular-nums; color: var(--ink); text-align: right;
+  }
+  .money-read { font-size: .75rem; color: var(--ink-45); }
 
   /* Stacked, keyboard-first. Each option is a different thing to do, so they
      are read rather than scanned; side-by-side pills invite a click before
@@ -354,7 +379,7 @@
   .choice-hint { font-size: .6875rem; color: var(--ink-45); }
   .choices:focus-visible .choice.on { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-  .ask input, .ask select {
+  .ask-row > input, .ask input:not(.money input), .ask select {
     font-family: var(--mono); font-size: .8125rem; background: var(--paper);
     border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem;
     min-width: 0; flex: 0 1 11rem; outline: none;
@@ -364,13 +389,14 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   }
-  .ask > button {
+  .ask-row > button, .ask > button {
     cursor: pointer; background: var(--accent); color: #fff; border: none;
     border-radius: 8px; padding: .38rem .9rem; font-size: .8125rem;
     transition: background .15s ease, transform .12s ease;
   }
-  .ask > button:hover { background: var(--accent-deep); }
-  .ask > button:active { transform: scale(.97); }
+  .ask-row > button:hover:not(:disabled), .ask > button:hover:not(:disabled) { background: var(--accent-deep); }
+  .ask-row > button:active:not(:disabled) { transform: scale(.97); }
+  .ask-row > button:disabled { background: var(--rule); color: var(--paper); cursor: default; }
 
   /* ---------- the answer, inside the message ---------- */
   .answer {
