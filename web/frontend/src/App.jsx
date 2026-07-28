@@ -7,6 +7,39 @@ import { analyze } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** How long each reasoning step is shown.
+ *
+ *  The deterministic analysis returns in about 45ms; synthesis over a language
+ *  model will not. This paces the mockup the way the finished product will
+ *  behave, so the screen is designed against the timing it will actually have
+ *  rather than against a timing that disappears the moment the API lands.
+ *
+ *  Only the pacing is simulated. The steps themselves are read from the
+ *  execution plan the server really produced, so nothing is shown as running
+ *  that did not run. When streaming replaces this, the step list stays and the
+ *  timer goes. */
+const STEP_MS = 1000;
+
+const STEP_LABEL = {
+  exposure: "순노출·자금공백 산출",
+  source_verification: "공식 출처 검증 확인",
+  market_scenario: "변동성 추정",
+  support: "지원제도 규칙 판정",
+  compliance: "신고의무 규칙 판정",
+  hedge: "헤지비율 산출",
+  synthesis: "답변 정리",
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The steps this answer actually took, in the order §4.1 runs them. */
+function stepsFor(result) {
+  const ran = result?.workers?.completed ?? [];
+  const order = ["exposure", "source_verification", "market_scenario", "support", "compliance", "hedge"];
+  const steps = order.filter((name) => ran.includes(name));
+  return [...steps, "synthesis"];
+}
+
 /** The conversation lives in the client. The server is stateless, so whatever
  *  the user has told us is resent each turn — the client already has to render
  *  it all, which makes it the natural owner. */
@@ -17,6 +50,7 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [thinking, setThinking] = useState(null);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
@@ -92,6 +126,15 @@ export default function App() {
       }
 
       if (data.status === "ready") {
+        // Walk the plan's steps before showing the answer. The result is
+        // already in hand — this paces the reveal, it does not wait on work.
+        const steps = stepsFor(data.result);
+        for (let index = 0; index < steps.length; index += 1) {
+          setThinking({ steps, index });
+          await wait(STEP_MS);
+        }
+        setThinking(null);
+
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
         setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
@@ -111,6 +154,7 @@ export default function App() {
     } catch (error) {
       say({ who: "agent", kind: "error", text: error.message });
     } finally {
+      setThinking(null);
       setBusy(false);
     }
   }
@@ -131,7 +175,12 @@ export default function App() {
             as the conversation lengthens. */}
         <div className={`view work ${view === "entry" ? "away" : ""}`}>
           <section className="chat">
-            <Thread turns={turns} busy={busy} threadRef={threadRef} />
+            <Thread
+              turns={turns}
+              busy={busy}
+              thinking={thinking}
+              threadRef={threadRef}
+            />
             {/* Directly above the input, and its own panel. A choice list is
                 several lines tall; inside the text box it read as the box
                 having swallowed something. */}
