@@ -474,35 +474,52 @@
     display: flex; align-items: center; gap: .5rem; margin: 0;
     font-size: .8125rem; line-height: 1.5; color: var(--ink-70);
   }
-  /* Each step replaces the last, so the swap is what needs marking. It lifts
-     and brightens rather than fading in from nothing — a step nobody can read
-     is worse than one that arrives without ceremony. */
-  .step { animation: step-in .26s cubic-bezier(.22,.9,.3,1); }
+  /* Each step replaces the last, so the swap is what needs marking, and it
+     does so with the same gesture the answer uses.
+
+     It opens at 0.35 rather than at nothing, unlike the answer. The answer can
+     start from zero because the turn takes its motion classes off once the
+     fade has had its time; a step has no such moment — it is replaced by the
+     next one and never settles — so a stalled animation would leave the only
+     line on screen invisible. */
+  .step { animation: step-in .42s cubic-bezier(.16,.84,.44,1); }
   @keyframes step-in {
-    from { opacity: .25; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
+    from { opacity: .35; transform: translateY(5px); filter: blur(2px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
   }
 
   /* One gesture for every part of an arriving answer: the trace lines, the
      sentence's words, the card, the band.
 
-     Movement only — nothing here touches opacity. Arrival is mounting: a part
-     that has not arrived is not in the document, so there is nothing to fade
-     up from, and a fade would only put a ghost of the finished answer on
-     screen ahead of itself. It also makes the failure mode cheap: an
-     animation that is applied but never advances holds its opening frame, and
-     that frame is legible text a few pixels low rather than invisible text. */
-  .arrive { animation: arrive .34s cubic-bezier(.22,.9,.3,1); }
+     Each part can fade up from nothing because arrival is mounting: a part
+     whose turn has not come is not in the document at all, so a fade here
+     cannot leave a ghost of the finished answer on screen ahead of itself —
+     which is exactly what an opacity that started before the mount did.
+
+     Softness comes from three things together, not from a longer duration
+     alone: the fade outlasts the gap to the next part, so several are always
+     in flight; the easing decelerates hard at the end rather than arriving at
+     a constant rate; and a little blur clearing to nothing keeps the first
+     frames from having a hard edge to snap out of. */
+  .arrive { animation: arrive .52s cubic-bezier(.16,.84,.44,1); }
   @keyframes arrive {
-    from { transform: translateY(5px); }
-    to { transform: none; }
+    from { opacity: 0; transform: translateY(9px); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
   }
 
-  .written .w { display: inline-block; animation: word .24s ease; }
+  .written .w { display: inline-block; }
+  .written.writing .w { animation: word .44s cubic-bezier(.16,.84,.44,1); }
   .w.em { color: var(--accent); font-weight: 600; }
   @keyframes word {
-    from { transform: translateY(3px); }
-    to { transform: none; }
+    from { opacity: 0; transform: translateY(5px); filter: blur(3px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+
+  /* Motion is the whole point of the effect, so there is nothing to soften
+     for a reader who has asked for less of it — the content simply is where
+     it belongs, at once. */
+  @media (prefers-reduced-motion: reduce) {
+    .arrive, .written.writing .w, .step { animation: none; }
   }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }
