@@ -68,17 +68,27 @@ class SlotReading:
     def complete(self) -> bool:
         return not self.missing and not self.issues
 
+    def prompts(self) -> tuple[tuple[str, str], ...]:
+        """The next slots to ask about, each with its question.
+
+        Field and wording travel together so a caller cannot pair the wrong
+        two. `missing` is in schema order while asking follows ASK_ORDER, and a
+        screen that read `missing[0]` for the field but `questions[0]` for the
+        wording offered a direction chooser under a question about the date.
+        """
+        pending = [slot for slot in ASK_ORDER if slot in self.missing]
+        pending += [slot for slot in self.missing if slot not in ASK_ORDER]
+        return tuple(
+            (slot, _QUESTIONS.get(slot, f"{slot} 값을 알려주세요."))
+            for slot in pending[:MAX_QUESTIONS_PER_TURN]
+        )
+
     def questions(self) -> tuple[str, ...]:
         """The next questions to put to the user, at most three.
 
         Ordered so that the first answers are the ones that unlock a result.
         """
-        pending = [slot for slot in ASK_ORDER if slot in self.missing]
-        pending += [slot for slot in self.missing if slot not in ASK_ORDER]
-        return tuple(
-            _QUESTIONS.get(slot, f"{slot} 값을 알려주세요.")
-            for slot in pending[:MAX_QUESTIONS_PER_TURN]
-        )
+        return tuple(question for _, question in self.prompts())
 
 
 def _read_direction(raw: Any) -> tuple[str | None, str | None]:
