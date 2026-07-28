@@ -60,15 +60,26 @@
     backdrop-filter: blur(14px);
     border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--lift);
   }
-  .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.02em; }
+  /* The one thing in the bar that actually goes somewhere. */
+  .brand {
+    display: flex; align-items: center; gap: .5rem; font-weight: 700;
+    letter-spacing: -.02em; background: none; border: 0; padding: 0;
+    cursor: pointer; color: inherit; transition: opacity .15s ease;
+  }
+  .brand:hover { opacity: .72; }
+  .brand:active { opacity: .55; }
   .brand i {
     width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
     border: 1.5px solid var(--accent); color: var(--accent);
     font-family: var(--mono); font-size: .75rem; font-style: normal;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
-  .nav nav a { text-decoration: none; color: inherit; }
-  .nav nav a.on { color: var(--accent); font-weight: 600; }
+  .nav-link { color: inherit; transition: color .15s ease; }
+  .nav-link.on { color: var(--accent); font-weight: 600; }
+  /* Alive to the pointer, but the cursor stays an arrow: there is no page to
+     click through to yet, and a pointer finger would promise one. */
+  .nav-link.soon { color: var(--ink-45); cursor: default; }
+  .nav-link.soon:hover { color: var(--ink-70); }
   .nav-cta {
     border: 1px solid var(--rule); background: var(--paper); cursor: pointer;
     border-radius: 999px; padding: .5rem 1.15rem; font-size: .875rem; font-weight: 600;

@@ -117,7 +117,10 @@ export default function App() {
 
   return (
     <>
-      <Nav />
+      {/* Home returns to the opening screen without discarding anything. The
+          conversation is still there, and typing continues it — a brand click
+          should not be able to destroy work the user cannot get back. */}
+      <Nav onHome={() => setView("entry")} />
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>
           <Entry onSend={(text) => send(text)} busy={busy} />

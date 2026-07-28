@@ -13,7 +13,7 @@ const MENU_EXIT_MS = 150;
  *  where the company's own facts are already known. The signed-out branch is
  *  kept rather than deleted — it is what the real sign-in page will return to,
  *  and the menu's 로그아웃 still reaches it. */
-export default function Nav() {
+export default function Nav({ onHome }) {
   const [signedIn, setSignedIn] = useState(true);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -49,14 +49,26 @@ export default function Nav() {
 
   return (
     <header className="nav">
-      <div className="brand">
+      <button className="brand" type="button" onClick={onHome}>
         <i>T</i> TradeFlow
-      </div>
-      <nav>
-        <a href="#" className="on">분석</a>
-        <a href="#">지원제도</a>
-        <a href="#">신고의무</a>
-        <a href="#">근거</a>
+      </button>
+      {/* The three areas beyond 분석 have no page behind them yet. They are
+          shown so the shape of the product is legible, and they respond to the
+          pointer so they do not read as dead text — but the cursor stays an
+          arrow and aria-disabled says what a hover cannot. A link that looks
+          like a link and goes nowhere is worse than one that says "준비 중". */}
+      <nav aria-label="주요 영역">
+        <span className="nav-link on" aria-current="page">분석</span>
+        {["지원제도", "신고의무", "근거"].map((area) => (
+          <span
+            key={area}
+            className="nav-link soon"
+            aria-disabled="true"
+            title="준비 중"
+          >
+            {area}
+          </span>
+        ))}
       </nav>
 
       <div className="account" ref={box}>
