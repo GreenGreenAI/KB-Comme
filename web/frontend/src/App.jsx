@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Nav from "./Nav.jsx";
 import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
-import { analyze, health } from "./api.js";
+import { analyze } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -18,20 +18,6 @@ export default function App() {
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
   const threadRef = useRef(null);
-  const [asOf, setAsOf] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    health()
-      .then((info) => {
-        const versions = info.fx_snapshots ?? [];
-        if (alive && versions.length) setAsOf(versions[versions.length - 1]);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
   const stick = useRef(true);
 
   // Remember, before the new turn paints, whether the reader was at the
@@ -161,7 +147,7 @@ export default function App() {
                   }
                 />
               )}
-              <Composer onSend={(text) => send(text)} busy={busy} asOf={asOf} />
+              <Composer onSend={(text) => send(text)} busy={busy} />
             </div>
           </section>
         </div>
@@ -176,7 +162,7 @@ function stripEmpty(object) {
   );
 }
 
-function Composer({ onSend, busy, asOf }) {
+function Composer({ onSend, busy }) {
   const [text, setText] = useState("");
   const field = useRef(null);
 
@@ -215,13 +201,7 @@ function Composer({ onSend, busy, asOf }) {
             }
           }}
         />
-        {/* What this session is computing against, and how to send. Both are
-            things the user would otherwise have to remember. */}
         <div className="composer-foot">
-          <span className="ctx">
-            <b>USD</b>
-            {asOf ? ` · ECOS ${asOf}` : ""}
-          </span>
           {/* Words, not glyphs. ⏎ and ⇧ are missing from enough system fonts
               to render as tofu, and a hint nobody can read is worse than one
               that takes two more characters. */}
