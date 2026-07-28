@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -65,7 +65,7 @@ class AnalyzeRequest(BaseModel):
     #: Set only when the user has already answered "새 거래인가, 수정인가".
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
-    placement: str | None = None
+    placement: Literal["append", "merge"] | None = None
 
 
 FIELD_LABELS = {
@@ -169,16 +169,31 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
     if request.utterance:
         heard = read_utterance(request.utterance, as_of=as_of)
         if heard:
-            action = request.placement or place_utterance(heard, supplied).action
+            action = request.placement or place_utterance(
+                heard,
+                supplied,
+                utterance=request.utterance,
+            ).action
             if action == AMBIGUOUS:
                 return _placement_question(request.utterance, heard, supplied)
             if action == APPEND:
                 supplied = [*supplied, dict(heard)]
             else:
-                # Fill only the slots the sentence stated and the form left
-                # blank; anything the user typed explicitly wins.
                 target = supplied[-1] if supplied else {}
-                merged = {**heard, **{k: v for k, v in target.items() if v}}
+                if request.placement == "merge":
+                    # The user explicitly chose to correct the current trade,
+                    # so the newly stated values must win.
+                    merged = {
+                        **{k: v for k, v in target.items() if v},
+                        **heard,
+                    }
+                else:
+                    # During ordinary slot filling, values already entered in
+                    # the structured form remain authoritative.
+                    merged = {
+                        **heard,
+                        **{k: v for k, v in target.items() if v},
+                    }
                 supplied = [*supplied[:-1], merged] if supplied else [merged]
 
     reading = intake(
