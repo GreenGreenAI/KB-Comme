@@ -243,7 +243,15 @@
      area its middle, and the footer carries what the session computes against
      plus how to send. Two same-width rounded panels stacked on each other read
      as separate parts, which is what this replaced. */
-  .dock { flex: none; border-top: 1px solid var(--rule-faint); padding: .85rem 1.5rem 1.15rem; }
+  /* No rule between the thread and the input. The two are one surface, and a
+     line across it read as a seam. What keeps them apart is the fade below:
+     text passing under the input dissolves instead of being cut, so the edge
+     is felt without being drawn. */
+  .dock { flex: none; padding: .35rem 1.5rem 1.15rem; }
+  .thread {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  }
   .composer { flex: none; }
   .composer-box {
     background: var(--paper); border: 1px solid var(--rule);
