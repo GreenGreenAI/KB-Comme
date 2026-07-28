@@ -20,17 +20,32 @@ const today = () => new Date().toISOString().slice(0, 10);
  *  timer goes. */
 const STEP_MS = 1000;
 
-const STEP_LABEL = {
-  exposure: "순노출·자금공백 산출",
-  source_verification: "공식 출처 검증 확인",
-  market_scenario: "변동성 추정",
-  support: "지원제도 규칙 판정",
-  compliance: "신고의무 규칙 판정",
-  hedge: "헤지비율 산출",
-  synthesis: "답변 정리",
-};
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The steps an intake turn actually took.
+ *
+ *  Deciding what to ask is reasoning too — the sentence has to be read, and
+ *  what it says has to be weighed against the trades already known. Naming
+ *  those makes a question arrive the same way an answer does, and each name
+ *  is an operation the server really performed.
+ */
+function stepsForAsk(data, utterance) {
+  const steps = [];
+  if (utterance) steps.push("read");
+  if (data.status === "needs_placement") steps.push("placement");
+  else steps.push("slots");
+  return steps;
+}
+
+/** Walk a step list, holding each one on screen for its turn. */
+async function walk(steps, show) {
+  for (let index = 0; index < steps.length; index += 1) {
+    show({ steps, index });
+    await wait(STEP_MS);
+  }
+  show(null);
+}
 
 /** The steps this answer actually took, in the order §4.1 runs them. */
 function stepsFor(result) {
@@ -107,6 +122,7 @@ export default function App() {
       });
 
       if (data.status === "needs_placement") {
+        await walk(stepsForAsk(data, utterance), setThinking);
         // Nothing is recorded yet — the sentence has no home until the user
         // says which trade it belongs to.
         setPending(data);
@@ -128,12 +144,7 @@ export default function App() {
       if (data.status === "ready") {
         // Walk the plan's steps before showing the answer. The result is
         // already in hand — this paces the reveal, it does not wait on work.
-        const steps = stepsFor(data.result);
-        for (let index = 0; index < steps.length; index += 1) {
-          setThinking({ steps, index });
-          await wait(STEP_MS);
-        }
-        setThinking(null);
+        await walk(stepsFor(data.result), setThinking);
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
@@ -148,6 +159,7 @@ export default function App() {
           spoken: Boolean(utterance),
         });
       } else {
+        await walk(stepsForAsk(data, utterance), setThinking);
         setPending(data);
         say({ who: "agent", kind: "ask", ask: data });
       }
