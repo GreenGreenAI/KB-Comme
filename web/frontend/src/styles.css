@@ -60,14 +60,16 @@
     backdrop-filter: blur(14px);
     border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--lift);
   }
-  /* The one thing in the bar that actually goes somewhere. */
+  /* The one thing in the bar that actually goes somewhere. It stays visually
+     still on hover — the wordmark is the product's name before it is a
+     control, and dimming it on the way past made the bar feel unsettled. The
+     pointer cursor and the press feedback are enough to say it is clickable. */
   .brand {
     display: flex; align-items: center; gap: .5rem; font-weight: 700;
     letter-spacing: -.02em; background: none; border: 0; padding: 0;
-    cursor: pointer; color: inherit; transition: opacity .15s ease;
+    cursor: pointer; color: inherit; transition: opacity .12s ease;
   }
-  .brand:hover { opacity: .72; }
-  .brand:active { opacity: .55; }
+  .brand:active { opacity: .6; }
   .brand i {
     width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
     border: 1.5px solid var(--accent); color: var(--accent);
