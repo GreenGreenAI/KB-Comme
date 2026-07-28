@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { health } from "./api.js";
-
+//: The first one doubles as the placeholder's example and as what Tab fills
+//: in, so the sentence a reader is shown is the sentence they get.
 const STARTERS = [
   "10월 24일에 수출대금 10만 달러 받기로 했어요",
   "8월 25일에 수입대금 6만 달러 나가요",
@@ -12,23 +12,6 @@ const STARTERS = [
 export default function Entry({ onSend, busy }) {
   const [text, setText] = useState("");
 
-  // The badge names the data the next answer will actually be built on, so it
-  // is read from the server rather than written into the page. A hardcoded
-  // date here silently became a false claim the day the snapshot moved.
-  const [asOf, setAsOf] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    health()
-      .then((info) => {
-        const versions = info.fx_snapshots ?? [];
-        if (alive && versions.length) setAsOf(versions[versions.length - 1]);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   function submit(value) {
     const trimmed = (value ?? text).trim();
     if (!trimmed || busy) return;
@@ -37,17 +20,21 @@ export default function Entry({ onSend, busy }) {
 
   return (
     <div className="entry-wrap">
-      <span className="badge">
-        <em>연동</em> 한국은행 ECOS 매매기준율
-        {asOf ? ` · ${asOf} 기준` : ""}
-      </span>
+      {/* The opening lines arrive in the order they are read. Each carries its
+          own delay rather than a shared one, so the sequence is legible in the
+          markup instead of hidden in a stylesheet.
 
+          The reveal stops at the standfirst. Below it is the input, and a
+          control that fades in is a control the hand has to wait for. */}
       <h1 className="hero">
-        짐작하지 말고
-        <br />
-        <b>계산하세요</b>
+        <span className="reveal" style={{ animationDelay: "60ms" }}>
+          짐작하지 말고
+        </span>
+        <b className="reveal" style={{ animationDelay: "220ms" }}>
+          계산하세요
+        </b>
       </h1>
-      <p className="standfirst">
+      <p className="standfirst reveal" style={{ animationDelay: "430ms" }}>
         수출입 거래의 환위험을 한국은행 환율로 계산하고, 출처와 기준일까지 함께
         보여드립니다. 환율을 예측하지는 않습니다.
       </p>
@@ -56,9 +43,17 @@ export default function Entry({ onSend, busy }) {
         <textarea
           rows="2"
           value={text}
-          placeholder="거래를 편하게 설명해 주세요. 예: 10월 24일에 수출대금 10만 달러 받기로 했어요"
+          placeholder={`거래를 편하게 설명해 주세요. 예: ${STARTERS[0]}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            // Tab takes the example the placeholder is already showing. Only
+            // while the field is empty — once there is text, Tab has to keep
+            // moving focus or the form becomes a trap for keyboard users.
+            if (e.key === "Tab" && !e.shiftKey && text.trim() === "") {
+              e.preventDefault();
+              setText(STARTERS[0]);
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();
@@ -66,10 +61,17 @@ export default function Entry({ onSend, busy }) {
           }}
         />
         <div className="prompt-foot">
-          <div className="toggles">
-            <span className="toggle"><i /> 근거 표시</span>
-            <span className="toggle off"><i /> 상세 계산</span>
-          </div>
+          <p className="prompt-hint">
+            {text.trim() === "" ? (
+              <>
+                <kbd>Tab</kbd> 예시 넣기
+              </>
+            ) : (
+              <>
+                <kbd>Enter</kbd> 분석 시작
+              </>
+            )}
+          </p>
           <button
             className="send"
             type="button"

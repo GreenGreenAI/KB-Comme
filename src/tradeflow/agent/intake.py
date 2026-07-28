@@ -28,6 +28,9 @@ class IntakeResult:
 
     program: TradeProgram | None
     questions: tuple[str, ...]
+    #: (slot, question) in the order they should be asked. `questions` is the
+    #: wording alone, kept for callers that only render prose.
+    prompts: tuple[tuple[str, str], ...]
     missing: tuple[str, ...]
     issues: tuple[SlotIssue, ...]
     readings: tuple[SlotReading, ...] = field(default_factory=tuple)
@@ -75,6 +78,7 @@ def intake(
         return IntakeResult(
             program=None,
             questions=("어떤 거래를 분석할까요? 수출인지 수입인지, 금액과 결제일을 알려주세요.",),
+            prompts=(),
             missing=("direction", "amount", "expected_payment_date"),
             issues=(),
         )
@@ -82,20 +86,23 @@ def intake(
     readings = tuple(read_slots(case) for case in cases)
     missing: list[str] = []
     issues: list[SlotIssue] = []
+    prompts: list[tuple[str, str]] = []
     questions: list[str] = []
     for reading in readings:
         for slot in reading.missing:
             if slot not in missing:
                 missing.append(slot)
         issues.extend(reading.issues)
-        for question in reading.questions():
+        for slot, question in reading.prompts():
             if question not in questions:
                 questions.append(question)
+                prompts.append((slot, question))
 
     if missing or issues:
         return IntakeResult(
             program=None,
             questions=tuple(questions[:3]),
+            prompts=tuple(prompts[:3]),
             missing=tuple(missing),
             issues=tuple(issues),
             readings=readings,
@@ -119,6 +126,7 @@ def intake(
     return IntakeResult(
         program=program,
         questions=(),
+        prompts=(),
         missing=(),
         issues=(),
         readings=readings,

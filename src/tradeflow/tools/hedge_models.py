@@ -122,6 +122,7 @@ class HedgeDecisionModel(Protocol):
     model_id: str
     model_version: str
     objective: str
+    scenario_centering: str
 
     def analyze(self, request: HedgeModelRequest) -> HedgeModelDecision: ...
 
@@ -130,6 +131,7 @@ class RateScenarioModel(Protocol):
     model_id: str
     model_version: str
     family: str
+    scenario_centering: str
 
     def forecast(self, request: HedgeModelRequest) -> RateForecast: ...
 
@@ -195,6 +197,7 @@ class RollingNormalScenarioModel:
     model_id = "rolling_normal"
     model_version = MODEL_VERSION
     family = "parametric_normal"
+    scenario_centering = "zero"
 
     def forecast(self, request: HedgeModelRequest) -> RateForecast:
         returns = log_returns(request.observations)
@@ -226,6 +229,7 @@ class HistoricalScenarioModel:
     model_id = "historical_simulation"
     model_version = MODEL_VERSION
     family = "historical"
+    scenario_centering = "empirical"
 
     def forecast(self, request: HedgeModelRequest) -> RateForecast:
         ordered = request.observations
@@ -265,6 +269,7 @@ class EwmaNormalScenarioModel:
     model_id = "ewma_normal"
     model_version = MODEL_VERSION
     family = "conditional_normal"
+    scenario_centering = "zero"
 
     def __init__(self, decay: float = 0.94) -> None:
         if not 0 < decay < 1:
@@ -352,6 +357,7 @@ class GarchFilteredHistoricalScenarioModel:
     model_id = "garch_filtered_historical"
     model_version = MODEL_VERSION
     family = "garch_filtered_historical"
+    scenario_centering = "empirical_standardized_residuals"
 
     def forecast(self, request: HedgeModelRequest) -> RateForecast:
         returns = log_returns(request.observations)
@@ -465,6 +471,7 @@ class QuantileProfitFloorModel:
     ) -> None:
         self.model_id = model_id
         self.scenario_model = scenario_model
+        self.scenario_centering = scenario_model.scenario_centering
 
     def analyze(self, request: HedgeModelRequest) -> HedgeModelDecision:
         forecast = self.scenario_model.forecast(request)
@@ -507,6 +514,7 @@ class QuantileProfitFloorModel:
             scenario_count=len(forecast.scenarios),
             parameters={
                 "scenario_model": forecast.model_id,
+                "scenario_centering": self.scenario_centering,
                 **dict(forecast.parameters),
             },
         )
@@ -516,6 +524,7 @@ class HistoricalCvarModel:
     model_id = "historical_cvar"
     model_version = MODEL_VERSION
     objective = "minimum_expected_shortfall_then_minimum_ratio"
+    scenario_centering = "empirical"
 
     def __init__(self) -> None:
         self.scenario_model = HistoricalScenarioModel()
@@ -569,6 +578,7 @@ class HistoricalCvarModel:
             scenario_count=len(forecast.scenarios),
             parameters={
                 "scenario_model": forecast.model_id,
+                "scenario_centering": self.scenario_centering,
                 "ratio_step": str(request.ratio_step),
                 "tail_probability": 1 - request.confidence_level,
             },

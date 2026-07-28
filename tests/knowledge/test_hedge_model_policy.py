@@ -35,6 +35,11 @@ class HedgeModelGovernanceRegistryTests(unittest.TestCase):
         blocked = governance.models["minimum_variance_forward"]
         self.assertEqual("data_blocked", blocked.status)
         self.assertTrue(blocked.blockers)
+        self.assertEqual("not_applicable", blocked.scenario_centering)
+        self.assertEqual(
+            ["zero", "not_applicable"],
+            governance.promotion_policy["allowed_scenario_centering"],
+        )
         self.assertFalse(
             governance.fallback_policy["automatic_challenger_fallback"]
         )

@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { won, pct } from "./api.js";
 
+/** How an answer arrives: top to bottom, one part after the next.
+ *
+ *  Read as a budget rather than as scattered constants — the trace lands
+ *  first, the sentence writes itself, and the figures follow it down the
+ *  card. Nothing starts from nothing: every part opens at 0.2 so an animation
+ *  that never advances costs the motion and not the content.
+ */
+const TRACE_MS = 70;
+const WORD_MS = 45;
+const AFTER_SENTENCE_MS = 90;
+const BLOCK_MS = 130;
+const ARRIVE_MS = 340;   // matches the .arrive animation in styles.css
+
 const DEFAULT_ORDER = [
   "exposure",
   "market_scenario",
@@ -18,16 +31,10 @@ const WORKER_LABEL = {
   compliance: "신고의무 규칙 판정",
 };
 
-const SLOT_LABEL = {
-  amount: "금액 (USD)",
-  expected_payment_date: "결제 예정일",
-  direction: "방향",
-};
-
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRef }) {
+export default function Thread({ turns, busy, thinking, onArrived, threadRef }) {
   return (
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
@@ -48,7 +55,7 @@ export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRe
             key={index}
             turn={turn}
             live={index === turns.length - 1 && !busy}
-            onPlace={onPlace}
+            onArrived={onArrived}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             previous={
               turns
@@ -56,29 +63,41 @@ export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRe
                 .filter((t) => t.kind === "result")
                 .at(-1)?.result ?? null
             }
-            onSlot={onSlot}
           />
         ),
       )}
 
-      {busy && <Thinking />}
+      {busy && <Thinking thinking={thinking} />}
     </div>
   );
 }
 
+const STEP_LABEL = {
+  exposure: "순노출·자금공백 산출",
+  source_verification: "공식 출처 검증 확인",
+  market_scenario: "변동성 추정",
+  support: "지원제도 규칙 판정",
+  compliance: "신고의무 규칙 판정",
+  hedge: "헤지비율 산출",
+  synthesis: "답변 정리",
+  read: "문장에서 거래 정보 읽기",
+  slots: "빠진 정보 확인",
+  placement: "앞 거래와 대조",
+};
+
 /** What the agent is doing, while it is doing it.
  *
- *  A local analysis returns in about 45ms, so an indicator shown immediately
- *  would flash and read as a glitch. It fades in after a delay instead: a fast
- *  answer never shows one, and a slow one is explained. No artificial wait is
- *  added — the delay only governs when the element becomes visible.
+ *  One line at a time: the step in progress replaces the one before it. A
+ *  growing list drew the eye back to work already finished and pushed the
+ *  conversation up the screen while the reader was waiting. What the answer
+ *  was built from is not lost — the trace under the finished answer carries
+ *  the same list.
  *
- *  The label does not claim per-worker progress. The API answers in a single
- *  response, so a staged "노출 계산 중 → 환율 확인 중" would be theatre; what
- *  actually ran is listed in the trace once the answer arrives. When synthesis
- *  starts taking seconds (§4.2[9]) this is where real stages belong.
+ *  Before an answer is in hand there is no plan to show, so the indicator
+ *  falls back to a single line. It appears after a short delay either way, so
+ *  a fast exchange never flashes one.
  */
-function Thinking() {
+function Thinking({ thinking }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -88,23 +107,39 @@ function Thinking() {
 
   if (!visible) return null;
 
+  const steps = thinking?.steps ?? [];
+  const active = thinking?.index ?? 0;
+
   return (
     <div className="turn agent thinking" aria-live="polite">
       <span className="who">TradeFlow</span>
-      <p className="think">
-        <span className="dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        계산하고 있습니다
-      </p>
+      {steps.length === 0 ? (
+        <p className="think">
+          <Dots />
+          계산하고 있습니다
+        </p>
+      ) : (
+        <p className="step" key={steps[active]}>
+          <Dots />
+          {STEP_LABEL[steps[active]] ?? steps[active]}
+        </p>
+      )}
     </div>
   );
 }
 
+function Dots() {
+  return (
+    <span className="dots" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
 
-function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
+
+function AgentTurn({ turn, live, first, previous, onArrived }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
@@ -120,20 +155,6 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
         <span className="who">TradeFlow</span>
         <Understood heard={turn.ask.understood} />
         <p>{turn.ask.question}</p>
-        {live && (
-          <div className="choices">
-            {turn.ask.options.map((option) => (
-              <button
-                className="choice"
-                type="button"
-                key={option.placement}
-                onClick={() => onPlace(turn.ask.utterance, option.placement)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     );
   }
@@ -149,7 +170,6 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
         {turn.ask.questions.map((question) => (
           <p key={question}>{question}</p>
         ))}
-        {live && <SlotInput missing={turn.ask.missing} onSlot={onSlot} />}
       </div>
     );
   }
@@ -180,76 +200,63 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
     !tradesChanged &&
     opened.length === 0;
 
+  const line = sentence({
+    first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
+    opened, unread,
+  });
+  const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
+  const sentenceStart = trace.length * TRACE_MS;
+  const answerStart = sentenceStart + words * WORD_MS + AFTER_SENTENCE_MS;
+
+  // One counter for everything below the sentence, owned by the turn. The
+  // card advances it as it lays its blocks out, and whatever follows the card
+  // picks up where it stopped — React runs sibling component bodies in order,
+  // so the count is already correct by the time the trailing line asks.
+  const cascade = counter(answerStart, live);
+
+  // The turn knows how long it takes to arrive; nothing else can. Block count
+  // depends on what the plan produced and the sentence length varies, so a
+  // constant elsewhere would drift out of step with the cascade it describes.
+  useEffect(() => {
+    if (!live || !onArrived) return;
+    const total = cascade.end() + ARRIVE_MS;
+    const timer = setTimeout(onArrived, total);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
   return (
     <div className="turn agent">
       <span className="who">TradeFlow</span>
 
       {trace.length > 0 && (
         <div className="trace">
-          {trace.map((name) => (
-            <span className="ok" key={name}>
+          {trace.map((name, index) => (
+            <span
+              className={`ok ${live ? "arrive" : ""}`}
+              style={{ animationDelay: `${index * TRACE_MS}ms` }}
+              key={name}
+            >
               {WORKER_LABEL[name] ?? name}
             </span>
           ))}
         </div>
       )}
 
-      {first && market && swing !== null ? (
-        <p>
-          계산했습니다.{" "}
-          <strong>
-            결제일까지 불리한 환율이 {won(market.adverse_rate)}원일 수 있고
-          </strong>
-          , 그러면 받는 금액이 지금보다{" "}
-          <strong>
-            {won(swing)}원{" "}
-            {market.adverse_cashflow_direction === "decrease"
-              ? "적어집니다"
-              : "많아집니다"}.
-          </strong>
-        </p>
-      ) : hedgeIsNew ? (
-        <p>
-          손익분기 환율은 <strong>{won(hedge.breakeven_rate)}원</strong>이고, 최소{" "}
-          <strong>{pct(hedge.optimal_ratio)}</strong>만 헤지하면 목표 이익을 지킬 수
-          있습니다.
-        </p>
-      ) : tradesChanged ? (
-        <p>거래 {tradeCount}건으로 다시 계산했습니다.</p>
-      ) : opened.length > 0 ? (
-        <p>{opened.map((name) => WORKER_LABEL[name] ?? name).join(" · ")}까지 채웠습니다.</p>
-      ) : unread ? (
-        <p>
-          그 문장에서는 거래 정보를 읽지 못해 계산이 달라지지 않았습니다. 금액 ·
-          결제일 · 수출입 여부는 문장으로 알려주실 수 있습니다.
-        </p>
-      ) : (
-        <p>다시 계산했습니다.</p>
-      )}
+      {/* The sentence arrives a word at a time, after the trace has landed.
+          Written as segments rather than JSX so each word can carry its own
+          delay; emphasis rides along on the segment. */}
+      <Written live={live} segments={line} start={sentenceStart} />
 
-      {first && !hedge && hedgeInputs.length === 0 && result.workers.skipped.hedge && (
-        <p>{result.workers.skipped.hedge}</p>
-      )}
+      <Answer result={result} order={order} cascade={cascade} />
 
-      {hedgeIsNew && hedge?.status === "HEDGE_INSUFFICIENT" && (
-        <p>
-          전액을 헤지해도 목표 이익을 지킬 수 없습니다. 헤지 비율을 임의로
-          제시하지 않고 다른 방법을 함께 검토해야 합니다.
-        </p>
-      )}
-
-      <Answer result={result} order={order} />
-
-      {/* Asked once. Repeating the request every turn read as if the answer
-          had not been received. */}
+      {/* Asked once, and only in words. The fields live in the bar above the
+          composer so they stay reachable after the thread scrolls on. */}
       {!hedge && hedgeInputs.length > 0 && live && (
-        <>
-          <p>
-            기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
-            입력하지 않은 하한을 임의로 만들지 않습니다.
-          </p>
-          <ProfitInput onSlot={onSlot} />
-        </>
+        <Trailing cascade={cascade}>
+          기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
+          입력하지 않은 하한을 임의로 만들지 않습니다.
+        </Trailing>
       )}
     </div>
   );
@@ -272,7 +279,111 @@ const SECTION_LABEL = {
  *
  *  Only the headline figures are open. Everything else is a fold — this is a
  *  chat message, and a message that takes four screens is not one. */
-function Answer({ result, order }) {
+/** The agent's line for this turn, as segments. */
+function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
+  if (first && market && swing !== null) {
+    const direction =
+      market.adverse_cashflow_direction === "decrease" ? "적어집니다" : "많아집니다";
+    return [
+      { text: "계산했습니다." },
+      { text: `결제일까지 불리한 환율이 ${won(market.adverse_rate)}원일 수 있고,`, strong: true },
+      { text: "그러면 받는 금액이 지금보다" },
+      { text: `${won(swing)}원 ${direction}.`, strong: true },
+    ];
+  }
+  if (hedgeIsNew) {
+    return [
+      { text: "손익분기 환율은" },
+      { text: `${won(hedge.breakeven_rate)}원`, strong: true },
+      { text: "이고, 최소" },
+      { text: pct(hedge.optimal_ratio), strong: true },
+      { text: "만 헤지하면 목표 이익을 지킬 수 있습니다." },
+    ];
+  }
+  if (tradesChanged) return [{ text: `거래 ${tradeCount}건으로 다시 계산했습니다.` }];
+  if (opened.length > 0) {
+    return [{ text: `${opened.map((n) => WORKER_LABEL[n] ?? n).join(" · ")}까지 채웠습니다.` }];
+  }
+  if (unread) {
+    return [{
+      text: "그 문장에서는 거래 정보를 읽지 못해 계산이 달라지지 않았습니다. " +
+            "금액 · 결제일 · 수출입 여부는 문장으로 알려주실 수 있습니다.",
+    }];
+  }
+  return [{ text: "다시 계산했습니다." }];
+}
+
+/** Hands out the next arrival slot below the sentence.
+ *
+ *  A shared counter rather than a delay per component: the card's height
+ *  varies with what the plan produced, and anything after it has to start
+ *  where the card stopped rather than at a number guessed in advance.
+ */
+function counter(start, live) {
+  let block = 0;
+  const next = () => {
+    const delay = start + block * BLOCK_MS;
+    block += 1;
+    return live
+      ? { className: "arrive", style: { animationDelay: `${delay}ms` } }
+      : {};
+  };
+  // When the last slot handed out begins. Read after render, once every block
+  // has taken its turn.
+  next.end = () => start + Math.max(block - 1, 0) * BLOCK_MS;
+  return next;
+}
+
+/** A line that follows the answer card, taking the next slot after it. */
+function Trailing({ cascade, children }) {
+  return <p {...cascade()}>{children}</p>;
+}
+
+/** Merge a base class with the arrival props, so a block can have both. */
+function withClass(props, base) {
+  return { ...props, className: [base, props.className].filter(Boolean).join(" ") };
+}
+
+/** Words appearing in order, as if being written.
+ *
+ *  They fade in from dim rather than from nothing. An animation that is
+ *  applied but not advancing holds its opening frame, and a sentence whose
+ *  opening frame is invisible is a sentence that can fail to arrive. At 0.2 it
+ *  is faint but readable, so the worst case costs the effect and not the text.
+ *
+ *  Only the newest turn writes itself. Re-animating the history every time
+ *  React re-renders would make the whole conversation flicker.
+ */
+function Written({ segments, live, start = 0 }) {
+  let index = 0;
+  return (
+    <p className={live ? "written" : ""}>
+      {segments.map((segment, s) =>
+        segment.text.split(" ").map((word) => {
+          const i = index;
+          index += 1;
+          return (
+            <span
+              className={`w ${segment.strong ? "em" : ""}`}
+              style={{ animationDelay: `${start + i * WORD_MS}ms` }}
+              key={`${s}-${i}`}
+            >
+              {word}{" "}
+            </span>
+          );
+        })
+      )}
+    </p>
+  );
+}
+
+
+function Answer({ result, order, cascade }) {
+  // The card arrives with its first figures, not before them. Drawing the grey
+  // box first left an empty panel sitting on screen waiting to be filled,
+  // which read as something still loading rather than as an answer being
+  // written. Blocks after the first follow it down.
+  const next = cascade;
   const cash = result.cashflow_analysis;
   const market = result.market_scenario;
   const hedge = result.hedge_analysis;
@@ -284,8 +395,12 @@ function Answer({ result, order }) {
   const matched = cash.maturity_matched_amount?.[0]?.amount;
   const skipped = result.workers?.skipped ?? {};
 
+  const card = next();
+
   return (
-    <div className="answer">
+    // The figures ride inside the card's own arrival — a second animation on
+    // them would stack transforms and make them drift twice.
+    <div {...withClass(card, "answer")}>
       <dl className="figrow">
         <div>
           <dt>순노출</dt>
@@ -309,15 +424,15 @@ function Answer({ result, order }) {
       </dl>
 
       {Number(natural) > 0 && Number(matched) === 0 && (
-        <p className="answer-note">
+        <p {...withClass(next(), "answer-note")}>
           상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
         </p>
       )}
 
-      {market && <RateBand market={market} hedge={hedge} />}
+      {market && <RateBand market={market} hedge={hedge} wrap={next()} />}
 
       {/* Sections follow the order §4.2[2]'s intent reading produced. */}
-      <div className="folds">
+      <div {...withClass(next(), "folds")}>
         {order
           .filter((section) => section !== "exposure" && section !== "market_scenario")
           .map((section) => {
@@ -362,7 +477,7 @@ function Answer({ result, order }) {
 }
 
 /** Where the rate can land by the last payment date, drawn to scale. */
-function RateBand({ market, hedge }) {
+function RateBand({ market, hedge, wrap = {} }) {
   const lower = Number(market.band_lower);
   const upper = Number(market.band_upper);
   const spot = Number(market.spot_rate);
@@ -380,7 +495,7 @@ function RateBand({ market, hedge }) {
   const at = (v) => ((v - min) / (max - min)) * 100;
 
   return (
-    <div className="rate">
+    <div {...withClass(wrap, "rate")}>
       <div className="rate-track">
         <span
           className="rate-fill"
@@ -411,69 +526,4 @@ function Understood({ heard }) {
   if (heard.amount) parts.push(`${won(heard.amount)} USD`);
   if (heard.expected_payment_date) parts.push(heard.expected_payment_date);
   return <p>{parts.join(" · ")}로 이해했습니다.</p>;
-}
-
-/** Asking in prose but accepting a typed value: the wording stays
- *  conversational while the value stays unambiguous. */
-function SlotInput({ missing, onSlot }) {
-  const slot = missing?.[0];
-  const [value, setValue] = useState("");
-  if (!slot) return null;
-
-  const submit = () => value && onSlot({ case: { [slot]: value } });
-
-  return (
-    <div className="slotline">
-      {slot === "direction" ? (
-        <select value={value} onChange={(e) => setValue(e.target.value)} aria-label={SLOT_LABEL[slot]}>
-          <option value="">선택하세요</option>
-          <option value="수출">수출 (대금을 받음)</option>
-          <option value="수입">수입 (대금을 지급)</option>
-        </select>
-      ) : (
-        <input
-          type={slot === "expected_payment_date" ? "date" : "text"}
-          inputMode={slot === "amount" ? "decimal" : undefined}
-          value={value}
-          placeholder={slot === "amount" ? "100,000" : undefined}
-          aria-label={SLOT_LABEL[slot] ?? slot}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      )}
-      <button type="button" onClick={submit}>확인</button>
-    </div>
-  );
-}
-
-function ProfitInput({ onSlot }) {
-  const [baseline, setBaseline] = useState("");
-  const [floor, setFloor] = useState("");
-  const submit = () =>
-    baseline &&
-    floor &&
-    onSlot({
-      profile: { baseline_profit: baseline, profit_floor: floor },
-    });
-
-  return (
-    <div className="slotline">
-      <input
-        inputMode="decimal"
-        value={baseline}
-        placeholder="기준 영업이익 (원)"
-        aria-label="기준 영업이익"
-        onChange={(e) => setBaseline(e.target.value)}
-      />
-      <input
-        inputMode="decimal"
-        value={floor}
-        placeholder="목표 손익 하한 (원)"
-        aria-label="목표 손익 하한"
-        onChange={(e) => setFloor(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-      />
-      <button type="button" onClick={submit}>계산</button>
-    </div>
-  );
 }

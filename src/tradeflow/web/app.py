@@ -209,6 +209,12 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
             "status": "needs_input",
             "understood": heard,
             "questions": list(reading.questions),
+            # Field and wording paired, so the screen asks for the thing it is
+            # quoting the question for.
+            "asked": [
+                {"field": field, "question": question}
+                for field, question in reading.prompts
+            ],
             "missing": list(reading.missing),
             "issues": [
                 {"field": issue.field, "reason": issue.reason}

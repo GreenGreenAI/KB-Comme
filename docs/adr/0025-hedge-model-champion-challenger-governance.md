@@ -46,18 +46,23 @@ credit, tenor and transaction-cost effects.
    insufficient information instead of silently changing the method.
 9. The LLM may explain a versioned model result but may not calculate a hedge
    ratio, invent a quote, select a model or override a promotion gate.
+10. Record each model's scenario-centering policy explicitly. A model whose
+    scenarios carry empirical directional drift cannot be promoted while the
+    product promises zero-drift, non-directional risk scenarios.
 
 ## Model interpretation
 
 - Rolling Normal and EWMA Normal use zero drift and normal quantiles. They are
   transparent baselines, not claims that FX returns are normally distributed.
-- Historical Simulation replays observed overlapping horizon returns.
+- Historical Simulation replays observed overlapping horizon returns, so its
+  empirical sample drift can move the scenario median away from spot.
 - GARCH-FHS estimates conditional variance with deterministic Gaussian QMLE
-  grid search and applies empirical standardized residuals. It is not a
-  Student-t maximum-likelihood implementation.
+  grid search and applies empirical standardized residuals. Those residuals
+  are not forcibly recentered, and the model is not a Student-t
+  maximum-likelihood implementation.
 - Historical CVaR minimizes empirical profit-floor shortfall over a bounded
-  ratio grid. It is an internal economic objective, not regulatory capital
-  Expected Shortfall.
+  ratio grid using the same empirically centered historical scenarios. It is
+  an internal economic objective, not regulatory capital Expected Shortfall.
 - Minimum variance follows the covariance of spot and forward returns divided
   by forward-return variance, bounded to the product's permitted ratio range.
 
@@ -77,5 +82,7 @@ spot data.
 - malformed, unaligned or zero-variance paired histories fail closed;
 - the committed ECOS snapshot produces at least 100 origins for every model;
 - spot-proxy validation always blocks promotion;
+- empirically centered scenario models remain blocked even when numerical
+  gates and observed-quote requirements pass;
 - observed-quote fixtures can pass the numerical gates;
 - `scripts/check_hedge_models.py` reproduces the benchmark.

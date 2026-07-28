@@ -40,6 +40,13 @@ not substitute another model.
 The machine-readable source of truth is
 [`knowledge/hedge_model_registry.json`](../../knowledge/hedge_model_registry.json).
 
+Each model also declares `scenario_centering`. Rolling Normal and EWMA use
+`zero`; Historical Simulation and Historical CVaR use `empirical`; GARCH-FHS
+uses `empirical_standardized_residuals`; Minimum Variance is
+`not_applicable`. Empirically centered models may be evaluated as challengers,
+but they cannot be promoted while the product contract remains
+non-directional.
+
 ## Walk-forward protocol
 
 For origin index `t` and horizon `h`:
@@ -81,6 +88,7 @@ Defaults are versioned in the registry:
 - estimated-cost increase at most 10%;
 - ratio-turnover increase at most 0.05;
 - observed historical forward quotes;
+- scenario centering allowed by the non-directional product policy;
 - approval by knowledge-domain, platform-runtime and a domain expert.
 
 Failure of any gate blocks promotion. There is no weighted score that can hide
