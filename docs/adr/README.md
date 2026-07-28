@@ -33,6 +33,7 @@ last-reviewed: 2026-07-27
 | [ADR-0020](0020-subject-scoped-operational-evidence.md) | proposed | 회사·케이스 범위 운영 자격 증거와 fail-closed 결합 |
 | [ADR-0021](0021-private-eligibility-evidence-snapshots.md) | proposed | 기업 자격·신용정보의 비공개 snapshot·tenant 경계 |
 | [ADR-0022](0022-koreaexim-reference-fx-catalog.md) | proposed | 한국수출입은행 다통화 기준환율 catalog와 출처 역할 |
+| [ADR-0023](0023-user-declared-compliance-gates.md) | proposed | 사용자 확정 진술로 규정 적용 관문만 입력하는 계약 |
 
 ## 운영 규칙
 
