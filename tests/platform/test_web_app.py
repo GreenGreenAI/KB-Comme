@@ -84,6 +84,51 @@ class WebApiValidationTests(unittest.TestCase):
         self.assertIn("hedge", body["result"]["workers"]["skipped"])
 
 
+class AskedPairingTests(unittest.TestCase):
+    """The field asked for and the question quoted must be the same thing.
+
+    `missing` is in schema order while asking follows ASK_ORDER, so a screen
+    reading `missing[0]` for the field and `questions[0]` for the wording put a
+    direction chooser under a question about the payment date.
+    """
+
+    def _asked(self, case: dict) -> list[dict]:
+        body = analyze_endpoint(
+            AnalyzeRequest(as_of=date.today().isoformat(), cases=[case])
+        )
+        self.assertEqual("needs_input", body["status"])
+        return body["asked"]
+
+    def test_the_first_asked_field_matches_the_first_question(self) -> None:
+        asked = self._asked({"amount": "100000"})
+
+        self.assertEqual("expected_payment_date", asked[0]["field"])
+        self.assertIn("날짜", asked[0]["question"])
+
+    def test_pairing_holds_when_a_different_slot_is_missing(self) -> None:
+        asked = self._asked({"direction": "export"})
+
+        self.assertEqual("amount", asked[0]["field"])
+        self.assertIn("금액", asked[0]["question"])
+
+    def test_asked_agrees_with_the_questions_it_renders(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(as_of=date.today().isoformat(), cases=[{}])
+        )
+
+        self.assertEqual(
+            body["questions"], [item["question"] for item in body["asked"]]
+        )
+
+    def test_every_asked_field_is_actually_missing(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(as_of=date.today().isoformat(), cases=[{}])
+        )
+
+        for item in body["asked"]:
+            self.assertIn(item["field"], body["missing"])
+
+
 class SecondTradeTests(unittest.TestCase):
     """A sentence about a different trade must reach the answer.
 
