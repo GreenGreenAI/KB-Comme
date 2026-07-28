@@ -28,6 +28,7 @@ from tradeflow.runtime.pipeline import TradeFlowPipeline
 from tradeflow.runtime.provenance import (
     CalculationVersions,
     InputFile,
+    canonical_business_inputs,
     fingerprint_knowledge,
     snapshot_versions,
 )
@@ -162,6 +163,7 @@ def analyze(
     """Run the workers this program calls for, keeping failures contained."""
     report = WorkerReport()
     review: list[str] = []
+    evaluated_at = as_of or datetime.now(UTC)
 
     exposures = analyze_exposure(program)
     report.completed.append("exposure")
@@ -172,7 +174,7 @@ def analyze(
         report,
         "source_verification",
         lambda: load_source_verification(
-            snapshot_root, as_of=as_of or datetime.now(UTC)
+            snapshot_root, as_of=evaluated_at
         ),
     )
     verification_ref, source_freshness = verification or (None, None)
@@ -217,7 +219,7 @@ def analyze(
         path = latest_snapshot_path(snapshot_root, FX_SOURCE)
         ref, payload = read_snapshot(path)
         snapshot = ref
-        require_fresh(ref, FX_FRESHNESS, as_of or datetime.now(ref.observed_at.tzinfo))
+        require_fresh(ref, FX_FRESHNESS, evaluated_at)
         return scenario_band(usd_krw_series(payload), horizon_business_days=horizon)
 
     band = _isolated(report, "market_scenario", _market)
@@ -285,7 +287,7 @@ def analyze(
                 )
 
     if snapshot is not None and FX_FRESHNESS.evaluate(
-        snapshot, as_of or datetime.now(snapshot.observed_at.tzinfo)
+        snapshot, evaluated_at
     ) is not Freshness.FRESH:
         review.append("환율 스냅샷이 최신성 기준을 넘겨 판단 근거에서 제외되었습니다")
 
@@ -315,6 +317,16 @@ def analyze(
             knowledge_files=(
                 () if knowledge_pipeline is not None else _default_knowledge_files()
             ),
-            snapshots=snapshot_versions((snapshot, verification_ref)),
+            snapshots=snapshot_versions(
+                (*program.input_snapshots, snapshot, verification_ref)
+            ),
+            business_inputs=canonical_business_inputs(
+                program=program,
+                baseline_profit=baseline_profit,
+                profit_floor=profit_floor,
+                hedge_measures=hedge_measures,
+                evaluated_at=evaluated_at,
+                horizon_business_days=horizon,
+            ),
         ),
     )
