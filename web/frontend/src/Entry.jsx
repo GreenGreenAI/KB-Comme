@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+//: The first one doubles as the placeholder's example and as what Tab fills
+//: in, so the sentence a reader is shown is the sentence they get.
 const STARTERS = [
   "10월 24일에 수출대금 10만 달러 받기로 했어요",
   "8월 25일에 수입대금 6만 달러 나가요",
@@ -41,9 +43,17 @@ export default function Entry({ onSend, busy }) {
         <textarea
           rows="2"
           value={text}
-          placeholder="거래를 편하게 설명해 주세요. 예: 10월 24일에 수출대금 10만 달러 받기로 했어요"
+          placeholder={`거래를 편하게 설명해 주세요. 예: ${STARTERS[0]}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            // Tab takes the example the placeholder is already showing. Only
+            // while the field is empty — once there is text, Tab has to keep
+            // moving focus or the form becomes a trap for keyboard users.
+            if (e.key === "Tab" && !e.shiftKey && text.trim() === "") {
+              e.preventDefault();
+              setText(STARTERS[0]);
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();
@@ -51,10 +61,17 @@ export default function Entry({ onSend, busy }) {
           }}
         />
         <div className="prompt-foot">
-          <div className="toggles">
-            <span className="toggle"><i /> 근거 표시</span>
-            <span className="toggle off"><i /> 상세 계산</span>
-          </div>
+          <p className="prompt-hint">
+            {text.trim() === "" ? (
+              <>
+                <kbd>Tab</kbd> 예시 넣기
+              </>
+            ) : (
+              <>
+                <kbd>Enter</kbd> 분석 시작
+              </>
+            )}
+          </p>
           <button
             className="send"
             type="button"

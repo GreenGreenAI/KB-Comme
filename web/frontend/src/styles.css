@@ -161,17 +161,18 @@
   }
   .prompt textarea::placeholder { color: var(--ink-45); }
   .prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-  .toggles { display: flex; align-items: center; gap: .5rem; }
-  .toggle {
-    display: inline-flex; align-items: center; gap: .45rem; cursor: pointer;
-    border: 1px solid var(--rule); border-radius: 999px; background: var(--paper);
-    padding: .32rem .7rem; font-size: .8125rem; color: var(--ink-70);
+  /* What the keyboard can do from here, in the space the two toggles used to
+     take. Those toggles were decoration — neither was wired to anything. */
+  .prompt-hint {
+    margin: 0; display: flex; align-items: center; gap: .4rem;
+    font-size: .75rem; color: var(--ink-45);
   }
-  .toggle i { width: 26px; height: 15px; border-radius: 999px; background: var(--accent); position: relative; flex: none; }
-  .toggle i::after { content: ""; position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
-  .toggle.off i { background: var(--rule); }
-  .toggle.off i::after { right: auto; left: 2px; }
-  .toggle.off { color: var(--ink-45); }
+  .prompt-hint kbd {
+    font-family: var(--mono); font-size: .6875rem; line-height: 1;
+    padding: .22rem .4rem; border: 1px solid var(--rule);
+    border-bottom-width: 2px; border-radius: 5px; color: var(--ink-70);
+    background: var(--paper);
+  }
   /* Every action the user can take carries the same colour, so "this is a
      control" never has to be worked out twice. */
   .send {
