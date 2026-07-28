@@ -15,7 +15,29 @@ const MENU_EXIT_MS = 150;
  *  sign-in form, and a button that scrolls you to what you are looking at is
  *  noise — what is missing at that moment is a way in for someone with no
  *  account at all. */
-export default function Nav({ onHome, signedIn, onSignOut }) {
+/** The facts §5.4 reads, in the words a person uses for them.
+ *
+ *  Only what the account actually states is listed. A fact it is silent about
+ *  is left out rather than shown as "아니요" — that silence is what makes the
+ *  rules ask, and writing an answer in for them here would be the screen
+ *  deciding something the analysis refused to decide. */
+const FACT_LABEL = {
+  "company.is_sme": (v) => (v ? "중소기업" : "중소기업 아님"),
+  "company.size": (v) => ({ small: "소기업", medium: "중기업", large: "대기업" }[v] ?? v),
+  "company.industry_code": (v) => `업종 ${v}`,
+  "company.credit_issue_free": (v) => (v ? "신용 이슈 없음" : "신용 이슈 있음"),
+  "company.ksure_exporter_grade": (v) => `K-SURE 등급 ${v}`,
+  "company.is_domestic": (v) => (v ? "국내 소재" : "국외 소재"),
+};
+
+function described(facts) {
+  return Object.entries(facts ?? {})
+    .filter(([name]) => name in FACT_LABEL)
+    .map(([name, value]) => FACT_LABEL[name](value));
+}
+
+export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut }) {
+  const signedIn = Boolean(account);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
 
@@ -80,12 +102,22 @@ export default function Nav({ onHome, signedIn, onSignOut }) {
 
       <div className="account" ref={box}>
         {!signedIn ? (
-          <div className="nav-invite">
-            <span>계정이 없으신가요?</span>
-            <button className="nav-cta" type="button">
-              가입 신청
+          signingIn ? (
+            /* On the sign-in screen itself, a 로그인 button would point at
+               what is already on the screen. What is missing there is a way in
+               for someone with no account — and there is no sign-up behind it,
+               so it says so instead of pretending. */
+            <div className="nav-invite">
+              <span>계정이 없으신가요?</span>
+              <button className="nav-cta" type="button" disabled title="준비 중">
+                가입 신청
+              </button>
+            </div>
+          ) : (
+            <button className="nav-cta" type="button" onClick={onSignIn}>
+              로그인
             </button>
-          </div>
+          )
         ) : (
           <>
             <button
@@ -96,7 +128,7 @@ export default function Nav({ onHome, signedIn, onSignOut }) {
               aria-label="계정 메뉴"
               onClick={() => setOpen((v) => !v)}
             >
-              한
+              {account.company_name.slice(0, 1)}
             </button>
             {/* Entering and leaving are separate animations rather than one
                 transition between classes. A transition needs the element to
@@ -106,18 +138,30 @@ export default function Nav({ onHome, signedIn, onSignOut }) {
             {mounted && (
               <div className={`menu ${open ? "" : "out"}`}>
                 <div className="menu-id">
-                  <span className="avatar" aria-hidden="true">한</span>
+                  <span className="avatar" aria-hidden="true">
+                    {account.company_name.slice(0, 1)}
+                  </span>
                   <div>
-                    <b>한빛정밀</b>
-                    <span>중소기업 · 제조업</span>
+                    <b>{account.company_name}</b>
+                    <span>{account.email}</span>
                   </div>
                 </div>
-                <a href="#">저장한 분석 <em>4건</em></a>
-                <a href="#" className="saved">기업 정보 <em>3개 항목 저장됨</em></a>
-                <a href="#">근거 이력 <em>스냅샷 12건</em></a>
+                {/* The facts themselves, not a count of them. These are the
+                    same values the server puts into DecisionPacket.inputs, so
+                    what is listed here is what the judgement was made on —
+                    the menu used to state a company the analysis had never
+                    heard of. */}
+                <div className="menu-facts">
+                  {described(account.facts).map((fact) => (
+                    <span key={fact}>{fact}</span>
+                  ))}
+                  {described(account.facts).length === 0 && (
+                    <span className="none">저장된 기업 사실이 없습니다</span>
+                  )}
+                </div>
                 <p className="note">
-                  중소기업 여부·담보 여력·업종은 계정에 저장되어 있어, 새 분석에서
-                  다시 묻지 않습니다.
+                  이 사실들은 분석 요청에 그대로 실립니다. 규칙이 묻지 않은 것은
+                  계정에도 없습니다.
                 </p>
                 <hr />
                 <a

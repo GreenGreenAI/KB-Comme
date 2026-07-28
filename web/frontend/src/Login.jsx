@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { signIn } from "./api.js";
 
 /** The way in.
  *
@@ -8,22 +9,37 @@ import { useState } from "react";
  *  and it is deliberately dull. A sign-in box is somewhere the hand goes, not
  *  somewhere the eye lingers.
  *
- *  Nothing here authenticates. There is no account system behind this yet, so
- *  the form does not send what is typed anywhere — it changes the screen. The
- *  fields are real controls rather than a picture so the layout is honest
- *  about the space a password manager and an error message will need, but a
- *  box that collected credentials and quietly dropped them would be worse than
- *  no box at all.
+ *  The form authenticates. What it does not do is decide the answer: the
+ *  password goes to the server, the server compares it against a stored scrypt
+ *  digest and sets the session cookie, and this component learns whether it
+ *  worked from the reply. Nothing about being signed in is decided here, so
+ *  nothing about it can be arranged from here either.
+ *
+ *  There is no sign-up. Accounts are seeded (scripts/seed_accounts.py), and the
+ *  two alternatives below are the ones a Korean SME really uses — neither is
+ *  connected to anything, so both say so rather than pretending.
  */
 export default function Login({ onSignIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
-    onSignIn();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onSignIn(await signIn(email, password));
+    } catch (failure) {
+      // One message for both failures, because the server sends one. Saying
+      // "그런 계정이 없습니다" would answer a question nobody asked.
+      setError(failure.message);
+      setBusy(false);
+    }
   }
 
   return (
@@ -103,19 +119,26 @@ export default function Login({ onSignIn }) {
           로그인 상태 유지
         </label>
 
-        <button className="signin-go" type="submit">
-          로그인
+        {error && (
+          <p className="signin-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button className="signin-go" type="submit" disabled={busy}>
+          {busy ? "확인하는 중" : "로그인"}
         </button>
 
         <p className="or"><span>또는</span></p>
 
         {/* The two ways a Korean SME actually signs in to something like this.
-            They are here because they are the real alternatives, not to fill
-            the space — and neither is wired up yet. */}
-        <button className="signin-alt" type="button" onClick={onSignIn}>
+            Disabled rather than removed: they are what belongs here, and a
+            button that looks live and goes nowhere is a worse promise than one
+            that says it is not ready. */}
+        <button className="signin-alt" type="button" disabled title="준비 중">
           회사 SSO로 로그인
         </button>
-        <button className="signin-alt" type="button" onClick={onSignIn}>
+        <button className="signin-alt" type="button" disabled title="준비 중">
           공동인증서로 로그인
         </button>
 

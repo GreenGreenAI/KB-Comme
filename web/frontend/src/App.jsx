@@ -4,7 +4,7 @@ import Entry from "./Entry.jsx";
 import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
-import { analyze } from "./api.js";
+import { analyze, signOut, whoami } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -79,12 +79,22 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
   const [writing, setWriting] = useState(false);
-  // The app opens signed in. There is no account system behind the form yet,
-  // so landing on it would put a door in front of the product with nothing on
-  // the other side; the state worth opening in is the one the rest of this is
-  // designed around, where the company's own facts are already known. 로그아웃
-  // is how the sign-in screen is reached.
-  const [signedIn, setSignedIn] = useState(true);
+  // Who the server says we are, or null. Signing in is not required — the
+  // product answers anonymously — so this starts as "not yet asked" rather than
+  // as "signed out", and the sign-in screen is somewhere you go, not a door you
+  // are stopped at.
+  const [account, setAccount] = useState(null);
+  const [showSignIn, setShowSignIn] = useState(false);
+
+  // Ask once on load. A session that survived a refresh should not have to be
+  // proved again by typing.
+  useEffect(() => {
+    let live = true;
+    whoami().then((found) => live && found && setAccount(found));
+    return () => {
+      live = false;
+    };
+  }, []);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
@@ -243,6 +253,9 @@ export default function App() {
         as_of: today(),
         ...(placement ? { placement } : {}),
       });
+      // Company facts are not sent from here when signed in. The server reads
+      // them from the session, so the screen cannot show one company while the
+      // analysis runs for another.
 
       if (data.status === "needs_placement") {
         await walk(stepsForAsk(data, utterance), setThinking);
@@ -302,12 +315,25 @@ export default function App() {
           conversation is still there, and typing continues it — a brand click
           should not be able to destroy work the user cannot get back. */}
       <Nav
-        onHome={() => setView("entry")}
-        signedIn={signedIn}
-        onSignOut={() => setSignedIn(false)}
+        onHome={() => {
+          setShowSignIn(false);
+          setView("entry");
+        }}
+        account={account}
+        signingIn={showSignIn}
+        onSignIn={() => setShowSignIn(true)}
+        onSignOut={async () => {
+          await signOut();
+          setAccount(null);
+        }}
       />
-      {!signedIn ? (
-        <Login onSignIn={() => setSignedIn(true)} />
+      {showSignIn && !account ? (
+        <Login
+          onSignIn={(who) => {
+            setAccount(who);
+            setShowSignIn(false);
+          }}
+        />
       ) : (
       <div className="stage" data-view={view}>
         <div className={`view entry ${view === "work" ? "away" : ""}`}>

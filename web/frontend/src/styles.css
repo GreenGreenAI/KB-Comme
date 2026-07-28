@@ -161,6 +161,18 @@
     font-style: normal; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
   }
   .menu a.saved em { color: var(--accent); }
+  /* The company facts the analysis will receive, listed as facts. Chips rather
+     than rows because they are a set, not a menu — there is nothing to click. */
+  .menu-facts {
+    display: flex; flex-wrap: wrap; gap: .3rem; padding: .35rem .65rem .1rem;
+  }
+  .menu-facts span {
+    font-size: .6875rem; line-height: 1.5; color: var(--ink-70);
+    padding: .18rem .5rem; border-radius: 999px;
+    background: var(--tint); border: 1px solid var(--rule-faint);
+  }
+  .menu-facts .none { background: none; border-color: transparent; color: var(--ink-45); }
+
   .menu hr { border: none; border-top: 1px solid var(--rule-faint); margin: .35rem 0; }
   .menu .note {
     margin: .1rem .65rem .5rem; font-size: .6875rem; color: var(--ink-45); line-height: 1.55;
@@ -297,6 +309,21 @@
   }
   .signin-alt:hover { border-color: var(--accent); color: var(--accent); }
   .signin-alt:active { transform: scale(.99); }
+
+  /* One message for both failures, so it is a statement rather than a hint
+     about which half was wrong. */
+  .signin-error {
+    margin: -.2rem 0 0; font-size: .8125rem; color: var(--accent);
+    padding: .55rem .7rem; border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 7%, #fff);
+  }
+  .signin-alt:disabled, .nav-cta:disabled {
+    color: var(--ink-45); border-color: var(--rule-faint);
+    cursor: default; box-shadow: none;
+  }
+  .signin-alt:disabled:hover, .nav-cta:disabled:hover {
+    border-color: var(--rule-faint); color: var(--ink-45);
+  }
 
   .signin-legal {
     margin: .6rem 0 0; font-size: .75rem; line-height: 1.6; color: var(--ink-45);

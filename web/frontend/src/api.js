@@ -24,6 +24,31 @@ export async function analyze(body) {
   return response.json();
 }
 
+/** Who the server says we are. The screen asks rather than remembering — being
+ *  signed in is the server's answer, not a flag the client sets about itself. */
+export async function whoami() {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) return null;
+  return (await response.json()).account;
+}
+
+export async function signIn(email, password) {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail?.reason ?? "로그인하지 못했습니다.");
+  }
+  return (await response.json()).account;
+}
+
+export async function signOut() {
+  await fetch("/api/auth/logout", { method: "POST" });
+}
+
 export const won = (value) =>
   value === null || value === undefined || value === ""
     ? "—"

@@ -1,9 +1,20 @@
 """HTTP surface for the TradeFlow web application.
 
-The API is deliberately stateless: the browser holds the conversation so far and
-resends it. A session store would add expiry, eviction and a second source of
-truth for what the user has told us, none of which this product needs — the
-intake loop is short and the client already has to render everything it knows.
+The conversation is deliberately stateless: the browser holds what has been said
+so far and resends it. Keeping it on the server would add expiry, eviction and a
+second source of truth for what the user has told us, none of which this product
+needs — the intake loop is short and the client already has to render everything
+it knows.
+
+The session is the one thing that is not stateless, and for the opposite reason:
+it says who the user is, and a claim about identity that the client can edit is
+not a claim at all. It carries no conversation — only which account is signed
+in, so the company facts §5.4 reads come from an account instead of from a
+request body that could say anything.
+
+Signing in is not required. An anonymous visitor states company facts in the
+request as before; a signed-in one has them supplied by their account, and the
+request cannot override them.
 
 This module only moves data. Deciding what to ask lives in the intake agent,
 and deciding what to run lives in the orchestrator.
@@ -11,17 +22,19 @@ and deciding what to run lives in the orchestrator.
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from tradeflow.agent.intake import intake
+from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
@@ -34,8 +47,99 @@ from tradeflow.tools.utterance import (
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT_ROOT = REPO_ROOT / "data" / "snapshots"
 FRONTEND_DIST = REPO_ROOT / "web" / "frontend" / "dist"
+ACCOUNT_DB = Path(os.environ.get("TRADEFLOW_ACCOUNT_DB", REPO_ROOT / "data" / "accounts.db"))
+
+SESSION_COOKIE = "tradeflow_session"
+
+#: Annotated rather than `= Cookie(default=None)`, so the real default is None.
+#: With the old form the tests that call these endpoints as plain functions —
+#: which is how every other endpoint here is tested — received the `Cookie`
+#: marker object itself as the token.
+SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 
 app = FastAPI(title="TradeFlow", version="0.1.0")
+accounts = AccountStore(ACCOUNT_DB)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def _signed_in(token: str | None) -> Account | None:
+    return accounts.read_session(token)
+
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest, response: Response) -> dict[str, Any]:
+    """Exchange a password for a session, or say no without saying why.
+
+    One message for both failures. "그런 계정이 없습니다" would answer a
+    question nobody asked — whether a given company banks here — to anyone
+    willing to type addresses into the form.
+    """
+    account = accounts.authenticate(body.email, body.password)
+    if account is None:
+        raise HTTPException(
+            status_code=401,
+            detail={"reason": "이메일 또는 비밀번호가 올바르지 않습니다"},
+        )
+    token = accounts.open_session(account)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=SESSION_DAYS * 24 * 3600,
+        # The browser may hold it but script may not read it: an XSS that can
+        # run in this page still cannot walk away with the session.
+        httponly=True,
+        samesite="lax",
+        # Off for local http development, on wherever this is served over TLS.
+        secure=bool(os.environ.get("TRADEFLOW_SECURE_COOKIE")),
+        path="/",
+    )
+    return {"account": _account_view(account)}
+
+
+@app.post("/api/auth/logout")
+def logout(
+    response: Response,
+    session: SessionCookie = None,
+) -> dict[str, Any]:
+    """End it on the server, then drop the cookie.
+
+    Clearing the cookie alone would leave a token that still works for anyone
+    who kept a copy of it.
+    """
+    accounts.close_session(session)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"account": None}
+
+
+@app.get("/api/auth/me")
+def me(session: SessionCookie = None) -> dict[str, Any]:
+    """Who the server thinks you are.
+
+    The screen asks rather than remembering, so being signed in is something
+    the server says and not something the client decides about itself.
+    """
+    account = _signed_in(session)
+    return {"account": _account_view(account) if account else None}
+
+
+def _account_view(account: Account) -> dict[str, Any]:
+    """What the screen may show — the same facts the analysis will receive.
+
+    Nothing is summarised or prettified on the way out. The account menu used
+    to state "중소기업 · 제조업" from a hardcoded string while the analysis ran
+    for a nameless company; sending the facts themselves is what keeps the two
+    from drifting apart again.
+    """
+    return {
+        "account_id": account.account_id,
+        "email": account.email,
+        "company_name": account.company_name,
+        "facts": account.facts,
+    }
 
 
 class CaseInput(BaseModel):
@@ -144,8 +248,20 @@ def _analysis_date(raw: str | None) -> date:
 
 
 @app.post("/api/analyze")
-def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
-    """Either the questions still blocking an answer, or the answer."""
+def analyze_endpoint(
+    request: AnalyzeRequest,
+    session: SessionCookie = None,
+) -> dict[str, Any]:
+    """Either the questions still blocking an answer, or the answer.
+
+    Company facts come from the account when there is one, and the request
+    cannot override them. Letting the body win would put back exactly the gap
+    an account was meant to close: a screen showing one company while the
+    analysis ran for another. Anonymous callers still state their own facts —
+    signing in is not required to get an answer, only to stop repeating
+    yourself.
+    """
+    account = _signed_in(session)
     as_of = _analysis_date(request.as_of)
     opening_balance = _money(request.opening_balance_usd, "opening_balance_usd")
     baseline_profit = _money(request.baseline_profit, "baseline_profit")
@@ -198,6 +314,7 @@ def analyze_endpoint(request: AnalyzeRequest) -> dict[str, Any]:
 
     reading = intake(
         supplied,
+        company=account.profile() if account else None,
         company_name=request.company_name,
         is_sme=request.is_sme,
         opening_balances=balances,
