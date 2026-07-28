@@ -20,7 +20,10 @@ export default function Entry({ onSend, busy }) {
     <div className="entry-wrap">
       {/* The opening lines arrive in the order they are read. Each carries its
           own delay rather than a shared one, so the sequence is legible in the
-          markup instead of hidden in a stylesheet. */}
+          markup instead of hidden in a stylesheet.
+
+          The reveal stops at the standfirst. Below it is the input, and a
+          control that fades in is a control the hand has to wait for. */}
       <h1 className="hero">
         <span className="reveal" style={{ animationDelay: "60ms" }}>
           짐작하지 말고
@@ -34,7 +37,7 @@ export default function Entry({ onSend, busy }) {
         보여드립니다. 환율을 예측하지는 않습니다.
       </p>
 
-      <div className="prompt reveal" style={{ animationDelay: "620ms" }}>
+      <div className="prompt">
         <textarea
           rows="2"
           value={text}
@@ -64,7 +67,7 @@ export default function Entry({ onSend, busy }) {
         </div>
       </div>
 
-      <div className="chips reveal" style={{ animationDelay: "760ms" }}>
+      <div className="chips">
         {STARTERS.map((starter) => (
           <button
             key={starter}
