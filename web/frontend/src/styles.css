@@ -30,10 +30,16 @@
        The second pixel is a shadow, not border-width. Growing the border from
        1px to 2px on focus would shrink the padding box under it and nudge the
        text sideways every time the field is entered. A shadow is drawn outside
-       the box and moves nothing. */
+       the box and moves nothing.
+
+       The glow is the line's own colour losing its alpha, not a separate
+       accent wash, and its outer edge is blurred rather than cut. A hard band
+       of a different mix beside a hard line reads as two effects that happened
+       to land in the same place; one colour fading out reads as one. */
     --focus-line: color-mix(in srgb, var(--accent) 65%, var(--rule));
     --focus-ring: 0 0 0 1px var(--focus-line),
-                  0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+                  0 0 0 2px color-mix(in srgb, var(--focus-line) 42%, transparent),
+                  0 0 5px 2px color-mix(in srgb, var(--focus-line) 24%, transparent);
 
     --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
             0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
