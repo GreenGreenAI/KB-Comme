@@ -126,8 +126,9 @@ PYTHONPATH=src python scripts/check_sources.py --write
 
 `--write`는 전체 매니페스트를 요구합니다. 일부만 조회한 결과를 기록하면 조회하지
 않은 출처가 판정 없는 상태로 남아 사실상 `FRESHNESS_UNKNOWN`이 되는데, 이는 검증
-실패와 구분되지 않기 때문입니다. 한 출처가 실패해도 나머지는 기록됩니다 —
-`www.koreaexim.go.kr`은 현재 중간 인증서를 누락해 `unreachable`로 남습니다.
+실패와 구분되지 않기 때문입니다. 한 출처가 실패해도 나머지는 기록됩니다. 한국수출입은행
+환율 API의 명세 출처는 구형 은행 도메인이 아니라 공공데이터포털의 공식 카탈로그를
+모니터링하며, 실제 데이터 호출은 신규 `oapi.koreaexim.go.kr` endpoint만 사용합니다.
 
 원문은 저장하지 않습니다. 매니페스트의 `storage_policy`가 출처별 재배포 조건을
 확인하기 전까지 응답 본문 보존을 금지하므로, HTTP 지문과 마커 판정만 남깁니다.
