@@ -24,7 +24,8 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 | 후보 | 용도 | 운영 승격 데이터 여부 |
 |---|---|---|
 | 기업의 은행 RFQ·Treasury Management System export | 기업·시각·만기·명목금액별 실제 가용 호가와 비용 | 가능, 최우선 |
-| [LSEG FXall Cash RFQ FIX API](https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker) | 다중 provider point-in-time bid/offer, forward points와 유효시간 | 가능, 우선 provider로 선정; 온보딩·권한 필요 |
+| [LSEG FXall Corporate Treasury](https://www.lseg.com/en/fx/corporates) | 다중 provider point-in-time bid/offer, 거래 이력과 TMS 연동 | 가능, 우선 제품군으로 선정; corporate 온보딩·interface 확인 필요 |
+| [LSEG Cash RFQ FIX Maker API](https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker) | LP가 RFQ에 호가하는 FIX workflow | 기업 buy-side 수집 API로 사용 불가; LSEG가 entitlement를 별도 확인한 경우만 provider-side bridge로 사용 |
 | [K-SURE 보장환율 공개 데이터](https://www.data.go.kr/data/15064336/fileData.do) | 보장환율·기간별 swap point·시장평균환율 benchmark | 불가, 보험 기준가격이지 기업별 은행 호가가 아님 |
 | [KRX 미국달러선물 상품](https://global.krx.co.kr/contents/GLB/02/0201/0201040601/GLB0201040601.jsp) | 상장 선물의 시장 hedge benchmark | 불가, 표준화 선물이며 OTC forward가 아님 |
 | [CME KRW futures](https://www.cmegroup.com/markets/fx/fx-delivery.html) | 해외 시장 stress·유동성 benchmark | 불가, cash-settled 표준상품 |
@@ -58,10 +59,11 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 ## 수집 순서
 
 1. 내부 또는 협력기업의 익명화된 RFQ/TMS export 확보 가능성을 확인한다.
-2. LSEG FXall 온보딩 또는 trial, LP entitlement, 이용목적, 보존기간과 재현 가능한
-   quote ID를 합의한다.
-3. `normalize_fxall_forward_quote`로 인증된 Cash RFQ FIX Quote(S)를 정규화하거나
-   `JsonForwardQuoteHistoryAdapter`로 HTTPS 정규화 feed를 수집하고
+2. LSEG FXall corporate 온보딩 또는 trial, LP 접근권한, 이용목적, 보존기간,
+   기업 고객에게 허용되는 API/FIX/TMS export와 재현 가능한 quote ID를 합의한다.
+3. 승인된 corporate export/API를 `JsonForwardQuoteHistoryAdapter` 계약으로
+   수집한다. 별도로 LP 자격과 Cash RFQ FIX 권한이 확인된 경우에만
+   `normalize_fxall_forward_quote`로 provider-side Quote(S)를 정규화하고
    tenant scope를 대조한 뒤, 호출자가 지정한 비공개·암호화 저장소에 immutable raw
    snapshot을 기록한다. 저장소의 공개 `data/snapshots/`는 이 데이터의 기본 경로가
    아니다.
@@ -76,7 +78,8 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
   결정론적으로 검증한다.
 - `JsonForwardQuoteHistoryAdapter`는 HTTPS와 응답 크기 제한을 강제하고 bearer
   credential을 snapshot이나 오류에 남기지 않는다.
-- `normalize_fxall_forward_quote`는 단일 outright `FXFWD`만 받아 매수에는 offer,
+- `normalize_fxall_forward_quote`는 provider-side reference bridge다. 단일 outright
+  `FXFWD`만 받아 매수에는 offer,
   매도에는 bid spot과 forward points를 적용한다. provider/company/tenant는
   인증된 connector context에서만 받고 계정·LEI·세션 credential은 정규화 결과에서
   제외한다.

@@ -35,12 +35,19 @@ tenant-private 해시만 둔다.
 
 ## 2. FXall 실호가
 
-우선 provider는 LSEG FXall Cash RFQ다. FXall은 회사에 적용된 다중은행 RFQ와
-선도환을 지원하고 FIX 연동 및 거래 이력을 제공한다. 현재 상태는
+우선 provider 제품군은 기업 Treasury용 LSEG FXall이다. FXall은 회사에 적용된
+다중은행 RFQ와 선도환, TMS/ERP 연동 및 거래 이력을 제공한다. 현재 상태는
 `onboarding_required`이며 실제 연결 또는 실데이터 확보로 표시하지 않는다.
 
-`tradeflow.integration.fxall_forward_quotes`는 인증된 세션에서 받은 단일
-`FXFWD` Quote(S)의 경제 필드만 기존 관측 선도환 스키마로 바꾼다.
+공개된 Cash RFQ FIX API는 liquidity-provider(Maker)용 문서다. 따라서 이를 기업
+buy-side API로 간주하거나 공개 문서만으로 기업 endpoint를 추정해서는 안 된다.
+기업 고객에게 허용되는 FIX/API/TMS export 경로는 LSEG가 계약과 entitlement를
+확인한 뒤 지정해야 한다.
+
+`tradeflow.integration.fxall_forward_quotes`는 인증된 provider-side 세션에서
+합법적으로 확보한 단일 `FXFWD` Quote(S)의 경제 필드만 기존 관측 선도환 스키마로
+바꾼다. corporate tenant의 기본 수집기는 LSEG가 승인한 export/API를
+`JsonForwardQuoteHistoryAdapter` 계약으로 변환하는 별도 connector다.
 
 - 매수는 Offer spot(190) + Offer forward points(191)
 - 매도는 Bid spot(188) + Bid forward points(189)
@@ -50,7 +57,13 @@ tenant-private 해시만 둔다.
 - provider/company/tenant는 FIX 본문이 아니라 인증된 connector context에서 주입
 - 비용률은 forward points로 추정하지 않고 계약/수수료 자료에서 별도 주입
 
-실제 운영 전에는 LSEG 온보딩, LP 권한, endpoint/credential, 회사 동의,
-tenant-private 암호화 저장소를 갖추고 100개 이상의 동일 범위 관측치를
+실제 운영 전에는 LSEG corporate 온보딩, 회사 측 LP 접근 권한, 승인된
+integration route와 credential, 회사 동의, tenant-private 암호화 저장소를 갖추고
+100개 이상의 동일 범위 관측치를
 수집해야 한다. 그 전에는 최소분산 헤지비율 모델이 실호가 기반으로
 승격되지 않는다.
+
+필요 항목과 상태는
+`knowledge/providers/fxall_onboarding_requirements.json`에 비밀값 없이 관리한다.
+`python scripts/check_fxall_onboarding.py`는 미완료 항목을 일괄 출력하며,
+실제 연결 검증 단계에서는 `--require-ready`를 사용해 하나라도 빠지면 실패시킨다.

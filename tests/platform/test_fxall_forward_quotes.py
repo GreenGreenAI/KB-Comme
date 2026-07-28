@@ -50,9 +50,15 @@ class FxallForwardQuoteTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         provider = registry["providers"][0]
-        self.assertEqual("LSEG_FXALL_CASH_RFQ", provider["provider_id"])
+        self.assertEqual("LSEG_FXALL_CORPORATE", provider["provider_id"])
         self.assertEqual("onboarding_required", provider["connection_state"])
         self.assertFalse(provider["production_eligible"])
+        maker = registry["providers"][1]
+        self.assertEqual(
+            "liquidity_provider_reference_only",
+            maker["role"],
+        )
+        self.assertFalse(maker["production_eligible"])
 
     def test_sell_quote_maps_bid_side_and_existing_contract(self) -> None:
         record = normalize_fxall_forward_quote(SELL, context=context())

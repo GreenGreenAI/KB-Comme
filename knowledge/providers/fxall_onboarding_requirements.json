@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "provider_id": "LSEG_FXALL_CORPORATE",
+  "status": "awaiting_external_onboarding",
+  "last_checked": "2026-07-28",
+  "requirements": [
+    {
+      "requirement_id": "LEGAL_CUSTOMER_IDENTITY",
+      "owner": "tradeflow_customer",
+      "status": "missing",
+      "needed": [
+        "legal company name",
+        "business country",
+        "authorized treasury contact",
+        "business email and phone"
+      ],
+      "reason": "LSEG product inquiry and customer onboarding require an identifiable corporate customer."
+    },
+    {
+      "requirement_id": "PRODUCT_AND_USE_CASE_APPROVAL",
+      "owner": "lseg",
+      "status": "missing",
+      "needed": [
+        "FXall Corporate Treasury or trial approval",
+        "permission to retain point-in-time RFQ history",
+        "permitted internal analytics and derived-data use"
+      ],
+      "reason": "Tradeflow must not collect or retain quotes outside the contracted use."
+    },
+    {
+      "requirement_id": "LIQUIDITY_ENTITLEMENTS",
+      "owner": "lseg_and_customer_banks",
+      "status": "missing",
+      "needed": [
+        "enabled liquidity providers",
+        "permitted currency pairs",
+        "forward tenors and notional limits",
+        "test liquidity provider or certification simulator"
+      ],
+      "reason": "A platform account without LP entitlements cannot produce company-applicable executable quotes."
+    },
+    {
+      "requirement_id": "CORPORATE_INTEGRATION_SPEC",
+      "owner": "lseg",
+      "status": "missing",
+      "needed": [
+        "approved company-side API, FIX, TMS export or file interface",
+        "test and production endpoints",
+        "authentication and certificate requirements",
+        "message or export schema",
+        "rate limits and session hours"
+      ],
+      "reason": "The public Cash RFQ Maker API is not evidence of a corporate buy-side interface."
+    },
+    {
+      "requirement_id": "TENANT_SECURITY_APPROVAL",
+      "owner": "tradeflow_customer",
+      "status": "missing",
+      "needed": [
+        "tenant identifier",
+        "company identifier mapping",
+        "encrypted private snapshot root",
+        "secret-manager location",
+        "retention and deletion period",
+        "authorized service identity"
+      ],
+      "reason": "Quote history is tenant-private financial data and cannot enter the public repository."
+    },
+    {
+      "requirement_id": "CERTIFICATION_EVIDENCE",
+      "owner": "tradeflow_and_lseg",
+      "status": "blocked_by_previous_requirements",
+      "needed": [
+        "successful authenticated test-session evidence",
+        "one forward RFQ request and response with quote ID",
+        "expiry, side, notional, pair and settlement-date verification",
+        "credential-redacted evidence hash",
+        "100 aligned observations before hedge-model promotion"
+      ],
+      "reason": "Only an entitled test or production session proves the live connector."
+    }
+  ],
+  "prohibited_shortcuts": [
+    "guessing a trading endpoint",
+    "using developer-portal HTML as a market-data API",
+    "treating the liquidity-provider Maker API as a corporate client API",
+    "storing credentials or raw company quotes in Git",
+    "labelling benchmark or synthetic forwards as executable quotes"
+  ]
+}
