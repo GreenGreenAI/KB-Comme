@@ -179,6 +179,37 @@ class SecondTradeTests(unittest.TestCase):
 
         self.assertEqual(2, len(added["result"]["trade_timeline"]))
         self.assertEqual(1, len(corrected["result"]["trade_timeline"]))
+        self.assertEqual(
+            "150000",
+            corrected["result"]["trade_timeline"][0]["amount"],
+        )
+
+    def test_direction_correction_is_confirmed_then_updates_the_trade(
+        self,
+    ) -> None:
+        utterance = "이 거래 방향은 수입으로 정정해 주세요"
+        question = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                cases=[self._export()],
+                utterance=utterance,
+            )
+        )
+
+        self.assertEqual("needs_placement", question["status"])
+
+        corrected = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                cases=[self._export()],
+                utterance=utterance,
+                placement="merge",
+            )
+        )
+
+        timeline = corrected["result"]["trade_timeline"]
+        self.assertEqual(1, len(timeline))
+        self.assertEqual("import", timeline[0]["direction"])
 
 
 if __name__ == "__main__":

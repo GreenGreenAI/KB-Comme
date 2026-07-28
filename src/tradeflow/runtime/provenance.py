@@ -21,6 +21,9 @@ must say so instead of quietly differing.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -66,6 +69,7 @@ class CalculationVersions:
     packet_schema_version: str | None
     knowledge_files: tuple[InputFile, ...]
     snapshots: tuple[SnapshotVersion, ...]
+    business_inputs: Mapping[str, Any]
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +77,9 @@ class CalculationVersions:
             "packet_schema_version": self.packet_schema_version,
             "knowledge_files": [item.as_dict() for item in self.knowledge_files],
             "snapshots": [item.as_dict() for item in self.snapshots],
+            # Raw company and trade inputs stay out of the provenance block,
+            # but their exact normalized identity remains comparable.
+            "business_input_hash": content_hash(self.business_inputs),
             # A single value that changes whenever any input above changes, so
             # two answers can be compared without walking the lists.
             "input_fingerprint": self.input_fingerprint(),
@@ -96,8 +103,101 @@ class CalculationVersions:
                 "packet_schema_version": self.packet_schema_version,
                 "knowledge_files": [item.as_dict() for item in self.knowledge_files],
                 "snapshots": [item.as_dict() for item in self.snapshots],
+                "business_inputs": self.business_inputs,
             }
         )
+
+
+def canonical_business_inputs(
+    *,
+    program: Any,
+    baseline_profit: Decimal | None,
+    profit_floor: Decimal | None,
+    hedge_measures: Iterable[Any],
+    evaluated_at: datetime,
+    horizon_business_days: int,
+) -> dict[str, Any]:
+    """Normalize every non-file input that can change an analysis result."""
+    company = program.company
+    return {
+        "program": {
+            "program_id": program.program_id,
+            "as_of": program.as_of.isoformat(),
+            "company": {
+                "company_id": company.company_id,
+                "name": company.name,
+                "country_code": company.country_code,
+                "is_sme": company.is_sme,
+                "annual_export_usd": _canonical_value(
+                    company.annual_export_usd
+                ),
+                "industry_code": company.industry_code,
+                "attributes": _canonical_value(company.attributes),
+            },
+            "opening_balances": {
+                currency: str(amount)
+                for currency, amount in sorted(program.opening_balances.items())
+            },
+            "cases": [
+                {
+                    "case_id": case.case_id,
+                    "direction": case.direction.value,
+                    "currency": case.currency,
+                    "amount": str(case.amount),
+                    "expected_payment_date": (
+                        case.expected_payment_date.isoformat()
+                    ),
+                    "payment_method": case.payment_method.value,
+                    "counterparty_country": case.counterparty_country,
+                    "confirmed": case.confirmed,
+                    "attributes": _canonical_value(case.attributes),
+                }
+                for case in program.cases
+            ],
+        },
+        "calculation_parameters": {
+            "evaluated_at": evaluated_at.isoformat(),
+            "horizon_business_days": horizon_business_days,
+            "baseline_profit": _canonical_value(baseline_profit),
+            "profit_floor": _canonical_value(profit_floor),
+            # Order is material: the orchestrator uses the first usable
+            # measure, so sorting would hide a result-changing input.
+            "hedge_measures": [
+                {
+                    "measure_id": measure.measure_id,
+                    "category": measure.category.value,
+                    "kind": measure.kind.value,
+                    "status": measure.status.value,
+                    "status_reasons": list(measure.status_reasons),
+                    "contract_rate": _canonical_value(measure.contract_rate),
+                    "cost_rate": _canonical_value(measure.cost_rate),
+                    "source_ids": list(measure.source_ids),
+                }
+                for measure in hedge_measures
+            ],
+        },
+    }
+
+
+def _canonical_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_value(item) for item in value]
+    raise TypeError(
+        f"unsupported business input value {type(value).__name__}"
+    )
 
 
 def fingerprint_file(path: Path | str, *, role: str, relative_to: Path) -> InputFile:

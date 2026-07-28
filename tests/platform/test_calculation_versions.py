@@ -9,6 +9,7 @@ import json
 import shutil
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -21,6 +22,12 @@ from tradeflow.agent.orchestrator import (
     analyze,
 )
 from tradeflow.agent.response import build_response
+from tradeflow.domain.enums import (
+    AvailabilityStatus,
+    FinancialInstrumentKind,
+    HedgeMeasureCategory,
+)
+from tradeflow.domain.models import HedgeMeasure
 from tradeflow.runtime.provenance import fingerprint_knowledge
 
 KST = timezone(timedelta(hours=9))
@@ -34,14 +41,45 @@ CASES = [
 ]
 
 
-def _program():
-    return intake(CASES, opening_balances={"USD": "20000"}, as_of=AS_OF).program
+def _program(
+    cases=CASES,
+    *,
+    company_name="테스트 기업",
+    is_sme=True,
+    opening_balance="20000",
+):
+    return intake(
+        cases,
+        company_name=company_name,
+        is_sme=is_sme,
+        opening_balances={"USD": opening_balance},
+        as_of=AS_OF,
+    ).program
 
 
-def _response():
+def _response(
+    program=None,
+    *,
+    baseline_profit=None,
+    profit_floor=None,
+    hedge_measures=(),
+):
     return build_response(
-        analyze(_program(), snapshot_root=SNAPSHOTS, as_of=NOW)
+        analyze(
+            program or _program(),
+            snapshot_root=SNAPSHOTS,
+            baseline_profit=baseline_profit,
+            profit_floor=profit_floor,
+            hedge_measures=hedge_measures,
+            as_of=NOW,
+        )
     )
+
+
+def _input_fingerprint(*args, **kwargs):
+    return _response(*args, **kwargs)["calculation_versions"][
+        "input_fingerprint"
+    ]
 
 
 class ReplayTests(unittest.TestCase):
@@ -60,6 +98,77 @@ class ReplayTests(unittest.TestCase):
             _response()["calculation_versions"]["input_fingerprint"],
             _response()["calculation_versions"]["input_fingerprint"],
         )
+
+    def test_trade_amount_and_date_change_the_fingerprint(self) -> None:
+        original = _input_fingerprint()
+        changed_amount = [{**CASES[0], "amount": "61000"}, CASES[1]]
+        changed_date = [
+            {
+                **CASES[0],
+                "expected_payment_date": "2026-08-26",
+            },
+            CASES[1],
+        ]
+
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(_program(changed_amount)),
+        )
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(_program(changed_date)),
+        )
+
+    def test_company_facts_and_opening_balance_change_the_fingerprint(
+        self,
+    ) -> None:
+        original = _input_fingerprint()
+
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(_program(is_sme=False)),
+        )
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(_program(opening_balance="25000")),
+        )
+
+    def test_profit_constraints_change_the_fingerprint(self) -> None:
+        original = _input_fingerprint()
+
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(baseline_profit=Decimal("10000000")),
+        )
+        self.assertNotEqual(
+            original,
+            _input_fingerprint(profit_floor=Decimal("5000000")),
+        )
+
+    def test_hedge_pricing_inputs_change_the_fingerprint(self) -> None:
+        def measure(rate: str) -> HedgeMeasure:
+            return HedgeMeasure(
+                measure_id="FORWARD-USD",
+                category=HedgeMeasureCategory.FINANCIAL_INSTRUMENT,
+                kind=FinancialInstrumentKind.FORWARD,
+                status=AvailabilityStatus.AVAILABLE,
+                contract_rate=Decimal(rate),
+                cost_rate=Decimal("0"),
+                source_ids=("BANK-QUOTE",),
+            )
+
+        self.assertNotEqual(
+            _input_fingerprint(hedge_measures=(measure("1380"),)),
+            _input_fingerprint(hedge_measures=(measure("1390"),)),
+        )
+
+    def test_raw_business_inputs_are_not_exposed_in_the_version_block(
+        self,
+    ) -> None:
+        versions = _response()["calculation_versions"]
+
+        self.assertIn("business_input_hash", versions)
+        self.assertNotIn("business_inputs", versions)
 
     def test_every_snapshot_the_answer_depended_on_is_recorded(self) -> None:
         """Both snapshots, not just the market one.

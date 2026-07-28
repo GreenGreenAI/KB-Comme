@@ -23,6 +23,13 @@ DEFAULT_MANIFEST = PROJECT_ROOT / "knowledge" / "source_monitors.json"
 DEFAULT_SNAPSHOT_ROOT = PROJECT_ROOT / "data" / "snapshots"
 
 
+def source_verification_version(moment: datetime) -> str:
+    """Return a collision-resistant, filesystem-safe identity for one run."""
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError("source verification time must include a timezone")
+    return moment.astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -59,7 +66,7 @@ def main() -> int:
             args.snapshot_root,
             build_envelope(
                 source_id=SOURCE_ID,
-                version=now.date().isoformat(),
+                version=source_verification_version(now),
                 observed_at=now,
                 retrieved_at=now,
                 payload=verification_payload(results),
