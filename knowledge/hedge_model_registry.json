@@ -7,6 +7,7 @@
       "version": "1.0",
       "status": "champion",
       "family": "parametric_normal",
+      "scenario_centering": "zero",
       "objective": "minimum_ratio_subject_to_adverse_profit_floor",
       "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
       "parameters": {
@@ -24,6 +25,7 @@
       "version": "1.0",
       "status": "challenger",
       "family": "historical_simulation",
+      "scenario_centering": "empirical",
       "objective": "minimum_ratio_subject_to_adverse_profit_floor",
       "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
       "parameters": {
@@ -40,6 +42,7 @@
       "version": "1.0",
       "status": "challenger",
       "family": "ewma_normal",
+      "scenario_centering": "zero",
       "objective": "minimum_ratio_subject_to_adverse_profit_floor",
       "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
       "parameters": {
@@ -57,6 +60,7 @@
       "version": "1.0",
       "status": "challenger",
       "family": "garch_filtered_historical",
+      "scenario_centering": "empirical_standardized_residuals",
       "objective": "minimum_ratio_subject_to_adverse_profit_floor",
       "implementation": "tradeflow.tools.hedge_models.QuantileProfitFloorModel",
       "parameters": {
@@ -73,6 +77,7 @@
       "version": "1.0",
       "status": "challenger",
       "family": "historical_cvar",
+      "scenario_centering": "empirical",
       "objective": "minimum_expected_shortfall_then_minimum_ratio",
       "implementation": "tradeflow.tools.hedge_models.HistoricalCvarModel",
       "parameters": {
@@ -89,6 +94,7 @@
       "version": "1.0",
       "status": "data_blocked",
       "family": "minimum_variance",
+      "scenario_centering": "not_applicable",
       "objective": "minimum_variance_ratio",
       "implementation": "tradeflow.tools.hedge_models.minimum_variance_hedge_ratio",
       "parameters": {
@@ -116,6 +122,10 @@
     "maximum_cost_increase": 0.1,
     "maximum_turnover_increase": "0.05",
     "require_observed_forward_quotes": true,
+    "allowed_scenario_centering": [
+      "zero",
+      "not_applicable"
+    ],
     "required_approvals": [
       "knowledge_domain",
       "platform_runtime",

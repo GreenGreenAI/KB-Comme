@@ -18,6 +18,7 @@ class GovernedHedgeModel:
     version: str
     status: str
     family: str
+    scenario_centering: str
     objective: str
     implementation: str
     references: tuple[str, ...]
@@ -65,6 +66,7 @@ class HedgeModelGovernanceRegistry:
                 version=_required(item, "version"),
                 status=_required(item, "status"),
                 family=_required(item, "family"),
+                scenario_centering=_required(item, "scenario_centering"),
                 objective=_required(item, "objective"),
                 implementation=_required(item, "implementation"),
                 references=tuple(item.get("references", [])),
@@ -111,6 +113,24 @@ class HedgeModelGovernanceRegistry:
             or len(set(required_roles)) != 3
         ):
             raise ValueError("three unique model approval roles are required")
+        allowed_centering = promotion.get("allowed_scenario_centering")
+        if (
+            not isinstance(allowed_centering, list)
+            or not allowed_centering
+            or len(set(allowed_centering)) != len(allowed_centering)
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in allowed_centering
+            )
+        ):
+            raise ValueError(
+                "allowed scenario centering values must be unique "
+                "non-empty strings"
+            )
+        if models[champion_id].scenario_centering not in allowed_centering:
+            raise ValueError(
+                "champion scenario centering must be allowed by promotion policy"
+            )
         if fallback.get("automatic_challenger_fallback") is not False:
             raise ValueError("automatic challenger fallback is forbidden")
         return cls(

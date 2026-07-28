@@ -65,6 +65,7 @@ class StressMetrics:
 class HedgeModelBacktestResult:
     model_id: str
     model_version: str
+    scenario_centering: str
     quote_basis: str
     tested: int
     failed: int
@@ -267,6 +268,7 @@ def walk_forward_validate(
     return HedgeModelBacktestResult(
         model_id=model.model_id,
         model_version=model.model_version,
+        scenario_centering=model.scenario_centering,
         quote_basis=quote_basis,
         tested=len(points),
         failed=failed,
@@ -325,6 +327,7 @@ class HedgeModelPromotionPolicy:
     maximum_cost_increase: float = 0.10
     maximum_turnover_increase: Decimal = Decimal("0.05")
     require_observed_forward_quotes: bool = True
+    allowed_scenario_centering: tuple[str, ...] = ("zero", "not_applicable")
 
 
 @dataclass(frozen=True)
@@ -398,6 +401,11 @@ def assess_model_promotion(
     ):
         blockers.append(
             "observed historical forward quotes are required for promotion"
+        )
+    if challenger.scenario_centering not in policy.allowed_scenario_centering:
+        blockers.append(
+            "scenario centering is incompatible with the non-directional "
+            "product policy"
         )
     if champion.tested != challenger.tested:
         blockers.append("champion and challenger were not tested on equal origins")

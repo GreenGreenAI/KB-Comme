@@ -14,6 +14,7 @@ from tradeflow.knowledge.hedge_model_policy import (
 )
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge_model_validation import (
+    HedgeModelPromotionPolicy,
     StressPeriod,
     assess_model_promotion,
     compare_registered_models,
@@ -66,6 +67,19 @@ def main() -> int:
         )
     if governance.champion_model_id != CHAMPION_MODEL_ID:
         raise ValueError("governed and executable champions have drifted")
+    for model_id, model in registry.models.items():
+        governed = governance.models[model_id]
+        if model.scenario_centering != governed.scenario_centering:
+            raise ValueError(
+                f"{model_id}: executable and governed scenario centering "
+                "have drifted"
+            )
+    if tuple(
+        governance.promotion_policy["allowed_scenario_centering"]
+    ) != HedgeModelPromotionPolicy().allowed_scenario_centering:
+        raise ValueError(
+            "executable and governed scenario-centering policies have drifted"
+        )
 
     metadata, payload = read_snapshot(args.snapshot)
     observations = usd_krw_series(payload)
@@ -106,6 +120,7 @@ def main() -> int:
             model_id: {
                 "tested": result.tested,
                 "failed": result.failed,
+                "scenario_centering": result.scenario_centering,
                 "adverse_breach_rate": result.adverse_breach_rate,
                 "adverse_calibration_error": result.adverse_calibration_error,
                 "floor_breach_rate": result.floor_breach_rate,

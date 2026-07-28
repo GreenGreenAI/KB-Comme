@@ -19,6 +19,7 @@ from tradeflow.tools.hedge_models import (
     GarchFilteredHistoricalScenarioModel,
     HedgeModelRequest,
     HistoricalScenarioModel,
+    QuantileProfitFloorModel,
     RollingNormalScenarioModel,
     default_hedge_model_registry,
     minimum_variance_hedge_ratio,
@@ -126,6 +127,15 @@ class ScenarioModelTests(unittest.TestCase):
         self.assertEqual(
             "overlapping_horizon_returns",
             forecast.parameters["resampling"],
+        )
+        self.assertEqual("empirical", model.scenario_centering)
+        decision = QuantileProfitFloorModel(
+            "historical_profit_floor",
+            model,
+        ).analyze(request())
+        self.assertEqual(
+            "empirical",
+            decision.parameters["scenario_centering"],
         )
 
     def test_ewma_reacts_more_to_recent_shocks_than_rolling_window(self) -> None:
@@ -289,6 +299,39 @@ class WalkForwardValidationTests(unittest.TestCase):
         )
 
         self.assertTrue(assessment.eligible, assessment.blockers)
+
+    def test_empirical_centering_blocks_promotion_after_numeric_gates(self) -> None:
+        registry = default_hedge_model_registry()
+        champion = walk_forward_validate(
+            registry.champion,
+            series(),
+            net_exposure=Decimal("100000"),
+            baseline_profit=Decimal("100000"),
+            profit_floor=Decimal("1000000"),
+            horizon_business_days=20,
+            window=120,
+            step=3,
+            quote_basis="observed_forward_quote",
+        )
+        empirically_centered = replace(
+            champion,
+            model_id="empirical_challenger",
+            scenario_centering="empirical",
+            expected_shortfall=champion.expected_shortfall * Decimal("0.5"),
+            mean_quantile_loss=champion.mean_quantile_loss * Decimal("0.5"),
+            adverse_calibration_error=0,
+        )
+
+        assessment = assess_model_promotion(
+            champion,
+            empirically_centered,
+            HedgeModelPromotionPolicy(minimum_origins=50),
+        )
+
+        self.assertFalse(assessment.eligible)
+        self.assertTrue(
+            any("scenario centering" in item for item in assessment.blockers)
+        )
 
 
 class RealEcosModelTests(unittest.TestCase):
