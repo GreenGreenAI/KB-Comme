@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+/** Kept in step with the .menu transition in styles.css. */
+const MENU_EXIT_MS = 150;
+
 /** Signed out shows a way in; signed in shows who you are. The menu is built
  *  from this product's own concepts — what is saved here is what the intake
  *  agent no longer has to ask for.
@@ -14,6 +17,21 @@ export default function Nav() {
   const [signedIn, setSignedIn] = useState(true);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
+
+  // The menu has to outlive `open` for as long as it takes to leave. Rendering
+  // it only while open removed it from the DOM on the same frame the close was
+  // requested, so there was nothing left to animate out.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    // Matches the CSS duration. Shorter and the menu is cut off mid-exit;
+    // longer and clicks pass through something the eye no longer sees.
+    const timer = setTimeout(() => setMounted(false), MENU_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -58,8 +76,13 @@ export default function Nav() {
             >
               한
             </button>
-            {open && (
-              <div className="menu">
+            {/* Entering and leaving are separate animations rather than one
+                transition between classes. A transition needs the element to
+                paint in its start state before the class flips, which means
+                waiting for a frame; mounting straight into an animation does
+                not. */}
+            {mounted && (
+              <div className={`menu ${open ? "" : "out"}`}>
                 <div className="menu-id">
                   <span className="avatar" aria-hidden="true">한</span>
                   <div>
