@@ -174,6 +174,49 @@ class EligibilityEvidenceDataset:
 
 
 @dataclass(frozen=True)
+class ForwardQuoteSpotRef:
+    source_id: str
+    version: str
+    content_hash: str
+
+
+@dataclass(frozen=True)
+class ObservedForwardQuote:
+    record_id: str
+    quote_id: str
+    provider_id: str
+    company_id: str
+    case_ids: tuple[str, ...]
+    base_currency: str
+    counter_currency: str
+    side: str
+    notional_min: Decimal
+    notional_max: Decimal
+    contract_rate: Decimal
+    cost_rate: Decimal
+    settlement_date: date
+    observed_at: datetime
+    valid_until: datetime
+    origin_spot_snapshot: ForwardQuoteSpotRef
+    evidence_content_hash: str
+    executed: bool | None
+    realized_settlement_rate: Decimal | None
+    actual_total_cost: Decimal | None
+
+
+@dataclass(frozen=True)
+class ObservedForwardQuoteDataset:
+    dataset_id: str
+    tenant_id: str
+    retention_class: str
+    records: tuple[ObservedForwardQuote, ...]
+
+    @property
+    def observed_at(self) -> datetime:
+        return max(record.observed_at for record in self.records)
+
+
+@dataclass(frozen=True)
 class SnapshotDataset:
     ref: SnapshotRef
     value: (
@@ -183,6 +226,7 @@ class SnapshotDataset:
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
+        | ObservedForwardQuoteDataset
     )
 
 
@@ -203,6 +247,32 @@ def _decimal(value: Any, field: str) -> Decimal:
     if not result.is_finite():
         raise DatasetContractError(f"{field} must be finite")
     return result
+
+
+def _decimal_string(
+    value: Any,
+    field: str,
+    *,
+    positive: bool = False,
+) -> Decimal:
+    if not isinstance(value, str):
+        raise DatasetContractError(f"{field} must be a decimal string")
+    result = _decimal(value, field)
+    if positive and result <= 0:
+        raise DatasetContractError(f"{field} must be positive")
+    return result
+
+
+def _aware_datetime(value: Any, field: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise DatasetContractError(f"{field} must be an ISO timestamp")
+    try:
+        return require_aware(
+            datetime.fromisoformat(value.replace("Z", "+00:00")),
+            field,
+        )
+    except ValueError as exc:
+        raise DatasetContractError(f"{field} is invalid: {exc}") from None
 
 
 def parse_trade_feed_payload(payload: Any) -> TradeFeedData:
@@ -723,6 +793,262 @@ def parse_eligibility_evidence_payload(payload: Any) -> EligibilityEvidenceDatas
     )
 
 
+_FORWARD_QUOTE_ROOT_FIELDS = {
+    "schema_version",
+    "dataset_id",
+    "tenant_id",
+    "retention_class",
+    "records",
+}
+_FORWARD_QUOTE_REQUIRED_FIELDS = {
+    "record_id",
+    "quote_id",
+    "provider_id",
+    "company_id",
+    "case_ids",
+    "base_currency",
+    "counter_currency",
+    "side",
+    "notional_min",
+    "notional_max",
+    "contract_rate",
+    "cost_rate",
+    "settlement_date",
+    "observed_at",
+    "valid_until",
+    "quote_basis",
+    "provider_verified",
+    "company_applicable",
+    "origin_spot_snapshot",
+    "evidence_content_hash",
+}
+_FORWARD_QUOTE_OPTIONAL_FIELDS = {
+    "executed",
+    "realized_settlement_rate",
+    "actual_total_cost",
+}
+_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+_CURRENCY = re.compile(r"^[A-Z]{3}$")
+
+
+def parse_observed_forward_quote_payload(
+    payload: Any,
+) -> ObservedForwardQuoteDataset:
+    """Validate a tenant-private, company-applicable forward quote history."""
+    if not isinstance(payload, Mapping):
+        raise DatasetContractError("forward quote payload must be a JSON object")
+    if payload.get("schema_version") != "1.0":
+        raise DatasetContractError("unsupported forward quote schema_version")
+    unknown_root = set(payload) - _FORWARD_QUOTE_ROOT_FIELDS
+    missing_root = _FORWARD_QUOTE_ROOT_FIELDS - set(payload)
+    if unknown_root or missing_root:
+        details = []
+        if missing_root:
+            details.append("missing " + ", ".join(sorted(missing_root)))
+        if unknown_root:
+            details.append("unknown " + ", ".join(sorted(unknown_root)))
+        raise DatasetContractError(
+            "forward quote payload fields invalid: " + "; ".join(details)
+        )
+
+    dataset_id = _required_text(payload, "dataset_id")
+    tenant_id = _required_text(payload, "tenant_id")
+    try:
+        safe_segment(dataset_id, "dataset_id")
+    except ValueError as exc:
+        raise DatasetContractError(str(exc)) from None
+    if payload.get("retention_class") != "tenant_private_financial":
+        raise DatasetContractError(
+            "forward quote retention_class must be tenant_private_financial"
+        )
+
+    raw_records = payload.get("records")
+    if not isinstance(raw_records, list) or not raw_records:
+        raise DatasetContractError("forward quote records must be non-empty")
+
+    records: list[ObservedForwardQuote] = []
+    record_ids: set[str] = set()
+    quote_ids: set[str] = set()
+    allowed = _FORWARD_QUOTE_REQUIRED_FIELDS | _FORWARD_QUOTE_OPTIONAL_FIELDS
+    for index, item in enumerate(raw_records):
+        prefix = f"forward quote records[{index}]"
+        if not isinstance(item, Mapping):
+            raise DatasetContractError(f"{prefix} must be an object")
+        unknown = set(item) - allowed
+        missing = _FORWARD_QUOTE_REQUIRED_FIELDS - set(item)
+        if unknown or missing:
+            details = []
+            if missing:
+                details.append("missing " + ", ".join(sorted(missing)))
+            if unknown:
+                details.append("unknown " + ", ".join(sorted(unknown)))
+            raise DatasetContractError(
+                f"{prefix} fields invalid: " + "; ".join(details)
+            )
+
+        record_id = _required_text(item, "record_id")
+        quote_id = _required_text(item, "quote_id")
+        if record_id in record_ids:
+            raise DatasetContractError(f"duplicate forward quote record_id: {record_id}")
+        if quote_id in quote_ids:
+            raise DatasetContractError(f"duplicate forward quote quote_id: {quote_id}")
+        record_ids.add(record_id)
+        quote_ids.add(quote_id)
+
+        raw_case_ids = item.get("case_ids")
+        if not isinstance(raw_case_ids, list) or not raw_case_ids:
+            raise DatasetContractError(f"{prefix}.case_ids must be non-empty")
+        case_ids = tuple(
+            _required_text({"case_id": value}, "case_id")
+            for value in raw_case_ids
+        )
+        if len(set(case_ids)) != len(case_ids):
+            raise DatasetContractError(f"{prefix}.case_ids must be unique")
+
+        base_currency = _required_text(item, "base_currency")
+        counter_currency = _required_text(item, "counter_currency")
+        if not _CURRENCY.fullmatch(base_currency):
+            raise DatasetContractError(f"{prefix}.base_currency must be ISO 4217")
+        if not _CURRENCY.fullmatch(counter_currency):
+            raise DatasetContractError(f"{prefix}.counter_currency must be ISO 4217")
+        if base_currency == counter_currency:
+            raise DatasetContractError(f"{prefix} currencies must differ")
+        side = _required_text(item, "side")
+        if side not in {"buy", "sell"}:
+            raise DatasetContractError(f"{prefix}.side must be buy or sell")
+
+        notional_min = _decimal_string(
+            item.get("notional_min"),
+            f"{prefix}.notional_min",
+            positive=True,
+        )
+        notional_max = _decimal_string(
+            item.get("notional_max"),
+            f"{prefix}.notional_max",
+            positive=True,
+        )
+        if notional_max < notional_min:
+            raise DatasetContractError(
+                f"{prefix}.notional_max must not be below notional_min"
+            )
+        contract_rate = _decimal_string(
+            item.get("contract_rate"),
+            f"{prefix}.contract_rate",
+            positive=True,
+        )
+        cost_rate = _decimal_string(item.get("cost_rate"), f"{prefix}.cost_rate")
+
+        try:
+            settlement_date = date.fromisoformat(
+                _required_text(item, "settlement_date")
+            )
+        except ValueError as exc:
+            raise DatasetContractError(
+                f"{prefix}.settlement_date is invalid: {exc}"
+            ) from None
+        observed_at = _aware_datetime(item.get("observed_at"), f"{prefix}.observed_at")
+        valid_until = _aware_datetime(item.get("valid_until"), f"{prefix}.valid_until")
+        if valid_until <= observed_at:
+            raise DatasetContractError(
+                f"{prefix}.valid_until must be later than observed_at"
+            )
+        if settlement_date < observed_at.date():
+            raise DatasetContractError(
+                f"{prefix}.settlement_date precedes observed_at"
+            )
+
+        if item.get("quote_basis") != "observed_forward_quote":
+            raise DatasetContractError(
+                f"{prefix}.quote_basis must be observed_forward_quote"
+            )
+        if item.get("provider_verified") is not True:
+            raise DatasetContractError(f"{prefix}.provider_verified must be true")
+        if item.get("company_applicable") is not True:
+            raise DatasetContractError(f"{prefix}.company_applicable must be true")
+
+        raw_spot = item.get("origin_spot_snapshot")
+        if not isinstance(raw_spot, Mapping) or set(raw_spot) != {
+            "source_id",
+            "version",
+            "content_hash",
+        }:
+            raise DatasetContractError(
+                f"{prefix}.origin_spot_snapshot fields are invalid"
+            )
+        spot_source = _required_text(raw_spot, "source_id")
+        spot_version = _required_text(raw_spot, "version")
+        try:
+            safe_segment(spot_source, "source_id")
+            safe_segment(spot_version, "version")
+        except ValueError as exc:
+            raise DatasetContractError(str(exc)) from None
+        spot_hash = _required_text(raw_spot, "content_hash")
+        evidence_hash = _required_text(item, "evidence_content_hash")
+        if not _SHA256.fullmatch(spot_hash):
+            raise DatasetContractError(
+                f"{prefix}.origin_spot_snapshot.content_hash is invalid"
+            )
+        if not _SHA256.fullmatch(evidence_hash):
+            raise DatasetContractError(
+                f"{prefix}.evidence_content_hash is invalid"
+            )
+
+        executed = item.get("executed")
+        if executed is not None and not isinstance(executed, bool):
+            raise DatasetContractError(f"{prefix}.executed must be boolean or null")
+        realized = item.get("realized_settlement_rate")
+        actual_cost = item.get("actual_total_cost")
+        realized_rate = (
+            None
+            if realized is None
+            else _decimal_string(
+                realized,
+                f"{prefix}.realized_settlement_rate",
+                positive=True,
+            )
+        )
+        total_cost = (
+            None
+            if actual_cost is None
+            else _decimal_string(actual_cost, f"{prefix}.actual_total_cost")
+        )
+
+        records.append(
+            ObservedForwardQuote(
+                record_id=record_id,
+                quote_id=quote_id,
+                provider_id=_required_text(item, "provider_id"),
+                company_id=_required_text(item, "company_id"),
+                case_ids=case_ids,
+                base_currency=base_currency,
+                counter_currency=counter_currency,
+                side=side,
+                notional_min=notional_min,
+                notional_max=notional_max,
+                contract_rate=contract_rate,
+                cost_rate=cost_rate,
+                settlement_date=settlement_date,
+                observed_at=observed_at,
+                valid_until=valid_until,
+                origin_spot_snapshot=ForwardQuoteSpotRef(
+                    source_id=spot_source,
+                    version=spot_version,
+                    content_hash=spot_hash,
+                ),
+                evidence_content_hash=evidence_hash,
+                executed=executed,
+                realized_settlement_rate=realized_rate,
+                actual_total_cost=total_cost,
+            )
+        )
+    return ObservedForwardQuoteDataset(
+        dataset_id=dataset_id,
+        tenant_id=tenant_id,
+        retention_class="tenant_private_financial",
+        records=tuple(records),
+    )
+
+
 def _country_code(value: Any, field: str) -> str:
     if not isinstance(value, str):
         raise DatasetContractError(f"{field} must be a two-letter country code")
@@ -833,6 +1159,28 @@ def read_trade_feed_snapshot(
         raise DatasetContractError(
             "feed observed_at does not match snapshot observed_at"
         )
+    return SnapshotDataset(ref, data)
+
+
+def read_observed_forward_quote_snapshot(
+    path: Path | str,
+    *,
+    tenant_id: str,
+) -> SnapshotDataset:
+    """Read an immutable private quote snapshot and enforce tenant ownership."""
+    ref, payload = read_snapshot(path)
+    data = parse_observed_forward_quote_payload(payload)
+    if data.dataset_id != ref.version:
+        raise DatasetContractError(
+            f"forward quote dataset {data.dataset_id!r} does not match "
+            f"snapshot {ref.version!r}"
+        )
+    if data.observed_at != ref.observed_at:
+        raise DatasetContractError(
+            "forward quote observed_at does not match snapshot observed_at"
+        )
+    if data.tenant_id != tenant_id:
+        raise DatasetContractError("forward quote tenant scope does not match")
     return SnapshotDataset(ref, data)
 
 

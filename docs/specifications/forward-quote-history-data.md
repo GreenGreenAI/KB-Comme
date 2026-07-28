@@ -59,7 +59,23 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 
 1. 내부 또는 협력기업의 익명화된 RFQ/TMS export 확보 가능성을 확인한다.
 2. provider 계약, 이용목적, 보존기간과 재현 가능한 quote ID를 합의한다.
-3. tenant-private adapter와 immutable raw snapshot을 구현한다.
+3. `JsonForwardQuoteHistoryAdapter`로 HTTPS 정규화 feed를 수집하고
+   tenant scope를 대조한 뒤, 호출자가 지정한 비공개·암호화 저장소에 immutable raw
+   snapshot을 기록한다. 저장소의 공개 `data/snapshots/`는 이 데이터의 기본 경로가
+   아니다.
 4. 최소 100개 동일 만기 origin을 확보하고 품질 보고서를 만든다.
 5. 공개 benchmark를 별도 adapter로 수집해 실제 quote 성과와 비교한다.
 6. 세 역할 승인 전에는 model promotion을 실행하지 않는다.
+
+## 구현된 수집 경계
+
+- `parse_observed_forward_quote_payload`는 스키마 버전, decimal 문자열, 통화·명목금액,
+  호가 유효시간, provider 검증, company applicability, spot snapshot과 evidence hash를
+  결정론적으로 검증한다.
+- `JsonForwardQuoteHistoryAdapter`는 HTTPS와 응답 크기 제한을 강제하고 bearer
+  credential을 snapshot이나 오류에 남기지 않는다.
+- adapter의 tenant와 payload tenant가 다르면 저장 전에 거부한다.
+- `read_observed_forward_quote_snapshot`은 immutable snapshot identity와 tenant scope를
+  다시 검증한다.
+- 실제 endpoint, credential, 암호화 저장소와 데이터 계약은 고객·provider 계약 후
+  운영 환경에서 주입한다. 이 저장소에는 실제 기업 호가 fixture를 넣지 않는다.

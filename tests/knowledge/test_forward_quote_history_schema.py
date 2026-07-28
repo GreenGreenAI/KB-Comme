@@ -24,6 +24,7 @@ class ObservedForwardQuoteHistorySchemaTests(unittest.TestCase):
             "tenant_private_financial",
             self.schema["properties"]["retention_class"]["const"],
         )
+        self.assertEqual(1, self.schema["properties"]["records"]["minItems"])
         self.assertIn("tenant_id", self.schema["required"])
         self.assertFalse(self.record["additionalProperties"])
 
