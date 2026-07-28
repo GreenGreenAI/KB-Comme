@@ -24,6 +24,10 @@ from tradeflow.knowledge.hedge_quotes import (
     UserForwardQuote,
     UserQuoteHedgeAvailabilityService,
 )
+from tradeflow.knowledge.hedge_model_policy import (
+    GovernedHedgeModel,
+    HedgeModelGovernanceRegistry,
+)
 from tradeflow.knowledge.mutual_account import (
     MutualAccountTimeline,
     derive_mutual_account_timeline,
@@ -45,6 +49,8 @@ __all__ = [
     "EvidenceMetadata",
     "HedgeQuoteAvailabilityInput",
     "HedgeQuoteSide",
+    "GovernedHedgeModel",
+    "HedgeModelGovernanceRegistry",
     "KsureCaseProfile",
     "KsureCreditEvidence",
     "MutualAccountTimeline",

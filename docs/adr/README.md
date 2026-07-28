@@ -35,6 +35,7 @@ last-reviewed: 2026-07-27
 | [ADR-0022](0022-koreaexim-reference-fx-catalog.md) | proposed | 한국수출입은행 다통화 기준환율 catalog와 출처 역할 |
 | [ADR-0023](0023-user-declared-compliance-gates.md) | proposed | 사용자 확정 진술로 규정 적용 관문만 입력하는 계약 |
 | [ADR-0024](0024-user-confirmed-forward-quote-availability.md) | proposed | 사용자 확인 선물환 호가의 범위·최신성·가용성 계약 |
+| [ADR-0025](0025-hedge-model-champion-challenger-governance.md) | proposed | 헤지 모델 champion/challenger 거버넌스 |
 
 ## 운영 규칙
 

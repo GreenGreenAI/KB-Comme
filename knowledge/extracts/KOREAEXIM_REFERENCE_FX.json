@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
   "source_id": "KOREAEXIM_REFERENCE_FX",
-  "retrieved_at": "2026-07-27T00:00:00+09:00",
+  "retrieved_at": "2026-07-28T00:00:00+09:00",
   "document": {
     "title": "한국수출입은행 환율 정보 Open API 개발 명세",
     "issuer": "한국수출입은행",
-    "official_url": "https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C&searchselect=&searchword=",
+    "official_url": "https://www.data.go.kr/data/3068846/openapi.do",
     "endpoint": "https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON"
   },
   "claims": [
@@ -58,8 +58,8 @@
   ],
   "verification": {
     "verified_by": "knowledge-domain",
-    "verified_on": "2026-07-27",
-    "method": "한국수출입은행 공식 개발 명세의 신규 endpoint, 요청변수, RESULT 코드와 출력필드 표 확인 및 신규 endpoint의 오류 응답 교차 확인",
+    "verified_on": "2026-07-28",
+    "method": "공공데이터포털의 한국수출입은행 공식 API 카탈로그에서 신규 도메인 전환을 확인하고, 기존 검증된 요청변수·RESULT 코드·출력필드 계약과 신규 endpoint의 오류 응답을 교차 확인",
     "limitations": [
       "Open API 활용신청으로 발급받은 인증키가 필요하다.",
       "공공데이터포털의 실시간 업데이트 표시는 기업별 실행 가능한 스트리밍 호가를 의미하지 않는다.",
