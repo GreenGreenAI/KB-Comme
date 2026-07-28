@@ -21,7 +21,7 @@ const WORKER_LABEL = {
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, threadRef }) {
+export default function Thread({ turns, busy, thinking, threadRef }) {
   return (
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
@@ -53,24 +53,33 @@ export default function Thread({ turns, busy, threadRef }) {
         ),
       )}
 
-      {busy && <Thinking />}
+      {busy && <Thinking thinking={thinking} />}
     </div>
   );
 }
 
+const STEP_LABEL = {
+  exposure: "순노출·자금공백 산출",
+  source_verification: "공식 출처 검증 확인",
+  market_scenario: "변동성 추정",
+  support: "지원제도 규칙 판정",
+  compliance: "신고의무 규칙 판정",
+  hedge: "헤지비율 산출",
+  synthesis: "답변 정리",
+};
+
 /** What the agent is doing, while it is doing it.
  *
- *  A local analysis returns in about 45ms, so an indicator shown immediately
- *  would flash and read as a glitch. It fades in after a delay instead: a fast
- *  answer never shows one, and a slow one is explained. No artificial wait is
- *  added — the delay only governs when the element becomes visible.
+ *  Steps that have passed stay on screen with a check; the one in progress
+ *  carries the dots. Keeping the finished ones visible is the point — the
+ *  reader can see what the answer was built from as it is being built, and the
+ *  same list is what the trace shows once the answer lands.
  *
- *  The label does not claim per-worker progress. The API answers in a single
- *  response, so a staged "노출 계산 중 → 환율 확인 중" would be theatre; what
- *  actually ran is listed in the trace once the answer arrives. When synthesis
- *  starts taking seconds (§4.2[9]) this is where real stages belong.
+ *  Before an answer is in hand there is no plan to show, so the indicator
+ *  falls back to a single line. It appears after a short delay either way, so
+ *  a fast exchange never flashes one.
  */
-function Thinking() {
+function Thinking({ thinking }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -80,18 +89,41 @@ function Thinking() {
 
   if (!visible) return null;
 
+  const steps = thinking?.steps ?? [];
+  const active = thinking?.index ?? 0;
+
   return (
     <div className="turn agent thinking" aria-live="polite">
       <span className="who">TradeFlow</span>
-      <p className="think">
-        <span className="dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        계산하고 있습니다
-      </p>
+      {steps.length === 0 ? (
+        <p className="think">
+          <Dots />
+          계산하고 있습니다
+        </p>
+      ) : (
+        <div className="steps">
+          {steps.slice(0, active + 1).map((name, index) => (
+            <p
+              className={`step ${index === active ? "now" : "done"}`}
+              key={name}
+            >
+              {index === active ? <Dots /> : <i className="tick" />}
+              {STEP_LABEL[name] ?? name}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function Dots() {
+  return (
+    <span className="dots" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
   );
 }
 
