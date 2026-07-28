@@ -22,6 +22,7 @@ and deciding what to run lives in the orchestrator.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -35,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from tradeflow.agent.intake import intake
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.runtime.synthesis import Synthesizer, figures
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
@@ -59,6 +61,11 @@ SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 
 app = FastAPI(title="TradeFlow", version="0.1.0")
 accounts = AccountStore(ACCOUNT_DB)
+
+#: §4.2[9]. Constructed whether or not a key is present — without one it simply
+#: declines, and the screen writes its own sentence.
+synthesizer = Synthesizer()
+logger = logging.getLogger("tradeflow.synthesis")
 
 
 class LoginRequest(BaseModel):
@@ -346,10 +353,23 @@ def analyze_endpoint(
         profit_floor=profit_floor,
         utterance=request.utterance,
     )
+    result = build_response(analysis)
+
+    # §4.2[9]: the last step, and the only one a language model touches. It is
+    # given the figures the tools produced and nothing else, and what it writes
+    # is checked against them before it is used. A refusal — no key, no
+    # network, or a sentence that invented a number — leaves `summary` empty
+    # and the screen assembles its own sentence, so prose is the only thing
+    # that can be lost here.
+    written = synthesizer.write(figures(result), question=request.utterance)
+    if written.accepted:
+        result["summary"] = written.sentence
+    elif written.reason:
+        logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
     return {
         "status": "ready",
         "understood": heard,
-        "result": build_response(analysis),
+        "result": result,
     }
 
 

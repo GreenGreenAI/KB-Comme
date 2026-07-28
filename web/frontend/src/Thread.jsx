@@ -212,10 +212,16 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     !tradesChanged &&
     opened.length === 0;
 
-  const line = sentence({
-    first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
-    opened, unread,
-  });
+  // §4.2[9] wrote this one, and the server only kept it after checking that
+  // every number in it came from a tool. When it is empty — no key, no network,
+  // or a sentence that invented a figure — the turn assembles its own, which is
+  // why that assembly stays here rather than being deleted as dead code.
+  const line = result.summary
+    ? [{ text: result.summary }]
+    : sentence({
+        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
+        opened, unread,
+      });
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
   const asksProfit = !hedge && hedgeInputs.length > 0;
 

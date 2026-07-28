@@ -20,7 +20,10 @@ app = [
     "fastapi==0.135.2",
     "pydantic==2.12.4",
     "uvicorn[standard]",
-    "anthropic",
+    # §4.2[9] synthesis talks to Upstage Solar, which serves an
+    # OpenAI-compatible chat-completions surface — same paths, same error
+    # envelope, same streaming chunks. Only base_url differs.
+    "openai",
 ]
 
 [tool.setuptools.packages.find]
