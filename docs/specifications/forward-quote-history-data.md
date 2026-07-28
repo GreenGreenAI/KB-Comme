@@ -77,5 +77,8 @@ forward curve, 거래소 선물 또는 사후 체결가를 당시 은행 호가�
 - adapter의 tenant와 payload tenant가 다르면 저장 전에 거부한다.
 - `read_observed_forward_quote_snapshot`은 immutable snapshot identity와 tenant scope를
   다시 검증한다.
+- `pair_company_forward_history`는 같은 기업·provider·통화쌍·side·명목금액
+  구간·case·만기의 호가만 고르고, 각 호가가 인용한 정확한 origin spot snapshot과
+  정렬한다. 미래 spot, 누락 snapshot과 동일 시각 중복 호가는 거부한다.
 - 실제 endpoint, credential, 암호화 저장소와 데이터 계약은 고객·provider 계약 후
   운영 환경에서 주입한다. 이 저장소에는 실제 기업 호가 fixture를 넣지 않는다.

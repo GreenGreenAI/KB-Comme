@@ -19,6 +19,12 @@ from tradeflow.integration.forward_quote_feed import (
     ForwardQuoteFeedError,
     JsonForwardQuoteHistoryAdapter,
 )
+from tradeflow.tools.forward_quote_history import (
+    ForwardQuoteHistoryError,
+    OriginSpotRate,
+    pair_company_forward_history,
+)
+from tradeflow.tools.hedge_models import minimum_variance_hedge_ratio
 
 
 OBSERVED = datetime(2026, 7, 28, tzinfo=UTC)
@@ -133,6 +139,127 @@ class ForwardQuotePayloadTests(unittest.TestCase):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(DatasetContractError, message):
                     parse_observed_forward_quote_payload(document)
+
+
+class ForwardQuotePairingTests(unittest.TestCase):
+    @staticmethod
+    def _history() -> dict:
+        document = payload()
+        records = []
+        for index, (day, spot_hash, rate) in enumerate(
+            (
+                (28, "a", "1388.25"),
+                (29, "c", "1390.50"),
+                (30, "d", "1394.00"),
+            ),
+            start=1,
+        ):
+            record = dict(document["records"][0])
+            observed = datetime(2026, 7, day, tzinfo=UTC)
+            record.update(
+                {
+                    "record_id": f"record-{index}",
+                    "quote_id": f"provider-quote-{index}",
+                    "observed_at": observed.isoformat(),
+                    "valid_until": (observed + timedelta(minutes=5)).isoformat(),
+                    "settlement_date": datetime(
+                        2026, 8, day + 1, tzinfo=UTC
+                    ).date().isoformat(),
+                    "contract_rate": rate,
+                    "origin_spot_snapshot": {
+                        "source_id": "ECOS_USD_KRW",
+                        "version": f"2026-07-{day}",
+                        "content_hash": "sha256:" + spot_hash * 64,
+                    },
+                    "evidence_content_hash": "sha256:" + str(index) * 64,
+                }
+            )
+            records.append(record)
+        document["records"] = records
+        return document
+
+    def test_exact_scope_and_origin_spot_feed_minimum_variance_model(self) -> None:
+        dataset = parse_observed_forward_quote_payload(self._history())
+        spot_rates = {
+            quote.origin_spot_snapshot: OriginSpotRate(
+                quote.observed_at - timedelta(hours=1),
+                rate,
+            )
+            for quote, rate in zip(
+                dataset.records,
+                (Decimal("1385"), Decimal("1389"), Decimal("1391")),
+                strict=True,
+            )
+        }
+
+        paired = pair_company_forward_history(
+            dataset,
+            spot_rates,
+            company_id="COMPANY-1",
+            provider_id="BANK-1",
+            base_currency="USD",
+            counter_currency="KRW",
+            side="sell",
+            notional=Decimal("100000"),
+            tenor_days=32,
+            case_id="EXP-1",
+        )
+        estimate = minimum_variance_hedge_ratio(
+            paired.spot_rates,
+            paired.forward_rates,
+            window=2,
+        )
+
+        self.assertEqual("observed_forward_quote", paired.quote_basis)
+        self.assertEqual(2, estimate.observation_count)
+
+    def test_scope_mismatch_missing_spot_and_future_spot_fail_closed(self) -> None:
+        dataset = parse_observed_forward_quote_payload(self._history())
+        with self.assertRaisesRegex(ForwardQuoteHistoryError, "no company-applicable"):
+            pair_company_forward_history(
+                dataset,
+                {},
+                company_id="OTHER-COMPANY",
+                provider_id="BANK-1",
+                base_currency="USD",
+                counter_currency="KRW",
+                side="sell",
+                notional=Decimal("100000"),
+                tenor_days=32,
+            )
+
+        with self.assertRaisesRegex(ForwardQuoteHistoryError, "snapshot is unavailable"):
+            pair_company_forward_history(
+                dataset,
+                {},
+                company_id="COMPANY-1",
+                provider_id="BANK-1",
+                base_currency="USD",
+                counter_currency="KRW",
+                side="sell",
+                notional=Decimal("100000"),
+                tenor_days=32,
+            )
+
+        future_spots = {
+            quote.origin_spot_snapshot: OriginSpotRate(
+                quote.observed_at + timedelta(seconds=1),
+                Decimal("1385"),
+            )
+            for quote in dataset.records
+        }
+        with self.assertRaisesRegex(ForwardQuoteHistoryError, "future data"):
+            pair_company_forward_history(
+                dataset,
+                future_spots,
+                company_id="COMPANY-1",
+                provider_id="BANK-1",
+                base_currency="USD",
+                counter_currency="KRW",
+                side="sell",
+                notional=Decimal("100000"),
+                tenor_days=32,
+            )
 
 
 class ForwardQuoteAdapterTests(unittest.TestCase):
