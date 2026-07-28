@@ -49,7 +49,9 @@ class PlacementTests(unittest.TestCase):
 
         self.assertEqual(MERGE, place_utterance(heard, [EXPORT]).action)
 
-    def test_the_opposite_direction_is_a_different_trade(self) -> None:
+    def test_an_explicit_addition_with_opposite_direction_is_a_new_trade(
+        self,
+    ) -> None:
         """The defect this rule exists for.
 
         An export does not become an import while keeping its amount and date,
@@ -61,10 +63,42 @@ class PlacementTests(unittest.TestCase):
             "expected_payment_date": "2026-08-25",
         }
 
-        placement = place_utterance(heard, [EXPORT])
+        placement = place_utterance(
+            heard,
+            [EXPORT],
+            utterance="수입대금 6만 달러도 나가요",
+        )
 
         self.assertEqual(APPEND, placement.action)
         self.assertIn("direction", placement.conflicts)
+
+    def test_an_opposite_direction_without_addition_is_asked_about(self) -> None:
+        heard = {"direction": "수입"}
+
+        placement = place_utterance(
+            heard,
+            [EXPORT],
+            utterance="이 거래 방향은 수입으로 정정해 주세요",
+        )
+
+        self.assertEqual(AMBIGUOUS, placement.action)
+        self.assertEqual(("direction",), placement.conflicts)
+
+    def test_an_explicit_identical_trade_is_still_appended(self) -> None:
+        heard = {
+            "direction": "수출",
+            "amount": "100000",
+            "expected_payment_date": "2026-10-24",
+        }
+
+        placement = place_utterance(
+            heard,
+            [EXPORT],
+            utterance="같은 조건의 수출대금 10만 달러도 있어요",
+        )
+
+        self.assertEqual(APPEND, placement.action)
+        self.assertEqual((), placement.conflicts)
 
     def test_the_same_direction_with_different_figures_is_asked_about(self) -> None:
         """A second shipment and a correction look identical in the data.

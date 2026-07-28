@@ -32,6 +32,11 @@ _AMOUNT_SUFFIXED = re.compile(
 _YMD = re.compile(r"(\d{4})\s*[-/.년]\s*(\d{1,2})\s*[-/.월]\s*(\d{1,2})")
 _MD = re.compile(r"(\d{1,2})\s*[/.월]\s*(\d{1,2})")
 _MONTH_ONLY = re.compile(r"(\d{1,2})\s*월(?!\s*\d)")
+_ADDITIONAL_TRADE = re.compile(
+    r"(?:새\s*거래|추가|별도(?:로)?|(?:^|\s)또(?:\s|$)|"
+    r"(?:달러|불|usd)\s*도(?:\s|$))",
+    re.IGNORECASE,
+)
 
 
 def _direction(text: str) -> str | None:
@@ -139,6 +144,8 @@ class Placement:
 def place_utterance(
     heard: Mapping[str, Any],
     cases: Sequence[Mapping[str, Any]],
+    *,
+    utterance: str | None = None,
 ) -> Placement:
     """Decide whether a sentence adds a trade or completes the current one.
 
@@ -152,9 +159,9 @@ def place_utterance(
 
     - nothing stated, or nothing already known → merge, there is no question
     - the sentence only fills blanks → merge
-    - it contradicts the direction → append; an export does not become an
-      import while keeping its amount and date, so this is a different trade
-    - it contradicts amount or date but not direction → ambiguous
+    - it contradicts an identifying field and the sentence explicitly says
+      this is additional → append
+    - otherwise a contradiction → ambiguous; it may be a correction
 
     The last case is left for the user. "12월 3일에 15만 달러 수취" after an
     export of 10만 is either a second shipment or a correction, and the data
@@ -173,10 +180,13 @@ def place_utterance(
         and _differs(heard[field], target[field], field)
     )
 
+    explicit_addition = bool(
+        utterance and _ADDITIONAL_TRADE.search(utterance)
+    )
+    if explicit_addition:
+        return Placement(APPEND, conflicts)
     if not conflicts:
         return Placement(MERGE)
-    if "direction" in conflicts:
-        return Placement(APPEND, conflicts)
     return Placement(AMBIGUOUS, conflicts)
 
 
