@@ -115,8 +115,9 @@ PR #7은 결정 배경을 확인하는 이력으로만 남긴다.
 
 #### 요구사항
 
-- support worker가 완료되면 후보, 조건부 후보, 제외 후보를 각각 표시한다.
-- 후보마다 상품명, 상태, 포함·제외 이유, 누락 정보와 source ID를 표시한다.
+- support worker가 완료되면 각 항목을 규칙이 반환한 판정 상태 그대로 표시한다.
+  `insufficient_information`을 후보나 제외 중 어느 쪽으로도 바꾸지 않는다.
+- 항목마다 상품명, 판정 상태, 이유, 누락 정보와 source ID를 표시한다.
 - compliance worker가 완료되면 신고 검토사항, 기관, 조건, 기한과 누락 사실을
   표시한다.
 - 비어 있는 배열과 worker 미실행을 같은 상태로 표현하지 않는다.
@@ -284,8 +285,9 @@ progressive disclosure를 사용한다.
 
 ### AC-1 지원제도
 
-기업 사실을 충족한 fixture에서 support worker가 완료되면 최소 한 개의 후보 카드가
-표시되고, 상품명·상태·이유·source ID를 확인할 수 있다.
+support worker가 완료되면 판정된 각 항목이 상품명·판정 상태·이유·누락
+사실·source ID와 함께 표시된다. `insufficient_information`을 “후보” 또는
+“해당 없음” 중 어느 쪽으로도 표현하지 않는다.
 
 ### AC-2 신고의무
 
@@ -334,6 +336,11 @@ progressive disclosure를 사용한다.
 
 ## 8. 권장 구현 순서
 
+0. `AnalyzeRequest`에 프로필 사실과 거래구조 선언을 받을 자리를 만든다. 현재
+   `CompanyProfile.attributes`가 수용 가능한 `company.size`,
+   `company.credit_issue_free`, `company.ksure_exporter_grade`,
+   `company.is_domestic`과 `DECLARED_STRUCTURE_FIELDS`를 요청에서 전달할 수 있어야
+   AC-1·AC-2의 누락 입력 큐가 실제 판정을 다시 실행할 수 있다.
 1. `support_candidates`, `filing_obligations`, `next_actions` 렌더링
 2. 프로필 표시와 실제 분석 state 일치
 3. 전체 missing-information 질문 큐
