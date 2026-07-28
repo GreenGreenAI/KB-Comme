@@ -18,16 +18,10 @@ const WORKER_LABEL = {
   compliance: "신고의무 규칙 판정",
 };
 
-const SLOT_LABEL = {
-  amount: "금액 (USD)",
-  expected_payment_date: "결제 예정일",
-  direction: "방향",
-};
-
 /** The conversation, including the trace of which tools actually ran. That
  *  trace is not decoration: it is how a reader can tell the figures came from
  *  a calculation rather than from the model's prose. */
-export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRef }) {
+export default function Thread({ turns, busy, threadRef }) {
   return (
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
@@ -48,7 +42,6 @@ export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRe
             key={index}
             turn={turn}
             live={index === turns.length - 1 && !busy}
-            onPlace={onPlace}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             previous={
               turns
@@ -56,7 +49,6 @@ export default function Thread({ turns, busy, pending, onSlot, onPlace, threadRe
                 .filter((t) => t.kind === "result")
                 .at(-1)?.result ?? null
             }
-            onSlot={onSlot}
           />
         ),
       )}
@@ -104,7 +96,7 @@ function Thinking() {
 }
 
 
-function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
+function AgentTurn({ turn, live, first, previous }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
@@ -120,20 +112,6 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
         <span className="who">TradeFlow</span>
         <Understood heard={turn.ask.understood} />
         <p>{turn.ask.question}</p>
-        {live && (
-          <div className="choices">
-            {turn.ask.options.map((option) => (
-              <button
-                className="choice"
-                type="button"
-                key={option.placement}
-                onClick={() => onPlace(turn.ask.utterance, option.placement)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     );
   }
@@ -149,7 +127,6 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
         {turn.ask.questions.map((question) => (
           <p key={question}>{question}</p>
         ))}
-        {live && <SlotInput missing={turn.ask.missing} onSlot={onSlot} />}
       </div>
     );
   }
@@ -240,16 +217,13 @@ function AgentTurn({ turn, live, onSlot, onPlace, first, previous }) {
 
       <Answer result={result} order={order} />
 
-      {/* Asked once. Repeating the request every turn read as if the answer
-          had not been received. */}
+      {/* Asked once, and only in words. The fields live in the bar above the
+          composer so they stay reachable after the thread scrolls on. */}
       {!hedge && hedgeInputs.length > 0 && live && (
-        <>
-          <p>
-            기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
-            입력하지 않은 하한을 임의로 만들지 않습니다.
-          </p>
-          <ProfitInput onSlot={onSlot} />
-        </>
+        <p>
+          기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
+          입력하지 않은 하한을 임의로 만들지 않습니다.
+        </p>
       )}
     </div>
   );
@@ -411,69 +385,4 @@ function Understood({ heard }) {
   if (heard.amount) parts.push(`${won(heard.amount)} USD`);
   if (heard.expected_payment_date) parts.push(heard.expected_payment_date);
   return <p>{parts.join(" · ")}로 이해했습니다.</p>;
-}
-
-/** Asking in prose but accepting a typed value: the wording stays
- *  conversational while the value stays unambiguous. */
-function SlotInput({ missing, onSlot }) {
-  const slot = missing?.[0];
-  const [value, setValue] = useState("");
-  if (!slot) return null;
-
-  const submit = () => value && onSlot({ case: { [slot]: value } });
-
-  return (
-    <div className="slotline">
-      {slot === "direction" ? (
-        <select value={value} onChange={(e) => setValue(e.target.value)} aria-label={SLOT_LABEL[slot]}>
-          <option value="">선택하세요</option>
-          <option value="수출">수출 (대금을 받음)</option>
-          <option value="수입">수입 (대금을 지급)</option>
-        </select>
-      ) : (
-        <input
-          type={slot === "expected_payment_date" ? "date" : "text"}
-          inputMode={slot === "amount" ? "decimal" : undefined}
-          value={value}
-          placeholder={slot === "amount" ? "100,000" : undefined}
-          aria-label={SLOT_LABEL[slot] ?? slot}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      )}
-      <button type="button" onClick={submit}>확인</button>
-    </div>
-  );
-}
-
-function ProfitInput({ onSlot }) {
-  const [baseline, setBaseline] = useState("");
-  const [floor, setFloor] = useState("");
-  const submit = () =>
-    baseline &&
-    floor &&
-    onSlot({
-      profile: { baseline_profit: baseline, profit_floor: floor },
-    });
-
-  return (
-    <div className="slotline">
-      <input
-        inputMode="decimal"
-        value={baseline}
-        placeholder="기준 영업이익 (원)"
-        aria-label="기준 영업이익"
-        onChange={(e) => setBaseline(e.target.value)}
-      />
-      <input
-        inputMode="decimal"
-        value={floor}
-        placeholder="목표 손익 하한 (원)"
-        aria-label="목표 손익 하한"
-        onChange={(e) => setFloor(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-      />
-      <button type="button" onClick={submit}>계산</button>
-    </div>
-  );
 }

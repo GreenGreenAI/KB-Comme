@@ -248,6 +248,33 @@
   .quick button { cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 999px; padding: .25rem .8rem; font-size: .8125rem; }
   .quick button:hover { border-color: var(--accent); }
 
+  /* Docked above the composer: the request the agent is waiting on, in the
+     one place the user is already looking. Flex-none so it never eats the
+     thread's height. */
+  .askbar {
+    flex: none; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin: 0 1.5rem; padding: .6rem .8rem;
+    background: var(--accent-tint); border: 1px solid var(--rule);
+    border-radius: 10px;
+    animation: rise .24s cubic-bezier(.22,.9,.3,1);
+  }
+  .ask-label { font-size: .75rem; color: var(--accent-deep); font-weight: 600; margin-right: .1rem; }
+  .askbar input, .askbar select {
+    font-family: var(--mono); font-size: .8125rem; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 8px; padding: .35rem .6rem;
+    min-width: 0; flex: 0 1 11rem;
+  }
+  .askbar button {
+    cursor: pointer; background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: .4rem .95rem; font-size: .8125rem;
+    transition: background .15s ease, transform .12s ease;
+  }
+  .askbar button:hover { background: var(--accent-deep); }
+  .askbar button:active { transform: scale(.97); }
+  .ask-choices { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .askbar .choice { background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; padding: .35rem .85rem; }
+  .askbar .choice:hover { background: var(--paper); border-color: var(--accent); color: var(--accent); }
+
   .composer { border-top: 1px solid var(--rule-faint); padding: .9rem 1.5rem 1.1rem; }
   .composer-box { display: flex; gap: .6rem; align-items: flex-end; background: var(--tint); border: 1px solid var(--rule); border-radius: 12px; padding: .55rem .6rem .55rem .85rem; }
   .composer-box textarea { flex: 1; border: none; background: none; resize: none; outline: none; min-height: 1.6rem; font-size: .9375rem; }
