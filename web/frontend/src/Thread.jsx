@@ -73,10 +73,11 @@ const STEP_LABEL = {
 
 /** What the agent is doing, while it is doing it.
  *
- *  Steps that have passed stay on screen with a check; the one in progress
- *  carries the dots. Keeping the finished ones visible is the point — the
- *  reader can see what the answer was built from as it is being built, and the
- *  same list is what the trace shows once the answer lands.
+ *  One line at a time: the step in progress replaces the one before it. A
+ *  growing list drew the eye back to work already finished and pushed the
+ *  conversation up the screen while the reader was waiting. What the answer
+ *  was built from is not lost — the trace under the finished answer carries
+ *  the same list.
  *
  *  Before an answer is in hand there is no plan to show, so the indicator
  *  falls back to a single line. It appears after a short delay either way, so
@@ -104,17 +105,10 @@ function Thinking({ thinking }) {
           계산하고 있습니다
         </p>
       ) : (
-        <div className="steps">
-          {steps.slice(0, active + 1).map((name, index) => (
-            <p
-              className={`step ${index === active ? "now" : "done"}`}
-              key={name}
-            >
-              {index === active ? <Dots /> : <i className="tick" />}
-              {STEP_LABEL[name] ?? name}
-            </p>
-          ))}
-        </div>
+        <p className="step" key={steps[active]}>
+          <Dots />
+          {STEP_LABEL[steps[active]] ?? steps[active]}
+        </p>
       )}
     </div>
   );
