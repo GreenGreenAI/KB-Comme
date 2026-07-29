@@ -75,11 +75,6 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
 
       {busy && <Thinking thinking={thinking} />}
 
-      {/* Room under the conversation so the newest exchange can be scrolled to
-          the top of the view. App sizes it to whatever is left over — see
-          fitTail there — and it is empty by design: without something below a
-          short exchange, there is nothing to scroll into. */}
-      <div className="tail" aria-hidden="true" />
     </div>
   );
 }
