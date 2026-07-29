@@ -7,6 +7,8 @@ from tradeflow.runtime.synthesis import (
     check,
     digit_runs,
     figures,
+    redact,
+    verdicts,
 )
 
 FIGURES = [
@@ -172,6 +174,46 @@ class FigureTests(unittest.TestCase):
 
     def test_an_empty_result_offers_nothing_to_quote(self) -> None:
         self.assertEqual(figures({}), [])
+
+
+class PromptHygieneTests(unittest.TestCase):
+    """Two failures the live model produced, fixed and pinned."""
+
+    def test_an_instruction_is_caught_whatever_ending_it_wears(self) -> None:
+        """`검토해 보세요` passed a list that had `하세요` and not `보세요`."""
+        for sentence in (
+            "무역금융 활용 가능성을 검토해 보세요.",
+            "지금 환전하십시오.",
+            "선물환을 권해 드립니다.",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(verdicts(sentence))
+
+    def test_the_redaction_marker_never_reaches_the_reader(self) -> None:
+        """The question's numbers are elided before the answer path sees them,
+        and the model copied the marker straight through: `○○억 원 규모 장비`.
+        It is an editing device for the prompt, not Korean."""
+        synthesizer, _ = synthesizer_returning(
+            {
+                "figures_used": ["순노출: 100,000 USD"],
+                "sentence": "○○억 원 규모 수출의 순노출은 100,000 USD입니다.",
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+
+    def test_a_question_is_stripped_of_its_numbers(self) -> None:
+        """And what is left reads as Korean. A placeholder that looks like
+        content gets treated as content — `○○` was copied straight into the
+        answer, so the scenario got no sentence at all."""
+        self.assertEqual(
+            redact("베트남에 3억 원 규모 장비를 수출합니다."),
+            "베트남에 일정 금액 규모 장비를 수출합니다.",
+        )
+        self.assertNotIn("100,000", redact("10만 달러를 송금합니다."))
 
 
 class IntakePhrasingTests(unittest.TestCase):

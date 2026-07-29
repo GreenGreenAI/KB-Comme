@@ -46,6 +46,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 from typing import Any
 
@@ -112,14 +113,30 @@ INSTRUCTION = """\
 - "100,000 USD는 1466.3원 기준 146,630,000원입니다" → 곱셈을 했습니다
 - "약 10만 달러의 노출이 있습니다" → 근사했습니다
 - "순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
+- "3억 원 규모 수출이시군요" → 사용자가 쓴 숫자를 되받았습니다. 분석은 확정된
+  수치로 돌았으니 목록의 값을 쓰세요
 
-좋은 문장의 예:
-- "순노출은 100,000 USD입니다. 불리한 쪽 환율 1361.05까지 가면 원화 수취액이
-  10,525,000 KRW 줄어듭니다."
+사용자가 걱정하는 것에 답하세요. 수치를 다시 읽어주는 것이 아니라,
+그 수치가 그 사람에게 무엇을 뜻하는지 말하는 것입니다.
+
+수출 기업이 "환율이 떨어질까 걱정"이라고 물었을 때:
+- 나쁨: "순노출은 100,000 USD이고 그때 덜 받는 원화는 10,525,000 KRW입니다."
+  → 카드에 있는 것을 다시 읽었습니다.
+- 좋음: "받을 100,000 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1361.05까지
+  가면 그때 손에 들어오는 원화가 10,525,000 KRW 적어집니다."
+
+수입 기업이 "환율이 오를까 걱정, 지금 환전할까요"라고 물었을 때:
+- 나쁨: "순노출은 -100,000 USD입니다."  → 부호를 읽어줬을 뿐입니다.
+- 좋음: "보내야 할 100,000 USD가 아직 환전되지 않았습니다. 불리한 쪽인
+  1560.48까지 가면 결제에 9,418,000 KRW가 더 듭니다."
 
 그 밖에:
 - 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
-- 두 문장 이내로, 담당자가 무엇을 알아야 하는지 말하세요.
+- 무엇을 하라고 지시하지 마세요. 판단은 아래 규칙 결과가 합니다.
+- 목록을 옮겨 적지 마세요. 가장 중요한 수치 두세 개만 고르세요.
+- 값이 0인 항목은 말하지 마세요. 자연헤지 0, 자금 공백 0을 나열하면 문장이
+  카드의 복사본이 됩니다.
+- 두 문장 이내. 짧을수록 좋습니다.
 """
 
 
@@ -134,6 +151,23 @@ class Synthesis:
     @property
     def summary(self) -> str:
         return self.sentence if self.accepted else ""
+
+
+#: A money amount as a person writes one: digits, an optional Korean magnitude,
+#: and a currency. Matched as a whole so the unit goes with the number.
+_SPOKEN_AMOUNT = re.compile(r"\d[\d,.]*\s*[억만천]?\s*(?:원|달러|불|USD|KRW)")
+
+
+def redact(text: str) -> str:
+    """The question with its numbers taken out, leaving ordinary Korean.
+
+    An earlier version left `○○` where a number had been, and the model copied
+    the marker into the answer — "○○억 원 규모 장비" reached the check and was
+    rejected, so the scenario got no sentence at all. A placeholder that looks
+    like content will be treated as content. What is left here is a phrase a
+    person could have written, with nothing worth quoting.
+    """
+    return _DIGITS.sub("몇", _SPOKEN_AMOUNT.sub("일정 금액", text))
 
 
 def digit_runs(text: str) -> set[str]:
@@ -182,8 +216,19 @@ def units_by_run(text: str) -> dict[str, set[str | None]]:
 VERDICT_WORDS = (
     "신고", "의무", "면제", "불필요", "해당 없음",
     "자격", "지원", "보험", "보증", "승인",
-    "하세요", "하시면 됩니다", "권장", "추천", "안전합니다", "문제없",
+    # Instructions, in the endings Korean uses for them. Enumerated, so this is
+    # a net and not a proof — a form nobody listed will pass. What guarantees
+    # the division is that verdicts are rendered from worker output elsewhere;
+    # this only keeps the sentence from competing with them. `검토해 보세요`
+    # got through the first list, which had `하세요` and not `보세요`.
+    "하세요", "보세요", "하십시오", "하시기 바랍니다", "하시면 됩니다",
+    "권장", "권해", "추천", "안전합니다", "문제없",
 )
+
+#: The marker `redact` leaves behind. It is an editing device for the prompt and
+#: has no business in a sentence a person reads — the model copied it straight
+#: through ("○○억 원 규모 장비") the first time the question carried a number.
+REDACTION = "○○"
 
 
 def verdicts(sentence: str) -> list[str]:
@@ -257,9 +302,23 @@ def figures(result: dict[str, Any]) -> list[str]:
         unit = market.get("unit", "KRW per USD")
         written.append(f"현재 환율: {market.get('spot_rate')} ({unit}, 한국은행 매매기준율 {market.get('observed_to')} 기준)")
         written.append(f"불리한 쪽 환율: {market.get('adverse_rate')} ({unit}, 신뢰수준 {market.get('confidence_level')})")
+        # Whose money moves, and which way. The label used to say 수취액
+        # whatever the trade was, so an import — where a rising rate means
+        # paying more — was told its receipts had fallen. The company is not
+        # receiving anything; it is paying, and the sentence said the opposite
+        # of what happened to it.
+        net = ((cash.get("net_exposure") or [{}])[0]).get("amount")
+        try:
+            receiving = Decimal(str(net)) > 0
+        except (InvalidOperation, TypeError):
+            receiving = None
+        label = (
+            "그때 덜 받는 원화" if receiving
+            else "그때 더 내는 원화" if receiving is False
+            else "그때 원화 현금흐름 차이"
+        )
         written.append(
-            f"그때 원화 수취액 차이: {money(market.get('adverse_cashflow_amount'))} KRW "
-            f"({'감소' if market.get('adverse_cashflow_direction') == 'decrease' else '증가'})"
+            f"{label}: {money(market.get('adverse_cashflow_amount'))} KRW"
         )
         written.append(
             f"관측 조건: 최근 {market.get('observation_days')}영업일, "
@@ -351,14 +410,16 @@ class Synthesizer:
         if not figures:
             return Synthesis("", False, "인용할 수치가 없습니다")
 
-        # The question is passed for tone, not for figures — it usually contains
-        # the user's own spelling of the amount ("10만 달러"), and the first
-        # version of this quoted it straight back and failed the check.
-        asked = (
-            f"\n\n사용자가 물은 내용(숫자는 인용하지 말 것): {question}"
-            if question
-            else ""
-        )
+        # The question is passed for tone, not for figures. Asking the model not
+        # to quote the user's numbers did not work — "3억 원 규모" came back
+        # every time and failed the check, so the answer fell through to the
+        # deterministic sentence. Redacting them removes the temptation instead
+        # of appealing against it: what is left is the concern, which is the
+        # only part of the question this path needs.
+        #
+        # `ask_for` keeps the digits. Asking may repeat what the user said;
+        # answering must report what the tools produced.
+        asked = f"\n\n사용자가 물은 내용: {redact(question)}" if question else ""
         prompt = (
             f"{INSTRUCTION}\n확정된 수치:\n"
             + "\n".join(f"- {figure}" for figure in figures)
@@ -387,6 +448,9 @@ class Synthesizer:
         broken = check(sentence, figures)
         if broken:
             return Synthesis(sentence, False, broken)
+
+        if REDACTION in sentence:
+            return Synthesis(sentence, False, "편집 표시가 문장에 남았습니다")
 
         # Only the answer carries this. §4.2[1] asks the user to do something
         # by definition, and blocking that would block the question itself.
