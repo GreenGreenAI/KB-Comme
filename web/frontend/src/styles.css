@@ -858,6 +858,10 @@
   .ask-row.quote > input { flex: 1 1 8rem; min-width: 6rem; }
   .ask-row.quote > .check { flex: 1 1 100%; margin: .1rem 0 0; }
 
+  /* A line about the answer, not part of it. Quieter than the sentence and
+     louder than the folds it points at. */
+  .pointer { margin: -.4rem 0 0; font-size: .8125rem; color: var(--ink-45); }
+
   /* ---------- verdicts ---------- */
   /* One judgement per row. The palette has no green/amber/red to lean on, so
      state is carried by form: a filled chip for a judgement that stands, an

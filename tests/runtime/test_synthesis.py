@@ -8,6 +8,7 @@ from tradeflow.runtime.synthesis import (
     digit_runs,
     TIMEOUT_S,
     figures,
+    pointer,
     redact,
     verdicts,
 )
@@ -215,6 +216,52 @@ class PromptHygieneTests(unittest.TestCase):
             "베트남에 일정 금액 규모 장비를 수출합니다.",
         )
         self.assertNotIn("100,000", redact("10만 달러를 송금합니다."))
+
+
+class PointerTests(unittest.TestCase):
+    """The line §4.2[9] is not allowed to write.
+
+    The sentence is given `figures()` and nothing else, so it cannot mention
+    that support was judged — and it must not be able to. A model that could
+    say "지원제도 후보가 있습니다" could also say "자격이 됩니다".
+    """
+
+    def test_it_counts_and_never_concludes(self) -> None:
+        line = pointer(
+            {
+                "workers": {"skipped": {"compliance": "…"}},
+                "support_candidates": [
+                    {"status": "expert_confirmation_required"},
+                    {"status": "insufficient_information"},
+                    {"status": "insufficient_information"},
+                ],
+                "next_actions": [{"action": "consult"}],
+            }
+        )
+        self.assertIn("지원제도 후보 1건", line)
+        self.assertIn("정보 부족 2건", line)
+        self.assertIn("다음 행동 1건", line)
+        # No conclusion, only counts. `verdicts()` is not the check here — it
+        # is a net for model-authored prose and it trips on the topic word
+        # 지원제도, which is a subject and not a claim. What matters is that
+        # nothing here decides anything.
+        for conclusion in ("자격", "불필요", "해당 없음", "하세요", "권장"):
+            self.assertNotIn(conclusion, line)
+
+    def test_a_worker_that_did_not_run_is_not_mentioned(self) -> None:
+        """Silence about compliance is not a clearance, and the pointer must
+        not turn a skipped worker into a reported one."""
+        line = pointer(
+            {
+                "workers": {"skipped": {"support": "…", "compliance": "…"}},
+                "support_candidates": [],
+            }
+        )
+        self.assertEqual("", line)
+
+    def test_compliance_that_ran_and_found_nothing_still_says_so(self) -> None:
+        line = pointer({"workers": {"skipped": {}}, "filing_obligations": []})
+        self.assertIn("신고 검토", line)
 
 
 class CeilingTests(unittest.TestCase):

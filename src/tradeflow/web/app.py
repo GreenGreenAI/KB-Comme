@@ -43,7 +43,7 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
-from tradeflow.runtime.synthesis import Synthesizer, figures
+from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
@@ -408,6 +408,10 @@ def analyze_endpoint(
         result["summary"] = written.sentence
     elif written.reason:
         logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
+
+    # Code-owned, and true whether or not the model answered. The sentence is
+    # about the figures; this says what else the answer holds.
+    result["pointer"] = pointer(result)
     return {
         "status": "ready",
         "understood": heard,

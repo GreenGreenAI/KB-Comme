@@ -2,11 +2,18 @@ import { useState } from "react";
 
 //: The first one doubles as the placeholder's example and as what Tab fills
 //: in, so the sentence a reader is shown is the sentence they get.
+//:
+//: One per thing the product judges, not four of the same thing. All four used
+//: to be a trade and an amount, which taught the scope in a glance — and the
+//: lesson was wrong: the engine decides support eligibility and filing duty
+//: too, and nobody was ever invited to ask about them. §4.2[2] reads intent
+//: from the sentence, so a chip that names a subject really does reorder the
+//: answer; these were checked against `read_intent` rather than guessed.
 const STARTERS = [
   "10월 24일에 수출대금 10만 달러 받기로 했어요",
-  "8월 25일에 수입대금 6만 달러 나가요",
-  "12월 3일에 $150,000 수취 예정입니다",
-  "3월 20일 수입 20만 달러 결제해요",
+  "10월 24일 수출 10만 달러인데 받을 수 있는 지원제도가 있나요",
+  "8월 25일 수입 6만 달러를 상계로 처리하는데 신고 대상인가요",
+  "12월 3일 수출 15만 달러, 환율이 더 떨어지면 얼마나 손해인가요",
 ];
 
 export default function Entry({ onSend, busy }) {
@@ -35,8 +42,9 @@ export default function Entry({ onSend, busy }) {
         </b>
       </h1>
       <p className="standfirst reveal" style={{ animationDelay: "430ms" }}>
-        수출입 거래의 환위험을 한국은행 환율로 계산하고, 출처와 기준일까지 함께
-        보여드립니다. 환율을 예측하지는 않습니다.
+        수출입 거래의 환노출을 한국은행 환율로 계산하고, 지원제도 자격과
+        신고의무를 규칙으로 판정합니다. 출처와 기준일을 함께 보여드리고,
+        환율을 예측하지는 않습니다.
       </p>
 
       <div className="prompt">

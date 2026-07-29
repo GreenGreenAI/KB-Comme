@@ -351,6 +351,50 @@ def figures(result: dict[str, Any]) -> list[str]:
     return written
 
 
+def pointer(result: dict[str, Any]) -> str:
+    """What else this answer holds, counted rather than judged.
+
+    §4.2[9]'s sentence is given `figures()` and nothing else, so it cannot
+    mention that three support candidates were decided — and it should not be
+    able to. A model that could say "지원제도 후보가 있습니다" could also say
+    "자격이 됩니다", and the whole division rests on it not being able to.
+
+    So the pointer is written here. Counts only: how many were judged, how many
+    are still short of a fact, how many actions came out. Every verdict stays
+    where it is rendered, from its own worker's output, with its own evidence.
+
+    Without this the screen answered a question about 지원제도 with a sentence
+    about exchange rates and left the judgement folded away underneath.
+    """
+    skipped = (result.get("workers") or {}).get("skipped") or {}
+    parts: list[str] = []
+
+    candidates = result.get("support_candidates") or []
+    if "support" not in skipped and candidates:
+        short = sum(
+            1 for item in candidates if item.get("status") == "insufficient_information"
+        )
+        piece = f"지원제도 후보 {len(candidates) - short}건"
+        if short:
+            piece += f" · 정보 부족 {short}건"
+        parts.append(piece)
+
+    if "compliance" not in skipped:
+        obligations = result.get("filing_obligations") or []
+        parts.append(
+            f"신고 검토 {len(obligations)}건" if obligations else "신고 검토 결과"
+        )
+
+    actions = result.get("next_actions") or []
+    if actions:
+        parts.append(f"다음 행동 {len(actions)}건")
+
+    # Joined with a dash rather than a particle: the last item changes every
+    # time, and `을(를)` is what a template writes when it does not know the
+    # word it is joining.
+    return " · ".join(parts) + " — 아래에 정리했습니다." if parts else ""
+
+
 INTAKE_INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석을 돕습니다. 아직 계산에 필요한 정보가
 부족한 상태이고, 무엇이 부족한지는 이미 정해져 있습니다. 당신의 일은 그것을

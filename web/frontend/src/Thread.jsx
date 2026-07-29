@@ -277,6 +277,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
           segment. */}
       {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
 
+      {/* Written by code, not by §4.2[9]: the sentence above is about the
+          figures, and this says what else the answer holds. Counts only —
+          every verdict is rendered from its own worker's output below. */}
+      {shown > words && result.pointer && (
+        <p className={`pointer${arrive}`}>{result.pointer}</p>
+      )}
+
       {shown > words && (
         <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
       )}
