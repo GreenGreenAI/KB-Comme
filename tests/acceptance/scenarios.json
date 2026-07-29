@@ -1,0 +1,99 @@
+{
+  "note": [
+    "다섯 시나리오는 제품 소유자가 손으로 쓴 이상적인 답변이다. 그 산문을",
+    "채점하지 않는다 — 우리 답이 그 문장과 얼마나 닮았는지는 알 가치가 없고,",
+    "닮게 만드는 가장 쉬운 방법은 지어내는 것이다.",
+    "",
+    "대신 각 시나리오가 요구하는 능력(capability)을 적고, 시스템이 실제로 그",
+    "판정을 냈는지 본다. 없는 능력은 '답이 나쁘다'가 아니라 '무엇이 없어서",
+    "못 낸다'로 보고된다. 그것이 A에게 넘길 수 있는 형태다."
+  ],
+  "scenarios": [
+    {
+      "id": "S1",
+      "title": "급격한 환율 상승에 따른 환리스크 관리 및 헤지 전략",
+      "utterance": "2달 후 미국 거래처에 10만 달러를 송금해야 하는데, 환율이 더 오를까 봐 걱정입니다.",
+      "case": {
+        "direction": "수입",
+        "amount": "100000",
+        "expected_payment_date": "2026-09-28"
+      },
+      "signed_in": true,
+      "expects": [
+        "exposure",
+        "scenario",
+        "hedge_ratio",
+        "forward_quote",
+        "next_action",
+        "evidence"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "수출입은행 및 정책자금(무역금융) 추천",
+      "utterance": "베트남에 3억 원 규모 장비를 수출하는데 제작 자금이 부족합니다. 중소기업이 쓸 수 있는 무역금융이나 정책자금이 있을까요?",
+      "case": {
+        "direction": "수출",
+        "amount": "230000",
+        "expected_payment_date": "2026-11-30"
+      },
+      "signed_in": true,
+      "expects": [
+        "exposure",
+        "support_ksure",
+        "support_policy_finance",
+        "next_action",
+        "evidence"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "신용장(L/C) 조건 검토 및 서류 불일치 리스크",
+      "utterance": "독일 바이어가 보낸 L/C 초안에 까다로운 조건이 있는지 확인해 주세요.",
+      "case": {
+        "direction": "수출",
+        "amount": "150000",
+        "expected_payment_date": "2026-10-15"
+      },
+      "signed_in": true,
+      "expects": ["document_intake", "lc_review", "next_action"]
+    },
+    {
+      "id": "S4",
+      "title": "거래 상대국 경제 불안 및 수출보험 활용",
+      "utterance": "브라질 바이어와 D/A 60일 외상 거래로 수출을 확대하려는데 대금을 못 받을까 걱정입니다.",
+      "case": {
+        "direction": "수출",
+        "amount": "120000",
+        "expected_payment_date": "2026-10-30",
+        "country": "BR"
+      },
+      "signed_in": true,
+      "expects": [
+        "exposure",
+        "support_ksure",
+        "country_risk",
+        "buyer_credit",
+        "next_action",
+        "evidence"
+      ]
+    },
+    {
+      "id": "S5",
+      "title": "외화 예금 및 금융상품을 활용한 여유 자금 운용",
+      "utterance": "수출 대금 20만 달러가 들어왔는데 3개월간 원화로 바꿀 필요가 없습니다. 어떻게 운용하면 좋을까요?",
+      "case": {
+        "direction": "수출",
+        "amount": "200000",
+        "expected_payment_date": "2026-07-28"
+      },
+      "signed_in": true,
+      "expects": ["exposure", "fx_deposit", "next_action"],
+      "out_of_scope": [
+        "fx_deposit",
+        "특정 금융상품의 수익률을 권유하는 것은 이 제품의 자리가 아니다.",
+        "1번의 헤지는 위험 관리이고 이것은 운용 수익이다."
+      ]
+    }
+  ]
+}
