@@ -396,11 +396,14 @@ def pointer(result: dict[str, Any]) -> str:
 
 
 INTAKE_INSTRUCTION = """\
-당신은 수출입 기업의 환위험 분석을 돕습니다. 아직 계산에 필요한 정보가
-부족한 상태이고, 무엇이 부족한지는 이미 정해져 있습니다. 당신의 일은 그것을
-자연스러운 한국어 한두 문장으로 옮기는 것뿐입니다.
+당신은 수출입 기업을 돕습니다. 아직 판단에 필요한 정보가 부족한 상태이고,
+무엇이 부족한지는 이미 정해져 있습니다. 당신의 일은 그것을 자연스러운
+한국어 한두 문장으로 옮기는 것뿐입니다.
 
 규칙:
+- 사용자가 물은 주제를 받아 말하세요. 지원제도를 물었으면 지원제도를 보려면
+  무엇이 필요한지 말하는 것이지, 「환위험 분석을 도와드리겠습니다」가
+  아닙니다. 묻지 않은 것의 이름을 대지 마세요.
 - 「물어야 할 것」을 늘리거나 줄이지 마세요. 목록에 있는 것만 물으세요.
 - 「이미 파악한 것」은 다시 묻지 마세요.
 - 숫자를 만들지 마세요. 이미 파악한 값만 그대로 쓸 수 있습니다.
@@ -425,6 +428,15 @@ INTAKE_SCHEMA = {
         "required": ["sentence", "asked_fields"],
         "additionalProperties": False,
     },
+}
+
+#: §4.2[2]'s section names, in the words a person uses for them.
+SUBJECT_NAME = {
+    "exposure": "환노출",
+    "market_scenario": "환율 시나리오",
+    "hedge": "헤지",
+    "support": "지원제도",
+    "compliance": "신고의무",
 }
 
 FIELD_WORDS = {
@@ -528,8 +540,15 @@ class Synthesizer:
         *,
         understood: dict[str, Any] | None = None,
         question: str | None = None,
+        subjects: list[str] | None = None,
     ) -> Synthesis:
         """§4.2[1]: say what is still needed, in words rather than in a list.
+
+        `subjects` is what §4.2[2] read out of the sentence. Without it every
+        question named 환위험 분석 whatever had been asked — a company asking
+        about 정책자금 was told which inputs the exchange-rate analysis wanted,
+        by name, which is the funnel telling the user what the product is
+        instead of answering them.
 
         The slots come in already chosen — §4.2[1] fixes both the priority
         (`amount` → `expected_payment_date` → `direction`) and the cap of three,
@@ -556,6 +575,12 @@ class Synthesizer:
                 + "\n".join(f"- {key}: {value}" for key, value in known.items())
                 if known
                 else "\n\n이미 파악한 것: 없음"
+            )
+            + (
+                "\n\n사용자가 물은 주제: "
+                + " · ".join(SUBJECT_NAME.get(s, s) for s in subjects)
+                if subjects
+                else ""
             )
             + (f"\n\n사용자가 방금 한 말: {question}" if question else "")
         )

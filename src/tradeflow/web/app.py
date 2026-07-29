@@ -51,6 +51,7 @@ from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    krw_amount,
     place_utterance,
     read_utterance,
 )
@@ -379,6 +380,7 @@ def analyze_endpoint(
                 list(reading.missing),
                 understood=heard,
                 question=request.utterance,
+                subjects=list(read_intent(request.utterance or "")),
             ).summary,
             "questions": list(reading.questions),
             # Field and wording paired, so the screen asks for the thing it is
@@ -389,8 +391,25 @@ def analyze_endpoint(
             ],
             "missing": list(reading.missing),
             "issues": [
-                {"field": issue.field, "reason": issue.reason}
-                for issue in reading.issues
+                *(
+                    [
+                        {
+                            "field": "amount",
+                            "reason": (
+                                f"{stated_krw:,.0f}원으로 들었습니다. 환노출은 "
+                                "외화 기준으로 계산하므로 달러 금액이 따로 "
+                                "필요합니다."
+                            ),
+                        }
+                    ]
+                    if (stated_krw := krw_amount(request.utterance or ""))
+                    and "amount" in reading.missing
+                    else []
+                ),
+                *(
+                    {"field": issue.field, "reason": issue.reason}
+                    for issue in reading.issues
+                ),
             ],
         }
 
