@@ -48,6 +48,13 @@ from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.tools.intent import read_intent
+from tradeflow.domain.datasets import (
+    SnapshotDataset,
+    parse_ksure_country_policy_payload,
+)
+from tradeflow.domain.snapshot_file import SnapshotNotFoundError
+from tradeflow.knowledge.facts import FactContractError
+from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.tools.source_freshness import load_source_verification
 from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
 
@@ -182,6 +189,13 @@ def _default_knowledge_files() -> tuple[InputFile, ...]:
 STRUCTURE_EVIDENCE_ID = "TRADEFLOW_DERIVED_STRUCTURE"
 DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 
+#: K-SURE's country acceptance policy, as a snapshot. The source is registered
+#: and the binder is written and tested; what is absent is the snapshot itself,
+#: so this reads as "no snapshot" and the rules report the fact as missing.
+#: That is the correct answer today — inventing a policy for Brazil would be
+#: exactly the guess §5.4 refuses.
+COUNTRY_POLICY_SOURCE = "KSURE_COUNTRY_POLICY_API"
+
 #: The company facts §5.4's eligibility rules will not read without evidence.
 #: Everything else on the profile reaches the rulepack conditions directly; these
 #: three go through `KsureCaseProfile`, which refuses a fact that cannot say
@@ -228,6 +242,55 @@ def _structure_assertions(
         for case_id in case_ids
     }
     return assertions, (descriptor,)
+
+
+def _country_policy_assertions(
+    program: TradeProgram,
+    snapshot_root: Path | str,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Bind each case's counterparty country to K-SURE's acceptance policy.
+
+    `bind_country_policy` has existed, with tests, since the country catalog
+    landed — but nothing called it outside those tests, so a trade that named
+    Brazil was analysed as a trade that named nowhere. Wiring it here means the
+    judgement opens the moment the snapshot exists, with no further code.
+
+    Absent snapshot, absent country and an unlisted country all end the same
+    way: no assertion, and §5.4 reports `counterparty.country_restricted` as a
+    fact it does not have. A country policy is the kind of thing that must be
+    dated and re-verifiable, and there is no defensible default for it.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    cases = [case for case in program.cases if case.counterparty_country]
+    if not cases:
+        return empty, ()
+
+    try:
+        path = latest_snapshot_path(snapshot_root, COUNTRY_POLICY_SOURCE)
+        ref, payload = read_snapshot(path)
+        catalog = parse_ksure_country_policy_payload(payload)
+    except (SnapshotNotFoundError, OSError, ValueError, TypeError):
+        return empty, ()
+
+    dataset = SnapshotDataset(ref=ref, value=catalog)
+    assertions = dict(empty)
+    evidence: list[EvidenceDescriptor] = []
+    for case in cases:
+        try:
+            bound, descriptor = bind_country_policy(KsureCaseProfile(), dataset, case)
+        except FactContractError:
+            # An unlisted country is not a permissive one. Saying nothing lets
+            # the rule report the gap, which is the honest outcome.
+            continue
+        assertions[case.case_id] = (
+            FactAssertion(
+                "counterparty.country_restricted",
+                bound.country_restricted,
+                (descriptor.evidence_id,),
+            ),
+        )
+        evidence.append(descriptor)
+    return assertions, tuple(evidence)
 
 
 def _declared_company_assertions(
@@ -352,11 +415,20 @@ def analyze(
         declared, declared_evidence = _declared_company_assertions(
             program, as_of=evaluated_at_utc
         )
+        country, country_evidence = _country_policy_assertions(program, snapshot_root)
         assertions = {
-            case_id: (*assertions.get(case_id, ()), *declared.get(case_id, ()))
-            for case_id in {*assertions, *declared}
+            case_id: (
+                *assertions.get(case_id, ()),
+                *declared.get(case_id, ()),
+                *country.get(case_id, ()),
+            )
+            for case_id in {*assertions, *declared, *country}
         }
-        structure_evidence = (*structure_evidence, *declared_evidence)
+        structure_evidence = (
+            *structure_evidence,
+            *declared_evidence,
+            *country_evidence,
+        )
         decision_packet = _isolated(
             report,
             "knowledge",
