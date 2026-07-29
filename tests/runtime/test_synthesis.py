@@ -90,26 +90,37 @@ class StrictRuleTests(unittest.TestCase):
 
 
 class BoundRenderingTests(unittest.TestCase):
-    def test_model_selects_exact_phrases_and_code_renders_them(self) -> None:
+    def test_a_verdict_the_model_invented_never_reaches_the_user(self) -> None:
+        """The sentence carries no numbers at all, so neither the digit check
+        nor the unit check sees anything wrong with it. §5.5 is explicit that a
+        filing duty is not cleared until the company states its trade
+        structure — a sentence that clears it is the model overruling a worker
+        that deliberately stopped."""
         synthesizer, completions = synthesizer_returning(
             {
-                "figures_used": [
-                    "순노출: 100,000 USD",
-                    "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
-                ],
+                "figures_used": ["순노출: 100,000 USD"],
                 "sentence": "신고 의무가 없으므로 바로 송금하세요.",
             }
         )
 
         written = synthesizer.write(FIGURES)
 
-        self.assertTrue(written.accepted)
-        self.assertEqual(
-            "순노출: 100,000 USD · "
-            "그때 원화 수취액 차이: 10,525,000 KRW (감소).",
-            written.summary,
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+        self.assertIn("신고", written.reason)
+
+    def test_describing_the_figures_is_allowed(self) -> None:
+        synthesizer, completions = synthesizer_returning(
+            {
+                "figures_used": ["순노출: 100,000 USD"],
+                "sentence": "순노출은 100,000 USD입니다.",
+            }
         )
-        self.assertNotIn("송금", written.summary)
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertTrue(written.accepted)
+        self.assertEqual("순노출은 100,000 USD입니다.", written.summary)
         schema = completions.request["response_format"]["json_schema"]
         self.assertEqual(
             FIGURES,
@@ -199,15 +210,16 @@ class IntakePhrasingTests(unittest.TestCase):
     def test_questions_are_rendered_from_the_exact_missing_fields(self) -> None:
         missing = ["amount", "expected_payment_date", "direction"]
         synthesizer, completions = synthesizer_returning(
-            {"acknowledgement": "안녕하세요.", "asked_fields": missing}
+            {
+                "sentence": "안녕하세요. 거래 금액, 결제일, 수출입 여부를 알려주세요.",
+                "asked_fields": missing,
+            }
         )
 
         written = synthesizer.ask_for(missing)
 
         self.assertTrue(written.accepted)
-        self.assertIn("거래 금액", written.summary)
-        self.assertIn("대금을 주고받기로 한 날짜", written.summary)
-        self.assertIn("수출인지 수입인지", written.summary)
+        self.assertIn("안녕하세요", written.summary)
         schema = completions.request["response_format"]["json_schema"]
         field_schema = schema["schema"]["properties"]["asked_fields"]
         self.assertEqual(missing, field_schema["items"]["enum"])

@@ -18,12 +18,20 @@ The spec gives this agent no tools and one strict rule:
 > 도구가 산출한 수치를 그대로 인용한다. 재계산·반올림·근사 표현을 금지한다.
 
 A prompt asking for that is a request. This module makes it a condition. The
-model may select up to three complete figure strings that the deterministic
-tools produced. Code validates exact membership and renders those strings;
-model-authored prose never reaches the user. A sign, unit, label or meaning
-therefore cannot be detached from its value.
+model is handed a list of figure strings that the deterministic tools produced,
+and its sentence is checked twice. Every run of digits it wrote must appear,
+character for character, among those figures — a sentence that introduces `10만`
+where the tools said `100,000` is rejected, because rounding is the failure this
+rule names and the check cannot tell a helpful rounding from a wrong one. And
+every number must still be wearing the unit it came with: quoting `100,000` and
+calling it KRW passes any arithmetic check and has lost the meaning entirely.
 
-A rejected selection, an unreachable API and an absent key all end the same way:
+Between those two, the model writes the sentence. Letting it only *pick*
+pre-rendered phrases would close the same holes, but §4.2[9]'s responsibility is
+"사용자 수준 설명 생성" — labels joined by dots are the card restated, not an
+explanation.
+
+A rejected sentence, an unreachable API and an absent key all end the same way:
 `summary` stays empty and the screen falls back to the sentence it assembles
 itself. Synthesis is the last step and it decorates figures that are already
 decided, so losing it costs prose and never an answer.
@@ -72,26 +80,46 @@ SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
+            "sentence": {
+                "type": "string",
+                "description": "사용자에게 보여줄 한국어 설명. 두 문장 이내.",
+            },
             "figures_used": {
                 "type": "array",
                 "items": {"type": "string"},
                 "minItems": 1,
                 "maxItems": 3,
-                "description": "사용자에게 우선 보여줄 확정 문구를 제공된 문자열 그대로.",
+                "description": "문장에 인용한 수치를, 제공된 문자열 그대로.",
             },
         },
-        "required": ["figures_used"],
+        "required": ["sentence", "figures_used"],
         "additionalProperties": False,
     },
 }
 
 INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석 결과를 설명합니다. 계산은 이미 끝났습니다.
-당신의 일은 아래 「확정된 문구」 중 사용자에게 우선 보여줄 항목을 최대 3개
-선택하는 것뿐입니다. 문구를 다시 쓰거나 새로운 문장을 만들지 마세요.
+당신의 일은 아래 「확정된 수치」를 사람의 문장으로 옮기는 것뿐입니다.
 
-반드시 목록의 문자열을 그대로 `figures_used`에 넣으세요. 숫자·부호·단위·라벨을
-바꾸거나 목록 밖의 결론을 추가할 수 없습니다.
+절대 규칙 — 숫자를 만들지 마세요:
+- 아래 목록에 **문자열 그대로** 있는 숫자만 쓸 수 있습니다. 복사해서 붙이세요.
+- 사칙연산을 하지 마세요. 두 수치를 곱하거나 더해 새 금액을 만들지 마세요.
+- 반올림·근사를 하지 마세요. 100,000을 「10만」으로 바꾸는 것도 위반입니다.
+- 사용자가 질문에 쓴 숫자도 그대로 인용하지 마세요. 목록의 수치를 쓰세요.
+- 숫자에 붙은 단위를 바꾸지 마세요. USD를 KRW로 옮겨 쓸 수 없습니다.
+
+금지되는 문장의 예 (전부 위반):
+- "100,000 USD는 1466.3원 기준 146,630,000원입니다" → 곱셈을 했습니다
+- "약 10만 달러의 노출이 있습니다" → 근사했습니다
+- "순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
+
+좋은 문장의 예:
+- "순노출은 100,000 USD입니다. 불리한 쪽 환율 1361.05까지 가면 원화 수취액이
+  10,525,000 KRW 줄어듭니다."
+
+그 밖에:
+- 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
+- 두 문장 이내로, 담당자가 무엇을 알아야 하는지 말하세요.
 """
 
 
@@ -113,6 +141,62 @@ def digit_runs(text: str) -> set[str]:
     return {match.group().rstrip(".,") for match in _DIGITS.finditer(text)}
 
 
+#: 원 and KRW are the same unit; so are 달러 and USD. A sentence that writes
+#: `10,525,000원` where the figure says `10,525,000 KRW` has not changed
+#: anything, and rejecting it would reject ordinary Korean.
+_UNIT_WORDS = {
+    "USD": "USD", "달러": "USD",
+    "KRW": "KRW", "원": "KRW",
+    "%": "%", "영업일": "영업일",
+}
+
+#: Adjacent means adjacent — at most one space. A wider window read the `원` in
+#: "1361.05까지 가면 원화 수취액이" as that number's unit and rejected a correct
+#: sentence.
+_ADJACENT_UNIT = re.compile(r"\s?(USD|KRW|달러|원|%|영업일)")
+
+
+def units_by_run(text: str) -> dict[str, set[str | None]]:
+    """Which unit each number is wearing, if any."""
+    found: dict[str, set[str | None]] = {}
+    for match in _DIGITS.finditer(text):
+        run = match.group().rstrip(".,")
+        unit = _ADJACENT_UNIT.match(text, match.end())
+        found.setdefault(run, set()).add(
+            _UNIT_WORDS[unit.group(1)] if unit else None
+        )
+    return found
+
+
+#: Words that belong to a rule's verdict, not to a description of figures.
+#:
+#: The digit and unit checks both pass "신고 의무가 없으므로 바로 송금하세요" —
+#: it contains no numbers at all. §5.5 is explicit that a filing duty is never
+#: cleared until the company states its trade structure, so a sentence that
+#: clears it is the model overruling a worker that deliberately stopped. The
+#: same goes for eligibility and for telling anyone what to do: those verdicts
+#: are rendered from their own worker output, in their own sections.
+#:
+#: The synthesis agent describes what was measured. It does not decide, and it
+#: does not instruct.
+VERDICT_WORDS = (
+    "신고", "의무", "면제", "불필요", "해당 없음",
+    "자격", "지원", "보험", "보증", "승인",
+    "하세요", "하시면 됩니다", "권장", "추천", "안전합니다", "문제없",
+)
+
+
+def verdicts(sentence: str) -> list[str]:
+    """Claims in the sentence that only a rule may make.
+
+    A greeting is dropped first: `안녕하세요` contains `하세요`, and the
+    intake path opens with one. Asking someone for a date is instructing them,
+    which is why this is checked on the answer and not on the question.
+    """
+    text = sentence.replace("안녕하세요", "")
+    return [word for word in VERDICT_WORDS if word in text]
+
+
 def check(sentence: str, figures: list[str]) -> str:
     """Empty if the sentence only quotes figures it was given, else the reason.
 
@@ -120,16 +204,21 @@ def check(sentence: str, figures: list[str]) -> str:
     wrote `05영업일` would slip through. Comparing whole runs against whole runs
     is what makes "그대로 인용" mean what it says.
     """
-    allowed = digit_runs(" ".join(figures))
-    invented = sorted(digit_runs(sentence) - allowed)
+    joined = " ".join(figures)
+    invented = sorted(digit_runs(sentence) - digit_runs(joined))
     if invented:
         return "확정된 수치에 없는 숫자: " + ", ".join(invented)
+
+    # A right number wearing the wrong unit is not a quotation. Checking digits
+    # alone let `100,000 USD` be written as `100,000 KRW`, which no arithmetic
+    # check can see — the digits are quoted exactly and the meaning is gone.
+    allowed_units = units_by_run(joined)
+    for run, worn in units_by_run(sentence).items():
+        for unit in worn:
+            if unit is not None and unit not in allowed_units.get(run, set()):
+                return f"단위가 바뀐 수치: {run} {unit}"
+
     return ""
-
-
-def _render_figures(selected: list[str]) -> str:
-    """Render only tool-owned phrases; model-authored prose never reaches UI."""
-    return " · ".join(item.rstrip(" .") for item in selected) + "."
 
 
 def figures(result: dict[str, Any]) -> list[str]:
@@ -188,7 +277,7 @@ def figures(result: dict[str, Any]) -> list[str]:
 INTAKE_INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석을 돕습니다. 아직 계산에 필요한 정보가
 부족한 상태이고, 무엇이 부족한지는 이미 정해져 있습니다. 당신의 일은 그것을
-자연스러운 한국어로 옮기는 것뿐입니다.
+자연스러운 한국어 한두 문장으로 옮기는 것뿐입니다.
 
 규칙:
 - 「물어야 할 것」을 늘리거나 줄이지 마세요. 목록에 있는 것만 물으세요.
@@ -205,18 +294,14 @@ INTAKE_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "acknowledgement": {
-                "type": "string",
-                "enum": ["", "안녕하세요.", "확인했습니다."],
-                "description": "질문 앞에 붙일 짧은 응답.",
-            },
+            "sentence": {"type": "string", "description": "사용자에게 보여줄 한두 문장."},
             "asked_fields": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "이 문장이 실제로 물은 항목의 이름. 목록에서 고르세요.",
             },
         },
-        "required": ["acknowledgement", "asked_fields"],
+        "required": ["sentence", "asked_fields"],
         "additionalProperties": False,
     },
 }
@@ -226,24 +311,6 @@ FIELD_WORDS = {
     "expected_payment_date": "대금을 주고받기로 한 날짜",
     "direction": "수출인지 수입인지",
 }
-
-
-def _render_questions(
-    missing: list[str],
-    *,
-    acknowledgement: str = "",
-    understood: dict[str, Any] | None = None,
-) -> str:
-    """Render the complete deterministic question list selected upstream."""
-    words = [FIELD_WORDS.get(field, field) for field in missing]
-    if len(words) == 1:
-        request = words[0]
-    else:
-        request = ", ".join(words[:-1]) + f", {words[-1]}"
-    prefix = acknowledgement.strip()
-    if not prefix and understood:
-        prefix = "확인했습니다."
-    return f"{prefix + ' ' if prefix else ''}{request}를 알려주세요."
 
 
 class Synthesizer:
@@ -313,16 +380,20 @@ class Synthesizer:
             # what happens next: the screen writes the sentence itself.
             return Synthesis("", False, f"합성 호출 실패: {type(failure).__name__}")
 
-        selected = written.get("figures_used")
-        if (
-            not isinstance(selected, list)
-            or not selected
-            or len(selected) > 3
-            or len(set(selected)) != len(selected)
-            or any(item not in figures for item in selected)
-        ):
-            return Synthesis("", False, "허용되지 않은 확정 문구 선택")
-        return Synthesis(_render_figures(selected), True)
+        sentence = str(written.get("sentence", "")).strip()
+        if not sentence:
+            return Synthesis("", False, "빈 문장")
+
+        broken = check(sentence, figures)
+        if broken:
+            return Synthesis(sentence, False, broken)
+
+        # Only the answer carries this. §4.2[1] asks the user to do something
+        # by definition, and blocking that would block the question itself.
+        claimed = verdicts(sentence)
+        if claimed:
+            return Synthesis(sentence, False, "규칙이 내려야 할 판단: " + ", ".join(claimed))
+        return Synthesis(sentence, True)
 
     def ask_for(
         self,
@@ -377,18 +448,28 @@ class Synthesizer:
         except Exception as failure:  # noqa: BLE001
             return Synthesis("", False, f"되묻기 합성 실패: {type(failure).__name__}")
 
-        claimed = {str(field) for field in written.get("asked_fields", [])}
-        expected = set(missing)
-        if claimed != expected or len(written.get("asked_fields", [])) != len(missing):
-            return Synthesis("", False, "필수 질문 목록이 일치하지 않습니다")
-        acknowledgement = str(written.get("acknowledgement", ""))
-        if acknowledgement not in {"", "안녕하세요.", "확인했습니다."}:
-            return Synthesis("", False, "허용되지 않은 응답 문구")
-        return Synthesis(
-            _render_questions(
-                missing,
-                acknowledgement=acknowledgement,
-                understood=known,
-            ),
-            True,
-        )
+        sentence = str(written.get("sentence", "")).strip()
+        if not sentence:
+            return Synthesis("", False, "빈 문장")
+
+        # Asking may repeat; answering must report. What the user themselves
+        # wrote is quotable here — echoing "10만 달러" back to the person who
+        # just said it is confirmation, not the rounding §4.2[9] forbids. A
+        # third number, belonging to neither the user nor the parse, is still
+        # the model filling a slot instead of asking for it.
+        allowed = [f"{key}: {value}" for key, value in known.items()]
+        if question:
+            allowed.append(question)
+        broken = check(sentence, allowed)
+        if broken:
+            return Synthesis(sentence, False, broken)
+
+        # Every slot the reader found missing, and no others. A model that
+        # dropped one would leave the user answering two questions and waiting
+        # on a third nobody asked; one that added a field is off the list §4.2[1]
+        # fixed. Self-reported, so it catches wandering rather than lying — the
+        # guarantee that matters is upstream, where `missing` was decided.
+        claimed = [str(field) for field in written.get("asked_fields", [])]
+        if set(claimed) != set(missing) or len(claimed) != len(missing):
+            return Synthesis(sentence, False, "필수 질문 목록이 일치하지 않습니다")
+        return Synthesis(sentence, True)
