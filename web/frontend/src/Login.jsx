@@ -23,7 +23,6 @@ export default function Login({ onSignIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
-  const [remember, setRemember] = useState(true);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -56,11 +55,11 @@ export default function Login({ onSignIn }) {
           </b>
         </h1>
         <p className="standfirst reveal" style={{ animationDelay: "430ms" }}>
-          로그인하면 계산한 거래와 적용된 한국은행 기준환율, 기준일이 그대로
-          보관됩니다. 신고의무 확인 결과도 함께 남습니다.
+          로그인하면 기업 정보를 반복해서 입력하지 않아도 같은 기준으로
+          지원제도와 신고의무를 점검할 수 있습니다.
         </p>
         <ul className="signin-points reveal" style={{ animationDelay: "600ms" }}>
-          <li>거래 내역과 산출 근거 보관</li>
+          <li>계정의 기업 사실을 분석에 일관되게 적용</li>
           <li>지원제도·신고의무 자동 점검</li>
           <li>계산은 결정론적 코드가 수행</li>
         </ul>
@@ -70,9 +69,10 @@ export default function Login({ onSignIn }) {
         <h2>로그인</h2>
         <p className="signin-sub">업무용 이메일로 계속하세요.</p>
 
-        <label className="field">
+        <label className="field" htmlFor="login-email">
           <span className="field-top">이메일</span>
           <input
+            id="login-email"
             type="email"
             name="email"
             autoComplete="username"
@@ -82,13 +82,13 @@ export default function Login({ onSignIn }) {
           />
         </label>
 
-        <label className="field">
+        <div className="field">
           <span className="field-top">
-            비밀번호
-            <a href="#" onClick={(e) => e.preventDefault()}>잊으셨나요?</a>
+            <label htmlFor="login-password">비밀번호</label>
           </span>
           <span className="field-box">
             <input
+              id="login-password"
               type={shown ? "text" : "password"}
               name="password"
               autoComplete="current-password"
@@ -107,17 +107,7 @@ export default function Login({ onSignIn }) {
               {shown ? "숨기기" : "표시"}
             </button>
           </span>
-        </label>
-
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          <span className="tickbox" aria-hidden="true" />
-          로그인 상태 유지
-        </label>
+        </div>
 
         {error && (
           <p className="signin-error" role="alert">
@@ -143,9 +133,7 @@ export default function Login({ onSignIn }) {
         </button>
 
         <p className="signin-legal">
-          로그인하면 <a href="#" onClick={(e) => e.preventDefault()}>이용약관</a>과{" "}
-          <a href="#" onClick={(e) => e.preventDefault()}>개인정보 처리방침</a>에
-          동의하는 것으로 봅니다.
+          현재 관리자가 발급한 데모 계정만 지원합니다.
         </p>
       </form>
     </div>

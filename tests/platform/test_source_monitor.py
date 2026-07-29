@@ -38,12 +38,7 @@ class _Response:
 
 
 class CheckAllTests(unittest.TestCase):
-    """One dead host must not decide the freshness of the other fourteen.
-
-    `www.koreaexim.go.kr` serves an incomplete certificate chain today, and
-    before isolation that single failure aborted the whole run — leaving no
-    verification at all, which makes every rule fail closed.
-    """
+    """One dead host must not decide the freshness of other sources."""
 
     def _specs(self) -> tuple[SourceMonitorSpec, ...]:
         return tuple(

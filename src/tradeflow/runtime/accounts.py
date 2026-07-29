@@ -49,6 +49,9 @@ SCRYPT_MAXMEM = 64 * 1024 * 1024
 #: How long a session lives. Long enough that a demo is not interrupted, short
 #: enough that a forgotten browser is not an open door.
 SESSION_DAYS = 14
+MAX_LOGIN_FAILURES = 5
+LOGIN_WINDOW = timedelta(minutes=15)
+LOGIN_LOCK = timedelta(minutes=15)
 
 #: `CompanyProfile` refuses to let attributes shadow these — a fact stated twice
 #: with two values is worse than a fact stated once. They are lifted into the
@@ -72,6 +75,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(account_id),
     expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS login_attempts (
+    identity_hash   TEXT PRIMARY KEY,
+    failed_count    INTEGER NOT NULL,
+    first_failed_at TEXT NOT NULL,
+    locked_until    TEXT
 );
 """
 
@@ -200,7 +209,7 @@ class AccountStore:
         )
         with self._connect() as db:
             db.execute(
-                "INSERT OR REPLACE INTO accounts"
+                "INSERT INTO accounts"
                 " (account_id, email, password, company_name, facts)"
                 " VALUES (?, ?, ?, ?, ?)",
                 (
@@ -213,23 +222,85 @@ class AccountStore:
             )
         return account
 
-    def authenticate(self, email: str, password: str) -> Account | None:
+    def authenticate(
+        self,
+        email: str,
+        password: str,
+        *,
+        now: datetime | None = None,
+    ) -> Account | None:
         """The account, or nothing — and the two failures cost the same.
 
         A missing account still pays for one scrypt hash. Returning early would
         make "no such account" measurably faster than "wrong password", which
         turns the login form into a way to enumerate who has an account here.
         """
+        normalized_email = email.strip().lower()
+        identity_hash = hashlib.sha256(
+            normalized_email.encode("utf-8")
+        ).hexdigest()
+        moment = now or _now()
         with self._connect() as db:
             row = db.execute(
                 "SELECT * FROM accounts WHERE email = ?",
-                (email.strip().lower(),),
+                (normalized_email,),
+            ).fetchone()
+            attempt = db.execute(
+                "SELECT * FROM login_attempts WHERE identity_hash = ?",
+                (identity_hash,),
             ).fetchone()
 
         stored = row["password"] if row else _ABSENT_PASSWORD
-        if not verify_password(password, stored):
-            return None
-        return None if row is None else _account(row)
+        password_valid = verify_password(password, stored)
+        locked = bool(
+            attempt
+            and attempt["locked_until"]
+            and datetime.fromisoformat(attempt["locked_until"]) > moment
+        )
+        if password_valid and row is not None and not locked:
+            with self._connect() as db:
+                db.execute(
+                    "DELETE FROM login_attempts WHERE identity_hash = ?",
+                    (identity_hash,),
+                )
+            return _account(row)
+        if not locked:
+            self._record_login_failure(identity_hash, attempt, now=moment)
+        return None
+
+    def _record_login_failure(
+        self,
+        identity_hash: str,
+        attempt: sqlite3.Row | None,
+        *,
+        now: datetime,
+    ) -> None:
+        first = (
+            datetime.fromisoformat(attempt["first_failed_at"])
+            if attempt
+            else now
+        )
+        if now - first > LOGIN_WINDOW:
+            first = now
+            count = 1
+        else:
+            count = (attempt["failed_count"] if attempt else 0) + 1
+        locked_until = (
+            (now + LOGIN_LOCK).isoformat()
+            if count >= MAX_LOGIN_FAILURES
+            else None
+        )
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO login_attempts"
+                " (identity_hash, failed_count, first_failed_at, locked_until)"
+                " VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(identity_hash) DO UPDATE SET"
+                " failed_count = excluded.failed_count,"
+                " first_failed_at = excluded.first_failed_at,"
+                " locked_until = excluded.locked_until",
+                (identity_hash, count, first.isoformat(), locked_until),
+            )
 
     def find(self, account_id: str) -> Account | None:
         with self._connect() as db:
@@ -246,7 +317,7 @@ class AccountStore:
         with self._connect() as db:
             db.execute(
                 "INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)",
-                (token, account.account_id, expires.isoformat()),
+                (_session_key(token), account.account_id, expires.isoformat()),
             )
         return token
 
@@ -264,7 +335,7 @@ class AccountStore:
                 "SELECT s.expires_at, a.* FROM sessions s"
                 " JOIN accounts a ON a.account_id = s.account_id"
                 " WHERE s.token = ?",
-                (token,),
+                (_session_key(token),),
             ).fetchone()
         if row is None:
             return None
@@ -282,7 +353,7 @@ class AccountStore:
         if not token:
             return
         with self._connect() as db:
-            db.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            db.execute("DELETE FROM sessions WHERE token = ?", (_session_key(token),))
 
 
 #: A real-looking hash that no password matches, so authenticating a
@@ -292,6 +363,10 @@ _ABSENT_PASSWORD = hash_password(secrets.token_urlsafe(32))
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _session_key(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _account(row: sqlite3.Row) -> Account:
