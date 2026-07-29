@@ -184,6 +184,12 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             <p key={question}>{question}</p>
           ))
         )}
+        {/* Most sessions stop on this turn, so the limits of what was asked
+            about belong here too — not only on an answer the reader may never
+            reach. */}
+        {turn.ask.coverage && (
+          <p className="pointer limit">{turn.ask.coverage}</p>
+        )}
       </div>
     );
   }
@@ -282,6 +288,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
           every verdict is rendered from its own worker's output below. */}
       {shown > words && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
+      )}
+
+      {/* What the subject they raised is not covered by. Nothing above is
+          false without it; what is missing is the sentence that stops the
+          reader waiting for an answer that is not coming. */}
+      {shown > words && result.coverage && (
+        <p className={`pointer limit${arrive}`}>{result.coverage}</p>
       )}
 
       {shown > words && (

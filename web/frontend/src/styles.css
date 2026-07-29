@@ -861,6 +861,11 @@
   /* A line about the answer, not part of it. Quieter than the sentence and
      louder than the folds it points at. */
   .pointer { margin: -.4rem 0 0; font-size: .8125rem; color: var(--ink-45); }
+  /* An admission reads differently from a summary. Marked by an edge rather
+     than by colour — the palette has one accent and it belongs to the figures. */
+  .pointer.limit {
+    border-left: 2px solid var(--rule); padding-left: .7rem; margin-top: .1rem;
+  }
 
   /* ---------- verdicts ---------- */
   /* One judgement per row. The palette has no green/amber/red to lean on, so

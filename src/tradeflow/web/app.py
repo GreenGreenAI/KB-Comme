@@ -43,7 +43,9 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
+from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
@@ -363,6 +365,11 @@ def analyze_endpoint(
         return {
             "status": "needs_input",
             "understood": heard,
+            # What the subject they raised is, and is not, covered by. Said
+            # here as well as on the answer because most sessions stop here —
+            # a company asking about 제작 자금 should not have to supply an
+            # amount and a date to find out we do not look at 수출입은행 자금.
+            "coverage": _coverage(request.utterance),
             # §4.2[1] in words. `questions` stays — the request panel pairs a
             # field with its own wording, and this one sentence covers all
             # three at once. What is asked for is still decided by the slot
@@ -412,11 +419,29 @@ def analyze_endpoint(
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
     result["pointer"] = pointer(result)
+    result["coverage"] = _coverage(request.utterance)
     return {
         "status": "ready",
         "understood": heard,
         "result": result,
     }
+
+
+def _coverage(utterance: str | None) -> str:
+    """The limits of whatever the user just asked about.
+
+    Only for the subject they raised. Reciting every limit on every turn
+    teaches the reader to skip the line, and then it is not there on the turn
+    that needed it — §4.2[2] already reads the subject, so this follows it.
+    """
+    if not utterance:
+        return ""
+    # Every subject the sentence named, not just the first. "베트남에 수출하는데
+    # 정책자금이 있을까요" reads as (exposure, support) — exposure leads because
+    # 수출 comes first — and taking only the lead said nothing about the half
+    # of the question we cannot answer.
+    said = [coverage_statement(section) for section in read_intent(utterance)]
+    return " ".join(line for line in said if line)
 
 
 def _hedge_measures(
