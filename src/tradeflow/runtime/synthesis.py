@@ -56,6 +56,16 @@ TEMPERATURE = 0.0
 #: inside it. The sign is part of the value: dropping `-` is not a paraphrase.
 _DIGITS = re.compile(r"[+-]?\d[\d,.]*")
 
+#: JSON Schema keywords Upstage's structured-output validator rejects outright.
+#: `uniqueItems` was in both schemas and every call came back 400, so the model
+#: contributed nothing at all — `summary` and `spoken` were empty on every
+#: request while the screen quietly used its own sentences. Uniqueness is
+#: cheaper to enforce here than to ask the server for.
+#:
+#: The lesson is the reason this file now has a live-call test: a schema that
+#: cannot be validated without a key is a schema nobody validated.
+UNSUPPORTED_SCHEMA_KEYWORDS = ("uniqueItems",)
+
 SCHEMA = {
     "name": "summary",
     "strict": True,
@@ -67,7 +77,6 @@ SCHEMA = {
                 "items": {"type": "string"},
                 "minItems": 1,
                 "maxItems": 3,
-                "uniqueItems": True,
                 "description": "사용자에게 우선 보여줄 확정 문구를 제공된 문자열 그대로.",
             },
         },
@@ -356,7 +365,6 @@ class Synthesizer:
         schema["schema"]["properties"]["asked_fields"]["items"]["enum"] = missing
         schema["schema"]["properties"]["asked_fields"]["minItems"] = len(missing)
         schema["schema"]["properties"]["asked_fields"]["maxItems"] = len(missing)
-        schema["schema"]["properties"]["asked_fields"]["uniqueItems"] = True
         try:
             completion = self._open().chat.completions.create(
                 model=self.model,
