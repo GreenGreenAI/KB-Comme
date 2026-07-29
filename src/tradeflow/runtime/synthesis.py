@@ -50,16 +50,34 @@ from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 from typing import Any
 
-#: Pinned, not the `solar-pro3` alias. The alias resolves to a dated build today
-#: and to a different one whenever Upstage ships — §6.2 asks that the same
-#: analysis re-run produce the same packet, and a model that changes under a
-#: stable name cannot be recorded honestly in `calculation_versions`.
-DEFAULT_MODEL = "solar-pro3-260323"
+#: Pinned, not an alias. An alias resolves to a dated build today and to a
+#: different one whenever Upstage ships — §6.2 asks that the same analysis
+#: re-run produce the same packet, and a model that changes under a stable name
+#: cannot be recorded honestly in `calculation_versions`.
+#:
+#: pro2 rather than pro3, on measurement. The same intake call, three runs each:
+#:
+#:   solar-pro3-260323   19.1 / 19.2 / 17.1 s
+#:   solar-pro2-251215    0.8 / 0.7  / 0.6  s
+#:   solar-mini-250422    0.4 / 0.5  / 0.4  s
+#:
+#: Twenty-five times, for a sentence of the same quality. A greeting took
+#: seventeen seconds to answer, and the client's pacing has no way to hide
+#: that — the trace budget is a floor on the wait, not a ceiling on it.
+DEFAULT_MODEL = "solar-pro2-251215"
 DEFAULT_BASE_URL = "https://api.upstage.ai/v1"
 
 #: Deterministic decoding. Prose that changes between two identical analyses
 #: would make the answer look recalculated when nothing moved.
 TEMPERATURE = 0.0
+
+#: How long an answer may wait on prose. Synthesis decorates figures that are
+#: already decided, so a slow model must cost the sentence and not the answer —
+#: past this the screen writes its own, which it can do instantly.
+#:
+#: This exists because the model choice above was wrong and nothing caught it.
+#: A ceiling holds whoever is behind the endpoint next.
+TIMEOUT_S = 6.0
 
 #: Any signed run of digits, with the separators a formatted figure carries
 #: inside it. The sign is part of the value: dropping `-` is not a paraphrase.
@@ -434,6 +452,7 @@ class Synthesizer:
                 response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
                 max_tokens=400,
+                timeout=TIMEOUT_S,
             )
             written = json.loads(completion.choices[0].message.content or "{}")
         except Exception as failure:  # noqa: BLE001 — any failure is the same failure
@@ -507,6 +526,7 @@ class Synthesizer:
                 response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
                 max_tokens=300,
+                timeout=TIMEOUT_S,
             )
             written = json.loads(completion.choices[0].message.content or "{}")
         except Exception as failure:  # noqa: BLE001

@@ -6,6 +6,7 @@ from tradeflow.runtime.synthesis import (
     Synthesizer,
     check,
     digit_runs,
+    TIMEOUT_S,
     figures,
     redact,
     verdicts,
@@ -214,6 +215,35 @@ class PromptHygieneTests(unittest.TestCase):
             "베트남에 일정 금액 규모 장비를 수출합니다.",
         )
         self.assertNotIn("100,000", redact("10만 달러를 송금합니다."))
+
+
+class CeilingTests(unittest.TestCase):
+    def test_a_slow_model_costs_the_sentence_and_not_the_answer(self) -> None:
+        """Synthesis decorates figures that are already decided. The default
+        model was answering a greeting in seventeen seconds and nothing caught
+        it — the client's trace budget is a floor on the wait, not a ceiling,
+        so the whole seventeen showed up on screen."""
+        synthesizer = Synthesizer(api_key="x")
+
+        def slow(**_):
+            raise TimeoutError("timed out")
+
+        synthesizer._client = type(
+            "C", (), {"chat": type("M", (), {"completions": type("K", (), {"create": staticmethod(slow)})()})()}
+        )()
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+        self.assertIn("실패", written.reason)
+
+    def test_the_request_carries_a_deadline(self) -> None:
+        synthesizer, completions = synthesizer_returning(
+            {"figures_used": ["순노출: 100,000 USD"], "sentence": "순노출은 100,000 USD입니다."}
+        )
+        synthesizer.write(FIGURES)
+        self.assertEqual(TIMEOUT_S, completions.request["timeout"])
 
 
 class IntakePhrasingTests(unittest.TestCase):
