@@ -13,3 +13,6 @@ data/runtime/
 
 node_modules/
 web/frontend/dist/
+
+# Accounts are seeded locally, never committed — the file holds password hashes.
+data/accounts.db

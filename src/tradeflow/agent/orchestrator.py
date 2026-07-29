@@ -180,6 +180,17 @@ def _default_knowledge_files() -> tuple[InputFile, ...]:
 
 
 STRUCTURE_EVIDENCE_ID = "TRADEFLOW_DERIVED_STRUCTURE"
+DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
+
+#: The company facts §5.4's eligibility rules will not read without evidence.
+#: Everything else on the profile reaches the rulepack conditions directly; these
+#: three go through `KsureCaseProfile`, which refuses a fact that cannot say
+#: where it came from.
+DECLARED_COMPANY_FIELDS = (
+    "company.size",
+    "company.credit_issue_free",
+    "company.ksure_exporter_grade",
+)
 
 
 def _structure_assertions(
@@ -213,6 +224,56 @@ def _structure_assertions(
         case_id: tuple(
             FactAssertion(field, value, (STRUCTURE_EVIDENCE_ID,))
             for field, value in structure.items()
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
+def _declared_company_assertions(
+    program: TradeProgram,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the company facts the company itself stated.
+
+    These arrive from the signed-in account, which is to say from the company.
+    That is a weaker kind of evidence than a snapshot of an official source, so
+    it has its own role instead of borrowing `SUPPORT_ELIGIBILITY`. The fact
+    assembler may use it to produce a candidate, while the pipeline keeps the
+    authoritative evidence requirement open and forces review. A judgement
+    resting on it still carries `review_required`, because
+    "우리는 중소기업입니다"라는 자기 선언으로 보험 자격을 확정할 수는 없다.
+
+    An unstated fact produces no assertion at all — the rules then report it as
+    missing, which is the answer, not a gap to be filled with `False`.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    facts = program.company.facts()
+    declared = {
+        field: facts[field]
+        for field in DECLARED_COMPANY_FIELDS
+        if facts.get(field) is not None
+    }
+    if not declared:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        DECLARED_COMPANY_EVIDENCE_ID,
+        EvidenceRole.USER_DECLARATION,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(declared),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 계정에 직접 입력한 사실",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (DECLARED_COMPANY_EVIDENCE_ID,))
+            for field, value in declared.items()
         )
         for case_id in case_ids
     }
@@ -284,9 +345,18 @@ def analyze(
         pipeline = knowledge_pipeline or _knowledge_pipeline(
             tuple(PACK_FOR_WORKER[name] for name in knowledge_workers)
         )
+        evaluated_at_utc = as_of or datetime.now(UTC)
         assertions, structure_evidence = _structure_assertions(
-            program, structure, as_of=as_of or datetime.now(UTC)
+            program, structure, as_of=evaluated_at_utc
         )
+        declared, declared_evidence = _declared_company_assertions(
+            program, as_of=evaluated_at_utc
+        )
+        assertions = {
+            case_id: (*assertions.get(case_id, ()), *declared.get(case_id, ()))
+            for case_id in {*assertions, *declared}
+        }
+        structure_evidence = (*structure_evidence, *declared_evidence)
         decision_packet = _isolated(
             report,
             "knowledge",

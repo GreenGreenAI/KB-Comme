@@ -36,6 +36,7 @@ last-reviewed: 2026-07-27
 | [ADR-0023](0023-user-declared-compliance-gates.md) | proposed | 사용자 확정 진술로 규정 적용 관문만 입력하는 계약 |
 | [ADR-0024](0024-user-confirmed-forward-quote-availability.md) | proposed | 사용자 확인 선물환 호가의 범위·최신성·가용성 계약 |
 | [ADR-0025](0025-hedge-model-champion-challenger-governance.md) | proposed | 헤지 모델 champion/challenger 거버넌스 |
+| [ADR-0026](0026-accounts-as-the-source-of-company-facts.md) | proposed | 계정은 관문이 아니라 기업 사실의 출처 |
 
 ## 운영 규칙
 

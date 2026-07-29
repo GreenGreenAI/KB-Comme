@@ -20,6 +20,29 @@
     --wash: color-mix(in srgb, var(--soft) 16%, #fff);
     --wash-2: color-mix(in srgb, var(--ink) 7%, #fff);
 
+    /* One focus language for every field in the product: a single muted line
+       that fades out instead of stopping.
+
+       A fully saturated accent border reads as an error rather than as focus —
+       the composer is 1130px wide, and a hard coloured rectangle that size is
+       what a form says when something is wrong. The weight went to two pixels
+       for a while to compensate, but that was propping up a line whose edge
+       was cut; once the edge fades, one pixel carries it and two are heavy.
+
+       What makes it one effect rather than two is that the fade is the line's
+       own colour losing its alpha — not a separate accent wash — and that its
+       outer edge is blurred rather than cut. A hard band of a different mix
+       beside a hard line reads as two things that happened to land in the same
+       place; one colour going to nothing reads as one.
+
+       All of it past the border is shadow, never border-width. Growing the
+       border on focus would shrink the padding box under it and nudge the text
+       sideways every time the field is entered; a shadow is drawn outside the
+       box and moves nothing. */
+    --focus-line: color-mix(in srgb, var(--accent) 65%, var(--rule));
+    --focus-ring: 0 0 0 1px color-mix(in srgb, var(--focus-line) 46%, transparent),
+                  0 0 4px 1px color-mix(in srgb, var(--focus-line) 26%, transparent);
+
     --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
             0 8px 26px color-mix(in srgb, var(--ink) 7%, transparent);
     --lift-lg: 0 2px 4px color-mix(in srgb, var(--ink) 8%, transparent),
@@ -138,9 +161,221 @@
     font-style: normal; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
   }
   .menu a.saved em { color: var(--accent); }
+  /* The company facts the analysis will receive, listed as facts. Chips rather
+     than rows because they are a set, not a menu — there is nothing to click. */
+  .menu-facts {
+    display: flex; flex-wrap: wrap; gap: .3rem; padding: .35rem .65rem .1rem;
+  }
+  .menu-facts span {
+    font-size: .6875rem; line-height: 1.5; color: var(--ink-70);
+    padding: .18rem .5rem; border-radius: 999px;
+    background: var(--tint); border: 1px solid var(--rule-faint);
+  }
+  .menu-facts .none { background: none; border-color: transparent; color: var(--ink-45); }
+
   .menu hr { border: none; border-top: 1px solid var(--rule-faint); margin: .35rem 0; }
   .menu .note {
     margin: .1rem .65rem .5rem; font-size: .6875rem; color: var(--ink-45); line-height: 1.55;
+  }
+
+  /* ---------- sign in ---------- */
+  /* Two halves: why an account is worth having, and the form. The copy side
+     is given the wider column because it is the part that has to be read; the
+     form is a fixed, familiar width and does not want to be larger. */
+  .signin {
+    width: min(1180px, calc(100% - 2.5rem)); margin: 0 auto;
+    padding: clamp(2rem, 7vh, 5rem) 0 3rem;
+    display: grid; grid-template-columns: 1fr 25.5rem; gap: clamp(2rem, 6vw, 5rem);
+    /* Its own scroll, because the page has none. `html, body` are locked to
+       the viewport so the conversation never grows a second scrollbar — which
+       means a form taller than a short window would simply be cut off with no
+       way to reach the button. `safe` gives up centring rather than centring
+       something too tall and pushing its head off the top. */
+    align-items: safe center;
+    height: calc(100dvh - 5.25rem); overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+  }
+  .signin-say { display: flex; flex-direction: column; gap: 1.15rem; }
+  /* Heavier than the entry hero. That one opens onto an empty input and wants
+     to be quiet; this one is competing with a form for the first look, and a
+     300-weight line loses that. */
+  .signin .hero { font-size: clamp(2.4rem, 4.6vw, 3.5rem); font-weight: 700; }
+  .signin .hero b { font-weight: 700; }
+  .signin-points {
+    margin: .35rem 0 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: .55rem;
+    color: var(--ink-70); font-size: .9375rem;
+  }
+  /* Drawn rather than a bullet character: a list marker inherits the text
+     colour and cannot carry the accent without colouring the line with it. */
+  .signin-points li { display: flex; align-items: baseline; gap: .65rem; }
+  .signin-points li::before {
+    content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent); transform: translateY(-2px);
+  }
+
+  .signin-card {
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 18px;
+    box-shadow: var(--lift-lg); padding: 1.9rem 1.75rem 1.6rem;
+    display: flex; flex-direction: column; gap: .85rem;
+    /* One piece, arriving a beat after the first line of the copy. Its
+       contents do not stagger — a field that fades in is a field the hand has
+       to wait for, and the cursor is already in this box. */
+    animation: card-in .55s cubic-bezier(.16,.84,.44,1) 140ms backwards;
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(16px) scale(.985); }
+    to { opacity: 1; transform: none; }
+  }
+  .signin-card h2 { margin: 0; font-size: 1.375rem; letter-spacing: -.02em; }
+  .signin-sub { margin: -.5rem 0 .35rem; color: var(--ink-45); font-size: .875rem; }
+
+  .field { display: flex; flex-direction: column; gap: .4rem; }
+  .field-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .75rem;
+    font-size: .8125rem; font-weight: 600; color: var(--ink-70);
+  }
+  .field-top a { color: var(--ink-45); font-weight: 400; text-decoration: none; }
+  .field-top a:hover { color: var(--accent); }
+  .field input, .field-box {
+    width: 100%; background: var(--tint); border: 1px solid transparent;
+    border-radius: 10px; padding: .7rem .85rem; font-size: .9375rem;
+    transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+  }
+  .field input { outline: none; }
+  .field input::placeholder { color: var(--ink-45); }
+  /* The box takes the focus ring so the reveal button inside it is included —
+     a ring around only the text half would read as two controls. */
+  .field-box { display: flex; align-items: center; gap: .5rem; padding-right: .5rem; }
+  .field-box input { background: none; border: 0; padding: 0; border-radius: 0; }
+  /* Three things move together, and none of them alone is the signal. The
+     fill lifts to white, the transparent resting border takes the softened
+     line, and the halo appears. Dropping the line entirely made focus
+     invisible on a white card; keeping it at full accent made a lone coloured
+     rectangle that read as a validation error. */
+  .field > input:focus, .field-box:focus-within {
+    background: var(--paper); border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
+  }
+  .peek {
+    flex: none; background: none; border: 0; cursor: pointer; padding: .25rem .4rem;
+    font-size: .75rem; color: var(--ink-45); border-radius: 6px;
+  }
+  .peek:hover { color: var(--accent); background: var(--tint); }
+
+  /* The native box is kept for the keyboard and for the label click; what is
+     drawn is the square beside it. */
+  .check {
+    display: flex; align-items: center; gap: .55rem; cursor: pointer;
+    font-size: .875rem; color: var(--ink-70); margin: .15rem 0 .3rem;
+  }
+  .check input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .tickbox {
+    flex: none; width: 17px; height: 17px; border-radius: 5px;
+    border: 1.5px solid var(--rule); background: var(--paper);
+    display: grid; place-items: center;
+    transition: background .14s ease, border-color .14s ease;
+  }
+  .tickbox::after {
+    content: ""; width: 9px; height: 5px; margin-top: -2px;
+    border-left: 2px solid var(--paper); border-bottom: 2px solid var(--paper);
+    transform: rotate(-45deg) scale(.6); opacity: 0;
+    transition: transform .16s cubic-bezier(.16,.84,.44,1), opacity .12s ease;
+  }
+  .check input:checked + .tickbox { background: var(--accent); border-color: var(--accent); }
+  .check input:checked + .tickbox::after { transform: rotate(-45deg) scale(1); opacity: 1; }
+  .check input:focus-visible + .tickbox { box-shadow: var(--focus-ring); }
+
+  .signin-go {
+    background: var(--accent); color: var(--paper); border: 0; cursor: pointer;
+    border-radius: 10px; padding: .8rem 1rem; font-size: .9375rem; font-weight: 600;
+    transition: background .14s ease, transform .1s ease;
+  }
+  .signin-go:hover { background: var(--accent-deep); }
+  .signin-go:active { transform: scale(.99); }
+
+  /* A rule with a word in it, drawn as one element so the two halves can never
+     fall out of alignment. */
+  .or {
+    display: flex; align-items: center; gap: .8rem; margin: .5rem 0 .1rem;
+    font-size: .75rem; color: var(--ink-45);
+  }
+  .or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--rule-faint); }
+
+  .signin-alt {
+    background: var(--paper); border: 1px solid var(--rule); cursor: pointer;
+    border-radius: 10px; padding: .72rem 1rem; font-size: .9375rem; font-weight: 600;
+    transition: border-color .14s ease, color .14s ease, transform .1s ease;
+  }
+  .signin-alt:hover { border-color: var(--accent); color: var(--accent); }
+  .signin-alt:active { transform: scale(.99); }
+
+  /* One message for both failures, so it is a statement rather than a hint
+     about which half was wrong. */
+  .signin-error {
+    margin: -.2rem 0 0; font-size: .8125rem; color: var(--accent);
+    padding: .55rem .7rem; border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 7%, #fff);
+  }
+  .signin-alt:disabled, .nav-cta:disabled {
+    color: var(--ink-45); border-color: var(--rule-faint);
+    cursor: default; box-shadow: none;
+  }
+  .signin-alt:disabled:hover, .nav-cta:disabled:hover {
+    border-color: var(--rule-faint); color: var(--ink-45);
+  }
+
+  .signin-legal {
+    margin: .6rem 0 0; font-size: .75rem; line-height: 1.6; color: var(--ink-45);
+  }
+  .signin-legal a { color: var(--accent); text-decoration: none; }
+  .signin-legal a:hover { text-decoration: underline; }
+
+  /* One column below the split: the copy still reads first, the form follows. */
+  @media (max-width: 900px) {
+    .signin {
+      grid-template-columns: 1fr; gap: 2.25rem;
+      padding-top: clamp(1.5rem, 5vh, 3rem);
+    }
+    .signin-card { max-width: 25.5rem; width: 100%; }
+  }
+
+  /* The invitation for someone with no account. Sits where the avatar does. */
+  .nav-invite { display: flex; align-items: center; gap: .85rem; }
+  .nav-invite span { font-size: .875rem; color: var(--ink-70); }
+
+  /* ---------- notices ---------- */
+  /* Under the bar, centred, above everything. Fixed rather than in the flow:
+     these arrive at moments nobody chose, and pushing the page down under the
+     reader's cursor is its own small failure. Centred because the bar is
+     centred — a notice hanging off one edge reads as belonging to whatever is
+     under that edge. */
+  .notices {
+    position: fixed; top: 5.25rem; left: 50%; transform: translateX(-50%);
+    z-index: 60; display: flex; flex-direction: column; gap: .5rem;
+    width: min(34rem, calc(100% - 2.5rem)); pointer-events: none;
+  }
+  .notice {
+    pointer-events: auto;
+    display: flex; align-items: flex-start; gap: .75rem;
+    padding: .7rem .7rem .7rem 1rem; border-radius: 12px;
+    background: var(--paper); border: 1px solid var(--accent);
+    box-shadow: var(--lift-lg);
+    font-size: .875rem; line-height: 1.55; color: var(--ink);
+  }
+  .notice span { flex: 1; }
+  .notice button {
+    flex: none; background: none; border: 0; cursor: pointer; padding: .1rem .3rem;
+    color: var(--ink-45); font-size: .75rem; border-radius: 6px; line-height: 1.4;
+  }
+  .notice button:hover { color: var(--accent); background: var(--tint); }
+  /* Comes from above, where it is. Notices.jsx takes the class off once the
+     fade has had its time, so a stalled animation cannot leave a warning at
+     zero opacity — the one failure a warning cannot afford. */
+  .notice-in { animation: notice-in .32s cubic-bezier(.16,.84,.44,1); }
+  @keyframes notice-in {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: none; }
   }
 
   /* ---------- state machine ---------- */
@@ -236,6 +471,9 @@
     display: flex; flex-direction: column; gap: 1.4rem;
     scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
   }
+  /* Cancels the column gap it would otherwise inherit, so an empty spacer
+     really is worth nothing. */
+  .tail { flex: none; margin-top: -1.4rem; }
   .thread::-webkit-scrollbar { width: 9px; }
   .thread::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 99px; border: 3px solid var(--paper); }
   .composer { flex: none; }
@@ -291,8 +529,8 @@
   /* The whole surface responds, not just the field inside it — the box is
      what the user is aiming at. */
   .composer-box:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .composer-box textarea {
     display: block; width: 100%; border: none; background: none; resize: none;
@@ -342,6 +580,17 @@
     border-radius: 12px;
     background: color-mix(in srgb, var(--accent) 4%, #fff);
   }
+  /* It comes in the way the answer does, and from just below where it lands —
+     the request is the end of the agent's turn, not a piece of chrome that
+     appeared under it. AskBar takes the class off again once the fade has had
+     its time, so a stalled animation cannot leave the panel invisible with
+     the only controls the user needs inside it. */
+  .ask-in { animation: ask-in .36s cubic-bezier(.16,.84,.44,1); }
+  @keyframes ask-in {
+    from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+
   /* The question itself, not a field name. The thread has scrolled on by the
      time the user looks down here, so the panel repeats what is being asked
      rather than labelling the box "금액 (USD)". */
@@ -360,8 +609,8 @@
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .money:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .money i, .money em {
     font-style: normal; font-family: var(--mono); font-size: .75rem;
@@ -418,8 +667,8 @@
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .ask input:focus, .ask select:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--focus-line);
+    box-shadow: var(--focus-ring);
   }
   .ask-row > button, .ask > button {
     cursor: pointer; background: var(--accent); color: #fff; border: none;
@@ -474,32 +723,53 @@
     display: flex; align-items: center; gap: .5rem; margin: 0;
     font-size: .8125rem; line-height: 1.5; color: var(--ink-70);
   }
-  /* Each step replaces the last, so the swap is what needs marking. It lifts
-     and brightens rather than fading in from nothing — a step nobody can read
-     is worse than one that arrives without ceremony. */
-  .step { animation: step-in .26s cubic-bezier(.22,.9,.3,1); }
+  /* Each step replaces the last, so the swap is what needs marking, and it
+     does so with the same gesture the answer uses.
+
+     It opens at 0.35 rather than at nothing, unlike the answer. The answer can
+     start from zero because the turn takes its motion classes off once the
+     fade has had its time; a step has no such moment — it is replaced by the
+     next one and never settles — so a stalled animation would leave the only
+     line on screen invisible. */
+  .step { animation: step-in .42s cubic-bezier(.16,.84,.44,1); }
   @keyframes step-in {
-    from { opacity: .25; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
+    from { opacity: .35; transform: translateY(5px); filter: blur(2px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
   }
 
-  /* The sentence writes itself, a word at a time. Words start faint rather
-     than absent for the same reason: an animation that never advances holds
-     its opening frame, and at 0.2 that frame is still legible. */
   /* One gesture for every part of an arriving answer: the trace lines, the
-     card's rows, the band. Each carries its own delay so the answer lands top
-     to bottom instead of the middle writing itself under a finished card. */
-  .arrive { animation: arrive .34s cubic-bezier(.22,.9,.3,1) backwards; }
+     sentence's words, the card, the band.
+
+     Each part can fade up from nothing because arrival is mounting: a part
+     whose turn has not come is not in the document at all, so a fade here
+     cannot leave a ghost of the finished answer on screen ahead of itself —
+     which is exactly what an opacity that started before the mount did.
+
+     Softness comes from three things together, not from a longer duration
+     alone: the fade outlasts the gap to the next part, so several are always
+     in flight; the easing decelerates hard at the end rather than arriving at
+     a constant rate; and a little blur clearing to nothing keeps the first
+     frames from having a hard edge to snap out of. */
+  .arrive { animation: arrive .52s cubic-bezier(.16,.84,.44,1); }
   @keyframes arrive {
-    from { opacity: .2; transform: translateY(5px); }
-    to { opacity: 1; transform: none; }
+    from { opacity: 0; transform: translateY(9px); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
   }
 
-  .written .w { animation: word .3s ease backwards; }
+  .written .w { display: inline-block; }
+  .written.writing .w { animation: word .44s cubic-bezier(.16,.84,.44,1); }
   .w.em { color: var(--accent); font-weight: 600; }
   @keyframes word {
-    from { opacity: .2; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: translateY(5px); filter: blur(3px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+
+  /* Motion is the whole point of the effect, so there is nothing to soften
+     for a reader who has asked for less of it — the content simply is where
+     it belongs, at once. */
+  @media (prefers-reduced-motion: reduce) {
+    .arrive, .written.writing .w, .step, .ask-in,
+    .reveal, .signin-card, .notice-in { animation: none; }
   }
 
   .think { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; color: var(--ink-45); }

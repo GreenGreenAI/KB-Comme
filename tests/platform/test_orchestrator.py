@@ -20,6 +20,7 @@ from tradeflow.domain.enums import (
     HedgeMeasureCategory,
 )
 from tradeflow.domain.models import HedgeMeasure
+from tradeflow.domain.models import CompanyProfile
 from tradeflow.domain.snapshot_file import content_hash
 
 KST = timezone(timedelta(hours=9))
@@ -243,6 +244,32 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("support", analysis.report.completed)
         self.assertIsNotNone(analysis.decision_packet)
         self.assertTrue(analysis.review_required)
+
+    def test_company_declarations_never_masquerade_as_official_evidence(self) -> None:
+        company = CompanyProfile(
+            "COMPANY-HANBIT",
+            "한빛정밀",
+            is_sme=True,
+            attributes={
+                "company.size": "small",
+                "company.credit_issue_free": True,
+                "company.ksure_exporter_grade": "A",
+            },
+        )
+        program = intake(CASES, company=company, as_of=AS_OF).program
+
+        analysis = analyze(program, snapshot_root=self.root, as_of=NOW)
+
+        declared = next(
+            item
+            for item in analysis.decision_packet.evidence
+            if item.evidence_id == "TRADEFLOW_COMPANY_DECLARED"
+        )
+        self.assertEqual("user_declaration", declared.role.value)
+        self.assertTrue(analysis.review_required)
+        self.assertTrue(
+            any("자기선언" in reason for reason in analysis.review_reasons)
+        )
 
     def test_without_a_profile_the_support_worker_states_what_it_needs(self) -> None:
         analysis = analyze(_program(), snapshot_root=self.root, as_of=NOW)

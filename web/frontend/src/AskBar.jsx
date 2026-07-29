@@ -12,6 +12,9 @@ import { useEffect, useRef, useState } from "react";
  *  conversation. This keeps the *control*.
  */
 
+/** A hair over the .ask-in animation in styles.css. */
+const ASK_IN_MS = 420;
+
 const FALLBACK_QUESTION = {
   amount: "거래 금액이 얼마인가요?",
   expected_payment_date: "대금을 주고받기로 한 날짜가 언제인가요?",
@@ -26,13 +29,13 @@ const DIRECTION_OPTIONS = [
 export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
   if (pending?.status === "needs_placement") {
     return (
-      <Ask label="어느 거래인가요">
+      <Ask key="placement" label="어느 거래인가요">
         <ChoiceList
           options={pending.options.map((option) => ({
             value: option.placement,
             label: option.label,
           }))}
-          onPick={(value) => onPlace(pending.utterance, value)}
+          onPick={(value, label) => onPlace(pending.utterance, value, label)}
         />
       </Ask>
     );
@@ -52,10 +55,10 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (slot === "direction") {
     return (
-      <Ask label={question}>
+      <Ask key={`direction:${question}`} label={question}>
         <ChoiceList
           options={DIRECTION_OPTIONS}
-          onPick={(value) => onSlot({ case: { direction: value } })}
+          onPick={(value, label) => onSlot({ case: { direction: value } }, label)}
         />
       </Ask>
     );
@@ -63,7 +66,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (slot) {
     return (
-      <Ask label={question}>
+      <Ask key={`slot:${slot}`} label={question}>
         <SlotField slot={slot} onSlot={onSlot} />
       </Ask>
     );
@@ -71,7 +74,7 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
 
   if (requiredInputs?.length > 0) {
     return (
-      <Ask label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
+      <Ask key="profit" label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
         <ProfitFields onSlot={onSlot} />
       </Ask>
     );
@@ -80,9 +83,30 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
   return null;
 }
 
+/** The request panel, and the way it comes in.
+ *
+ *  It arrives with the same gesture the answer uses — it is the end of the
+ *  agent's turn, not a separate piece of chrome that appeared underneath.
+ *
+ *  The class comes back off once the fade has had its time. An animation that
+ *  is applied but never advances holds its opening frame, and here that frame
+ *  is an invisible panel with the only controls the user needs in it. Every
+ *  call site keys this on the question, so a new question is a new panel and
+ *  arrives rather than silently swapping its contents.
+ */
 function Ask({ label, children }) {
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), ASK_IN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="ask" role="group" aria-label={label}>
+    <div
+      className={entered ? "ask" : "ask ask-in"}
+      role="group"
+      aria-label={label}
+    >
       <p className="ask-label">{label}</p>
       {children}
     </div>
@@ -108,7 +132,7 @@ function ChoiceList({ options, onPick }) {
     const index = Number(event.key) - 1;
     if (index >= 0 && index < options.length) {
       event.preventDefault();
-      onPick(options[index].value);
+      onPick(options[index].value, options[index].label);
       return;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -119,7 +143,7 @@ function ChoiceList({ options, onPick }) {
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      onPick(options[active].value);
+      onPick(options[active].value, options[active].label);
     }
   }
 
@@ -142,7 +166,7 @@ function ChoiceList({ options, onPick }) {
           className={`choice ${index === active ? "on" : ""}`}
           tabIndex={-1}
           onMouseEnter={() => setActive(index)}
-          onClick={() => onPick(option.value)}
+          onClick={() => onPick(option.value, option.label)}
         >
           <span className="choice-key">{index + 1}</span>
           <span className="choice-label">{option.label}</span>
@@ -169,7 +193,7 @@ function SlotField({ slot, onSlot }) {
 
   if (slot === "amount") return <AmountField onSlot={onSlot} />;
 
-  const submit = () => value && onSlot({ case: { [slot]: value } });
+  const submit = () => value && onSlot({ case: { [slot]: value } }, value);
 
   return (
     <div className="ask-row">
@@ -190,6 +214,8 @@ function SlotField({ slot, onSlot }) {
 
 const GROUPED = /\B(?=(\d{3})+(?!\d))/g;
 
+const group = (raw) => raw.replace(/^(\d+)/, (whole) => whole.replace(GROUPED, ","));
+
 /** An amount, shown the way it is read.
  *
  *  Six digits in a row are hard to check at a glance, which matters when the
@@ -200,16 +226,15 @@ const GROUPED = /\B(?=(\d{3})+(?!\d))/g;
 function AmountField({ onSlot }) {
   const [raw, setRaw] = useState("");
   const focus = useAutoFocus();
-  const submit = () => raw && onSlot({ case: { amount: raw } });
+  const submit = () =>
+    raw && onSlot({ case: { amount: raw } }, `${group(raw)} USD`);
 
   function onChange(event) {
     const digits = event.target.value.replace(/[^\d.]/g, "");
     setRaw(digits);
   }
 
-  const shown = raw
-    ? raw.replace(/^(\d+)/, (whole) => whole.replace(GROUPED, ","))
-    : "";
+  const shown = raw ? group(raw) : "";
   const spoken = raw ? readable(raw) : null;
 
   return (
@@ -254,7 +279,10 @@ function ProfitFields({ onSlot }) {
   const submit = () =>
     baseline &&
     floor &&
-    onSlot({ profile: { baseline_profit: baseline, profit_floor: floor } });
+    onSlot(
+      { profile: { baseline_profit: baseline, profit_floor: floor } },
+      `기준 영업이익 ${group(baseline)}원 · 목표 손익 하한 ${group(floor)}원`,
+    );
 
   return (
     <div className="ask-row">

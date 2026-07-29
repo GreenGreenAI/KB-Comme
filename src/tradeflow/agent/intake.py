@@ -63,6 +63,7 @@ def _case(index: int, values: Mapping[str, Any]) -> TradeCase:
 def intake(
     cases: list[Mapping[str, Any]],
     *,
+    company: CompanyProfile | None = None,
     company_name: str = "미입력 기업",
     is_sme: bool | None = None,
     opening_balances: Mapping[str, Any] | None = None,
@@ -73,6 +74,11 @@ def intake(
 
     Questions from all incomplete cases are merged and capped, so a user filling
     in three trades is not asked nine things at once.
+
+    `company` is the profile an account already holds, facts and all. It wins
+    over the loose `company_name`/`is_sme` arguments, which remain for callers
+    with no account to speak of — those two are all a request body can state,
+    and §5.4 reads more than two facts.
     """
     if not cases:
         return IntakeResult(
@@ -115,7 +121,7 @@ def intake(
     }
     program = TradeProgram(
         program_id=program_id,
-        company=CompanyProfile("COMPANY-001", company_name, is_sme=is_sme),
+        company=company or CompanyProfile("COMPANY-001", company_name, is_sme=is_sme),
         cases=tuple(
             _case(index, reading.values)
             for index, reading in enumerate(readings, start=1)

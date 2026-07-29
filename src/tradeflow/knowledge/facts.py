@@ -221,8 +221,15 @@ class FactAssembler:
             raise FactContractError(
                 f"{field}: unknown evidence_ids: {', '.join(missing)}"
             )
+        accepted_roles = {definition.evidence_role}
+        if definition.evidence_role is EvidenceRole.SUPPORT_ELIGIBILITY:
+            # A company declaration may be used to produce a candidate result,
+            # but it must remain distinguishable from authoritative eligibility
+            # evidence. The pipeline adds a mandatory review reason whenever
+            # this weaker role participates.
+            accepted_roles.add(EvidenceRole.USER_DECLARATION)
         if not any(
-            evidence_by_id[item].role is definition.evidence_role
+            evidence_by_id[item].role in accepted_roles
             for item in evidence_ids
         ):
             raise FactContractError(
