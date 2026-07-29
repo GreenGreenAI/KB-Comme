@@ -95,6 +95,28 @@ _RELATIVE_MONTHS = re.compile(
 )
 _RELATIVE_DAYS = re.compile(r"(\d+)\s*일\s*(?:후|뒤|이내|안)")
 _NEXT_MONTH = re.compile(r"다음\s*달")
+
+#: What a date near these words is a date *of*. A sentence carries several
+#: dates and they are not interchangeable: "9월 3일에 선적합니다" was read as a
+#: settlement date, so the screen reported a payment date nobody had given and
+#: called it understood. Mishearing is worse than not hearing — a gap asks a
+#: question, a misread produces a whole answer built on the wrong day.
+_DATE_ROLE = (
+    ("expected_shipment_date", ("선적", "출하", "출고", "船積")),
+    ("contract_date", ("계약", "발주", "수주", "체결")),
+)
+
+#: The currency a sentence names. §2.4 fixed the MVP to USD and `read_slots`
+#: refuses anything else — but only when the currency reaches it. Reading none
+#: let a euro trade default to dollars and be analysed as one, which is the
+#: refusal being bypassed rather than passed.
+_CURRENCIES = {
+    "유로": "EUR", "EUR": "EUR", "eur": "EUR",
+    "엔화": "JPY", "엔": "JPY", "JPY": "JPY", "jpy": "JPY",
+    "위안": "CNY", "CNY": "CNY", "cny": "CNY",
+    "파운드": "GBP", "GBP": "GBP", "gbp": "GBP",
+    "달러": "USD", "불": "USD", "USD": "USD", "usd": "USD",
+}
 _MONTH_ONLY = re.compile(r"(\d{1,2})\s*월(?!\s*\d)")
 _ADDITIONAL_TRADE = re.compile(
     r"(?:새\s*거래|추가|별도(?:로)?|(?:^|\s)또(?:\s|$)|"
@@ -154,6 +176,14 @@ def krw_amount(text: str) -> Decimal | None:
     return None
 
 
+def _currency(text: str) -> str | None:
+    """The currency the sentence names, so §2.4's refusal can actually fire."""
+    for name, code in _CURRENCIES.items():
+        if name in text:
+            return code
+    return None
+
+
 def _country(text: str) -> str | None:
     """The counterparty country, when the sentence names one plainly."""
     for name, code in _COUNTRIES.items():
@@ -162,19 +192,73 @@ def _country(text: str) -> str | None:
     return None
 
 
+def _role_of(text: str, start: int, end: int, *, bounds: tuple[int, int]) -> str:
+    """Which date this is, read from the words that belong to it.
+
+    Korean puts the qualifier after the date — "9월 3일 선적" — so the text
+    that follows decides, and the text between two dates belongs to the earlier
+    one. Reading backwards as well let the second date in "9월 3일 선적, 10월
+    24일 결제" take the first one's 선적, and the settlement date vanished.
+
+    The words before a date are read only when nothing precedes it, which is
+    the one position where "계약일은 7월 1일" cannot be confused with anything.
+    """
+    tail = text[end : min(bounds[1], end + 18)]
+    for role, hints in _DATE_ROLE:
+        if any(hint in tail for hint in hints):
+            return role
+    if bounds[0] == 0:
+        lead = text[max(0, start - 16) : start]
+        for role, hints in _DATE_ROLE:
+            if any(hint in lead for hint in hints):
+                return role
+    return "expected_payment_date"
+
+
+def _dates(text: str, *, as_of: date) -> dict[str, date]:
+    """Every date the sentence states, under the role it states it in."""
+    spans = sorted(
+        {(m.start(), m.end()) for p in (_YMD, _MD) for m in p.finditer(text)}
+    )
+
+    def bounds(start: int, end: int) -> tuple[int, int]:
+        left = max((e for s, e in spans if e <= start), default=0)
+        right = min((s for s, e in spans if s >= end), default=len(text))
+        return left, right
+
+    found: dict[str, date] = {}
+    for match in _YMD.finditer(text):
+        try:
+            moment = date(
+                int(match.group(1)), int(match.group(2)), int(match.group(3))
+            )
+        except ValueError:
+            continue
+        role = _role_of(
+            text, match.start(), match.end(),
+            bounds=bounds(match.start(), match.end()),
+        )
+        found.setdefault(role, moment)
+    for match in _MD.finditer(text):
+        role = _role_of(
+            text, match.start(), match.end(),
+            bounds=bounds(match.start(), match.end()),
+        )
+        # A contract is signed before today; a settlement and a shipment come
+        # after. Reading every bare month-day forward made "7월 1일에
+        # 계약했습니다" a contract dated next year.
+        resolve = _last_occurrence if role == "contract_date" else _next_occurrence
+        moment = resolve(int(match.group(1)), int(match.group(2)), as_of)
+        if moment is not None:
+            found.setdefault(role, moment)
+    return found
+
+
 def _payment_date(text: str, *, as_of: date) -> date | None:
     """A settlement date, with a missing year read as the next occurrence."""
-    ymd = _YMD.search(text)
-    if ymd:
-        try:
-            return date(int(ymd.group(1)), int(ymd.group(2)), int(ymd.group(3)))
-        except ValueError:
-            return None
-
-    md = _MD.search(text)
-    if md:
-        month, day = int(md.group(1)), int(md.group(2))
-        return _next_occurrence(month, day, as_of)
+    stated = _dates(text, as_of=as_of)
+    if "expected_payment_date" in stated:
+        return stated["expected_payment_date"]
 
     relative = _relative(text, as_of=as_of)
     if relative is not None:
@@ -217,6 +301,18 @@ def _add_months(start: date, months: int) -> date | None:
     return date(year, month, min(start.day, last))
 
 
+def _last_occurrence(month: int, day: int, as_of: date) -> date | None:
+    """The most recent time this month and day went by."""
+    for year in (as_of.year, as_of.year - 1):
+        try:
+            candidate = date(year, month, day)
+        except ValueError:
+            return None
+        if candidate <= as_of:
+            return candidate
+    return None
+
+
 def _next_occurrence(month: int, day: int, as_of: date) -> date | None:
     for year in (as_of.year, as_of.year + 1):
         try:
@@ -246,9 +342,17 @@ def read_utterance(text: str, *, as_of: date) -> dict[str, Any]:
     if moment is not None:
         slots["expected_payment_date"] = moment.isoformat()
 
+    for role, moment in _dates(text, as_of=as_of).items():
+        if role != "expected_payment_date":
+            slots[role] = moment.isoformat()
+
     country = _country(text)
     if country:
         slots["country"] = country
+
+    currency = _currency(text)
+    if currency:
+        slots["currency"] = currency
 
     return slots
 

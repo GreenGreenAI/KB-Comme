@@ -100,5 +100,56 @@ class DateTests(unittest.TestCase):
         )
 
 
+class DateRoleTests(unittest.TestCase):
+    """A sentence carries several dates and they are not interchangeable.
+
+    Mishearing is worse than not hearing. A gap asks a question; a misread
+    settlement date produces a whole answer — exposure, band, hedge — built on
+    a day nobody gave, and reports it as understood.
+    """
+
+    def test_a_shipment_date_is_not_a_settlement_date(self) -> None:
+        heard = read("9월 3일에 선적합니다")
+        self.assertEqual("2026-09-03", heard["expected_shipment_date"])
+        self.assertNotIn("expected_payment_date", heard)
+
+    def test_a_contract_date_is_not_a_settlement_date(self) -> None:
+        heard = read("7월 1일에 계약했습니다")
+        self.assertEqual("2026-07-01", heard["contract_date"])
+        self.assertNotIn("expected_payment_date", heard)
+
+    def test_a_contract_is_dated_backwards(self) -> None:
+        """It was signed before today. Reading every bare month-day forward
+        made "7월 1일에 계약했습니다" a contract dated next year."""
+        self.assertEqual("2025-12-01", read("12월 1일에 계약했습니다")["contract_date"])
+
+    def test_each_date_keeps_its_own_qualifier(self) -> None:
+        """The words between two dates belong to the earlier one — Korean puts
+        the qualifier after. Reading backwards let the second date take the
+        first one's 선적 and the settlement date was lost."""
+        heard = read("9월 3일 선적, 10월 24일 결제")
+        self.assertEqual("2026-09-03", heard["expected_shipment_date"])
+        self.assertEqual("2026-10-24", heard["expected_payment_date"])
+
+    def test_it_holds_without_punctuation_between_the_clauses(self) -> None:
+        heard = read("12월 1일에 계약했고 3월 20일에 결제합니다")
+        self.assertEqual("2025-12-01", heard["contract_date"])
+        self.assertEqual("2027-03-20", heard["expected_payment_date"])
+
+    def test_a_qualifier_before_the_first_date_still_counts(self) -> None:
+        self.assertEqual("2026-07-01", read("계약일은 7월 1일입니다")["contract_date"])
+
+
+class CurrencyTests(unittest.TestCase):
+    def test_a_named_currency_reaches_the_slot_reader(self) -> None:
+        """§2.4 fixed the MVP to USD and `read_slots` refuses anything else —
+        but only when the currency reaches it. Reading none let a euro trade
+        default to dollars and be analysed as one, which bypasses the refusal
+        rather than passing it."""
+        self.assertEqual("EUR", read("유로로 15만 유로 받아요")["currency"])
+        self.assertEqual("JPY", read("엔화로 결제받습니다")["currency"])
+        self.assertEqual("USD", read("10만 달러 수출")["currency"])
+
+
 if __name__ == "__main__":
     unittest.main()
