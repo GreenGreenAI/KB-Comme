@@ -293,6 +293,207 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   );
 }
 
+/** What a rule concluded, in the words a person uses for it.
+ *
+ *  §5.4 and §5.5 report five outcomes and the screen must keep them apart
+ *  (PR #51 AC-6). Collapsing "아직 못 정했다" into "해당 없다" is the single
+ *  most dangerous thing this screen could do: one is a question, the other is
+ *  a clearance, and a company that reads the second when the first was meant
+ *  ships without filing.
+ */
+const STATUS_LABEL = {
+  expert_confirmation_required: "전문가 확인 필요",
+  insufficient_information: "정보 부족",
+  matched: "조건 충족",
+  not_matched: "조건 불충족",
+  source_expired: "출처 만료",
+};
+
+const FACT_LABEL = {
+  "company.size": "기업규모",
+  "company.credit_issue_free": "신용 이슈 여부",
+  "company.ksure_exporter_grade": "K-SURE 수출자 등급",
+  "counterparty.ksure_importer_grade": "수입자 등급",
+  "counterparty.country_restricted": "상대국 인수 제한 여부",
+  "trade.payment_term_days": "결제기간",
+  "financing.purpose": "자금 용도",
+  "financing.has_bank_consultation": "은행 상담 여부",
+};
+
+/** The object particle, chosen the way Korean chooses it.
+ *
+ *  `을(를)` is what a template writes when it does not know the word it is
+ *  about to join, and the missing-facts line joins a different word every
+ *  time. A final consonant decides this, and a syllable carries one at a fixed
+ *  offset — so it can simply be read rather than sidestepped. */
+function particle(word) {
+  const last = word.trim().slice(-1).charCodeAt(0);
+  const syllable = last >= 0xac00 && last <= 0xd7a3;
+  return syllable && (last - 0xac00) % 28 !== 0 ? "을" : "를";
+}
+
+const AUTHORITY_LABEL = {
+  ksure: "한국무역보험공사",
+  bok: "한국은행",
+  bank: "지정거래외국환은행",
+};
+
+/** §5.4 support, once it has actually judged something.
+ *
+ *  This used to render `null`. The fold only drew a line when the worker had
+ *  been skipped, so completing the judgement made it disappear — the better
+ *  the analysis did, the less the screen said. Three candidates were being
+ *  decided on every signed-in request and none of them reached the user.
+ */
+function Support({ result }) {
+  const candidates = result.support_candidates ?? [];
+  const excluded = result.excluded_candidates ?? [];
+  if (candidates.length === 0 && excluded.length === 0) {
+    return (
+      <details className="fold">
+        <summary>지원제도 · 해당하는 제도 없음</summary>
+        <p className="fold-note">
+          규칙을 모두 확인했고 이 거래에 해당하는 제도가 없었습니다. 판정하지
+          못한 것과는 다릅니다.
+        </p>
+      </details>
+    );
+  }
+  const settled = candidates.filter((c) => c.status !== "insufficient_information");
+  return (
+    <details className="fold">
+      <summary>
+        지원제도 · 후보 {settled.length}건
+        {candidates.length - settled.length > 0 &&
+          ` · 정보 부족 ${candidates.length - settled.length}건`}
+        {excluded.length > 0 && ` · 제외 ${excluded.length}건`}
+      </summary>
+      {candidates.map((candidate) => (
+        <Candidate key={candidate.rule_id} candidate={candidate} />
+      ))}
+      {excluded.map((candidate) => (
+        <Candidate key={candidate.rule_id} candidate={candidate} excluded />
+      ))}
+    </details>
+  );
+}
+
+function Candidate({ candidate, excluded }) {
+  const missing = candidate.missing_fields ?? [];
+  return (
+    <div className="verdict">
+      <div className="verdict-head">
+        <b>{candidate.title}</b>
+        <span className={`chip ${excluded ? "out" : candidate.status}`}>
+          {excluded ? "조건 불충족" : STATUS_LABEL[candidate.status] ?? candidate.status}
+        </span>
+      </div>
+      {missing.length > 0 && (
+        <p className="fold-note">
+          {(() => {
+            const words = missing.map((f) => FACT_LABEL[f] ?? f);
+            return `${words.join(" · ")}${particle(words[words.length - 1])} 알려주시면 판정합니다.`;
+          })()}
+        </p>
+      )}
+      {/* The conditions as the rule wrote them. Summary first, the rule's own
+          text one fold deeper (AC-5): nobody should have to read
+          `company.size=small in [...]` to learn that a judgement was made, and
+          nobody checking one should be unable to. */}
+      <details className="why">
+        <summary>
+          근거 {candidate.reasons?.length ?? 0}건 · 출처{" "}
+          {candidate.source_ids?.length ?? 0}건
+        </summary>
+        <ul className="reasons">
+          {(candidate.reasons ?? []).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p className="sources">{(candidate.source_ids ?? []).join(" · ")}</p>
+      </details>
+    </div>
+  );
+}
+
+/** §5.5 compliance, once it has judged.
+ *
+ *  An empty list here is never "신고 불필요". §5.5 only raises a duty from a
+ *  trade structure the company states, so silence means the structures we
+ *  asked about were not present — not that nothing else could apply.
+ */
+function Compliance({ result }) {
+  const obligations = result.filing_obligations ?? [];
+  if (obligations.length === 0) {
+    return (
+      <details className="fold">
+        <summary>신고의무 · 확인된 신고 사유 없음</summary>
+        <p className="fold-note">
+          알려주신 거래 구조에서는 신고 사유가 확인되지 않았습니다. 신고가
+          불필요하다는 판정은 아닙니다.
+        </p>
+      </details>
+    );
+  }
+  return (
+    <details className="fold">
+      <summary>신고의무 · 검토 {obligations.length}건</summary>
+      {obligations.map((item) => (
+        <Candidate key={item.rule_id} candidate={item} />
+      ))}
+    </details>
+  );
+}
+
+/** What the person reading this has to go and do.
+ *
+ *  The product's output is not a number, it is a trade decision plan. Every
+ *  scenario this was designed against ends the same way — who, by when, with
+ *  which documents — and all of it was already in the response, unused.
+ */
+function Actions({ actions }) {
+  if (!actions || actions.length === 0) return null;
+  return (
+    <details className="fold" open>
+      <summary>다음 행동 · {actions.length}건</summary>
+      {actions.map((action, index) => (
+        <div className="verdict" key={`${action.action}-${index}`}>
+          <div className="verdict-head">
+            <b>{ACTION_LABEL[action.action] ?? action.action}</b>
+            <span className="chip who">
+              {AUTHORITY_LABEL[action.authority] ?? action.authority}
+            </span>
+          </div>
+          <p className="fold-note">
+            {TIMING_LABEL[action.timing] ?? action.timing}
+            {action.deadline ? ` · 기한 ${action.deadline}` : ""}
+          </p>
+          {(action.required_documents ?? []).length > 0 && (
+            <details className="why">
+              <summary>필요서류 {action.required_documents.length}건</summary>
+              <ul className="reasons">
+                {action.required_documents.map((doc) => (
+                  <li key={doc}>{doc}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      ))}
+    </details>
+  );
+}
+
+const ACTION_LABEL = {
+  consult_and_apply_for_ksure_product: "K-SURE 상품 상담 및 청약",
+};
+
+const TIMING_LABEL = {
+  before_application: "청약 전",
+  before_shipment: "선적 전",
+  before_payment: "결제 전",
+};
+
 const SECTION_LABEL = {
   exposure: "노출",
   market_scenario: "환율",
@@ -505,14 +706,27 @@ function Answer({ result, order, shown, arrive }) {
                 </details>
               );
             }
-            if (!reason) return null;
-            return (
-              <details className="fold" key={section}>
-                <summary>{SECTION_LABEL[section]} · 알려주시면 판정</summary>
-                <p className="fold-note">{reason}</p>
-              </details>
-            );
+            // A worker that did not run says why. One that ran says what it
+            // found — including that it found nothing, which is a different
+            // answer and must not wear the same words.
+            if (reason) {
+              return (
+                <details className="fold" key={section}>
+                  <summary>{SECTION_LABEL[section]} · 알려주시면 판정</summary>
+                  <p className="fold-note">{reason}</p>
+                </details>
+              );
+            }
+            if (section === "support") {
+              return <Support key={section} result={result} />;
+            }
+            if (section === "compliance") {
+              return <Compliance key={section} result={result} />;
+            }
+            return null;
           })}
+
+        <Actions actions={result.next_actions} />
 
         <details className="fold">
           <summary>근거 · 재현에 필요한 입력</summary>
