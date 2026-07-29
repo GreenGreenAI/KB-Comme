@@ -119,7 +119,11 @@ CAPABILITIES = (
             for item in _candidates(r)
             for reason in satisfied(item)
         ),
-        needs="거래에 상대국을 받고, K-SURE 국별인수방침 스냅샷을 판정에 잇는 것",
+        needs=(
+            "K-SURE 국별인수방침 스냅샷. 거래는 이미 상대국을 받고 판정 배선도 "
+            "끝났으므로(agent/orchestrator._country_policy_assertions), 스냅샷이 "
+            "생기면 코드 변경 없이 열린다. 지금 추출본에는 나라별 기록이 없다"
+        ),
     ),
     Capability(
         "buyer_credit",
