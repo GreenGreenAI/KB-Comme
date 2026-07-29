@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from calendar import monthrange
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
@@ -70,7 +71,30 @@ _COUNTRIES = {
 }
 
 _YMD = re.compile(r"(\d{4})\s*[-/.년]\s*(\d{1,2})\s*[-/.월]\s*(\d{1,2})")
-_MD = re.compile(r"(\d{1,2})\s*[/.월]\s*(\d{1,2})")
+#: A day must not be the first digits of an amount. `내년 3월 10만 달러` was
+#: read as March 10th — the amount was eaten by the date and then reported as
+#: understood, which is worse than not reading it at all.
+#: `(?!\d)` after the day matters as much as the lookahead after it. Without
+#: it the engine backtracks: blocked from taking `10` in `3월 10만`, it takes
+#: the `1` instead and reads the first of March.
+_MD = re.compile(
+    rf"(\d{{1,2}})\s*[/.월]\s*(\d{{1,2}})(?!\d)\s*일?"
+    rf"(?!\s*(?:{_SCALES}|달러|불|원|usd|USD))"
+)
+
+#: "2달 후", "두 달 뒤", "3개월 후", "45일 뒤", "다음 달". A settlement date
+#: stated in relative terms is still stated — asking for it again reads as not
+#: having listened, and the reading is shown back as `understood` so a wrong
+#: one can be corrected.
+_KOREAN_COUNT = {
+    "한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6,
+    "일곱": 7, "여덟": 8, "아홉": 9, "열": 10,
+}
+_RELATIVE_MONTHS = re.compile(
+    r"(\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:달|개월)\s*(?:후|뒤|이내|안)"
+)
+_RELATIVE_DAYS = re.compile(r"(\d+)\s*일\s*(?:후|뒤|이내|안)")
+_NEXT_MONTH = re.compile(r"다음\s*달")
 _MONTH_ONLY = re.compile(r"(\d{1,2})\s*월(?!\s*\d)")
 _ADDITIONAL_TRADE = re.compile(
     r"(?:새\s*거래|추가|별도(?:로)?|(?:^|\s)또(?:\s|$)|"
@@ -152,11 +176,45 @@ def _payment_date(text: str, *, as_of: date) -> date | None:
         month, day = int(md.group(1)), int(md.group(2))
         return _next_occurrence(month, day, as_of)
 
+    relative = _relative(text, as_of=as_of)
+    if relative is not None:
+        return relative
+
     month_only = _MONTH_ONLY.search(text)
     if month_only:
         # A month with no day is not a settlement date; the agent asks.
         return None
     return None
+
+
+def _relative(text: str, *, as_of: date) -> date | None:
+    """A date the sentence gave in months or days from now."""
+    months = _RELATIVE_MONTHS.search(text)
+    if months:
+        written = months.group(1)
+        count = _KOREAN_COUNT.get(written) or int(written) if not written.isdigit() else int(written)
+        return _add_months(as_of, count)
+    if _NEXT_MONTH.search(text):
+        return _add_months(as_of, 1)
+    days = _RELATIVE_DAYS.search(text)
+    if days:
+        return as_of + timedelta(days=int(days.group(1)))
+    return None
+
+
+def _add_months(start: date, months: int) -> date | None:
+    """The same day of the month, clamped where that day does not exist.
+
+    31 January plus one month is 28 February, not 3 March. A settlement date
+    that rolled into the next month would move the cashflow event to the wrong
+    side of a month end.
+    """
+    if months <= 0:
+        return None
+    total = start.month - 1 + months
+    year, month = start.year + total // 12, total % 12 + 1
+    last = monthrange(year, month)[1]
+    return date(year, month, min(start.day, last))
 
 
 def _next_occurrence(month: int, day: int, as_of: date) -> date | None:
