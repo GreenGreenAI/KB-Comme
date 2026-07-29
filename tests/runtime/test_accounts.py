@@ -1,3 +1,5 @@
+import contextlib
+import sqlite3
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -90,6 +92,59 @@ class StoreTests(unittest.TestCase):
     def test_an_unknown_token_is_nobody(self) -> None:
         self.assertIsNone(self.store.read_session("made-up"))
         self.assertIsNone(self.store.read_session(None))
+
+    def test_session_database_contains_only_a_token_hash(self) -> None:
+        token = self.store.open_session(self.account)
+        with contextlib.closing(sqlite3.connect(self.store.path)) as db:
+            stored = db.execute("SELECT token FROM sessions").fetchone()[0]
+
+        self.assertNotEqual(token, stored)
+        self.assertNotIn(token, stored)
+        self.assertIsNotNone(self.store.read_session(token))
+
+    def test_duplicate_email_cannot_replace_an_existing_account(self) -> None:
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.create(
+                "kim@hanbit.co.kr",
+                "replacement",
+                company_name="Replacement",
+                account_id="COMPANY-REPLACEMENT",
+            )
+
+        self.assertIsNotNone(
+            self.store.authenticate("kim@hanbit.co.kr", "tradeflow-demo")
+        )
+        self.assertIsNone(
+            self.store.authenticate("kim@hanbit.co.kr", "replacement")
+        )
+        self.assertIsNotNone(self.store.find("COMPANY-HANBIT"))
+        self.assertIsNone(self.store.find("COMPANY-REPLACEMENT"))
+
+    def test_repeated_failures_temporarily_lock_even_the_correct_password(self) -> None:
+        now = datetime.now(timezone.utc)
+        for offset in range(5):
+            self.assertIsNone(
+                self.store.authenticate(
+                    "kim@hanbit.co.kr",
+                    "wrong",
+                    now=now + timedelta(seconds=offset),
+                )
+            )
+
+        self.assertIsNone(
+            self.store.authenticate(
+                "kim@hanbit.co.kr",
+                "tradeflow-demo",
+                now=now + timedelta(minutes=1),
+            )
+        )
+        self.assertIsNotNone(
+            self.store.authenticate(
+                "kim@hanbit.co.kr",
+                "tradeflow-demo",
+                now=now + timedelta(minutes=16),
+            )
+        )
 
 
 class ProfileTests(unittest.TestCase):

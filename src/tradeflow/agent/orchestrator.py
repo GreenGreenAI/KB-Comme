@@ -238,10 +238,11 @@ def _declared_company_assertions(
     """Attest the company facts the company itself stated.
 
     These arrive from the signed-in account, which is to say from the company.
-    That is a weaker kind of evidence than a snapshot of an official source, and
-    the descriptor says so rather than dressing it up: the role is the one the
-    eligibility catalog demands, but the payload names the account as the
-    declarer. A judgement resting on it still carries `review_required`, because
+    That is a weaker kind of evidence than a snapshot of an official source, so
+    it has its own role instead of borrowing `SUPPORT_ELIGIBILITY`. The fact
+    assembler may use it to produce a candidate, while the pipeline keeps the
+    authoritative evidence requirement open and forces review. A judgement
+    resting on it still carries `review_required`, because
     "우리는 중소기업입니다"라는 자기 선언으로 보험 자격을 확정할 수는 없다.
 
     An unstated fact produces no assertion at all — the rules then report it as
@@ -260,7 +261,7 @@ def _declared_company_assertions(
     case_ids = tuple(case.case_id for case in program.cases)
     descriptor = EvidenceDescriptor(
         DECLARED_COMPANY_EVIDENCE_ID,
-        EvidenceRole.SUPPORT_ELIGIBILITY,
+        EvidenceRole.USER_DECLARATION,
         case_ids,
         generated_at=as_of,
         payload={

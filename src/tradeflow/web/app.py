@@ -69,8 +69,8 @@ logger = logging.getLogger("tradeflow.synthesis")
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 def _signed_in(token: str | None) -> Account | None:

@@ -18,14 +18,12 @@ The spec gives this agent no tools and one strict rule:
 > 도구가 산출한 수치를 그대로 인용한다. 재계산·반올림·근사 표현을 금지한다.
 
 A prompt asking for that is a request. This module makes it a condition. The
-model is handed a list of figure strings that the deterministic tools produced,
-and its sentence is then checked digit by digit: every run of digits it wrote
-must appear, character for character, among those figures. A sentence that
-introduces `10만` where the tools said `100,000` is rejected — not because the
-two disagree, but because rounding is the failure this rule names, and the
-check cannot tell a helpful rounding from a wrong one.
+model may select up to three complete figure strings that the deterministic
+tools produced. Code validates exact membership and renders those strings;
+model-authored prose never reaches the user. A sign, unit, label or meaning
+therefore cannot be detached from its value.
 
-A rejected sentence, an unreachable API and an absent key all end the same way:
+A rejected selection, an unreachable API and an absent key all end the same way:
 `summary` stays empty and the screen falls back to the sentence it assembles
 itself. Synthesis is the last step and it decorates figures that are already
 decided, so losing it costs prose and never an answer.
@@ -54,9 +52,9 @@ DEFAULT_BASE_URL = "https://api.upstage.ai/v1"
 #: would make the answer look recalculated when nothing moved.
 TEMPERATURE = 0.0
 
-#: Any run of digits, with the separators a formatted figure carries inside it.
-#: Trailing separators are trimmed so a figure at the end of a clause matches.
-_DIGITS = re.compile(r"\d[\d,.]*")
+#: Any signed run of digits, with the separators a formatted figure carries
+#: inside it. The sign is part of the value: dropping `-` is not a paraphrase.
+_DIGITS = re.compile(r"[+-]?\d[\d,.]*")
 
 SCHEMA = {
     "name": "summary",
@@ -64,43 +62,27 @@ SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "sentence": {
-                "type": "string",
-                "description": "사용자에게 보여줄 한국어 설명. 두 문장 이내.",
-            },
             "figures_used": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "문장에 인용한 수치를, 제공된 문자열 그대로.",
+                "minItems": 1,
+                "maxItems": 3,
+                "uniqueItems": True,
+                "description": "사용자에게 우선 보여줄 확정 문구를 제공된 문자열 그대로.",
             },
         },
-        "required": ["sentence", "figures_used"],
+        "required": ["figures_used"],
         "additionalProperties": False,
     },
 }
 
 INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석 결과를 설명합니다. 계산은 이미 끝났습니다.
-당신의 일은 아래 「확정된 수치」를 사람의 문장으로 옮기는 것뿐입니다.
+당신의 일은 아래 「확정된 문구」 중 사용자에게 우선 보여줄 항목을 최대 3개
+선택하는 것뿐입니다. 문구를 다시 쓰거나 새로운 문장을 만들지 마세요.
 
-절대 규칙 — 숫자를 만들지 마세요:
-- 아래 목록에 **문자열 그대로** 있는 숫자만 쓸 수 있습니다. 복사해서 붙이세요.
-- 사칙연산을 하지 마세요. 두 수치를 곱하거나 더해 새 금액을 만들지 마세요.
-- 반올림·근사를 하지 마세요. 100,000을 「10만」으로 바꾸는 것도 위반입니다.
-- 사용자가 질문에 쓴 숫자도 그대로 인용하지 마세요. 목록의 수치를 쓰세요.
-
-금지되는 문장의 예 (전부 위반):
-- "100,000 USD는 1466.3원 기준 146,630,000원입니다" → 곱셈을 했습니다
-- "약 10만 달러의 노출이 있습니다" → 근사했습니다
-- "1,466원 수준입니다" → 반올림했습니다
-
-좋은 문장의 예:
-- "순노출은 100,000 USD입니다. 불리한 쪽 환율 1361.05까지 가면 원화 수취액이
-  10,525,000 KRW 줄어듭니다."
-
-그 밖에:
-- 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
-- 두 문장 이내로, 담당자가 무엇을 알아야 하는지 말하세요.
+반드시 목록의 문자열을 그대로 `figures_used`에 넣으세요. 숫자·부호·단위·라벨을
+바꾸거나 목록 밖의 결론을 추가할 수 없습니다.
 """
 
 
@@ -134,6 +116,11 @@ def check(sentence: str, figures: list[str]) -> str:
     if invented:
         return "확정된 수치에 없는 숫자: " + ", ".join(invented)
     return ""
+
+
+def _render_figures(selected: list[str]) -> str:
+    """Render only tool-owned phrases; model-authored prose never reaches UI."""
+    return " · ".join(item.rstrip(" .") for item in selected) + "."
 
 
 def figures(result: dict[str, Any]) -> list[str]:
@@ -209,14 +196,18 @@ INTAKE_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "sentence": {"type": "string", "description": "사용자에게 보여줄 한두 문장."},
+            "acknowledgement": {
+                "type": "string",
+                "enum": ["", "안녕하세요.", "확인했습니다."],
+                "description": "질문 앞에 붙일 짧은 응답.",
+            },
             "asked_fields": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "이 문장이 실제로 물은 항목의 이름. 목록에서 고르세요.",
             },
         },
-        "required": ["sentence", "asked_fields"],
+        "required": ["acknowledgement", "asked_fields"],
         "additionalProperties": False,
     },
 }
@@ -226,6 +217,24 @@ FIELD_WORDS = {
     "expected_payment_date": "대금을 주고받기로 한 날짜",
     "direction": "수출인지 수입인지",
 }
+
+
+def _render_questions(
+    missing: list[str],
+    *,
+    acknowledgement: str = "",
+    understood: dict[str, Any] | None = None,
+) -> str:
+    """Render the complete deterministic question list selected upstream."""
+    words = [FIELD_WORDS.get(field, field) for field in missing]
+    if len(words) == 1:
+        request = words[0]
+    else:
+        request = ", ".join(words[:-1]) + f", {words[-1]}"
+    prefix = acknowledgement.strip()
+    if not prefix and understood:
+        prefix = "확인했습니다."
+    return f"{prefix + ' ' if prefix else ''}{request}를 알려주세요."
 
 
 class Synthesizer:
@@ -279,11 +288,13 @@ class Synthesizer:
             + "\n".join(f"- {figure}" for figure in figures)
             + asked
         )
+        schema = json.loads(json.dumps(SCHEMA))
+        schema["schema"]["properties"]["figures_used"]["items"]["enum"] = figures
         try:
             completion = self._open().chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_schema", "json_schema": SCHEMA},
+                response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
                 max_tokens=400,
             )
@@ -293,14 +304,16 @@ class Synthesizer:
             # what happens next: the screen writes the sentence itself.
             return Synthesis("", False, f"합성 호출 실패: {type(failure).__name__}")
 
-        sentence = str(written.get("sentence", "")).strip()
-        if not sentence:
-            return Synthesis("", False, "빈 문장")
-
-        broken = check(sentence, figures)
-        if broken:
-            return Synthesis(sentence, False, broken)
-        return Synthesis(sentence, True)
+        selected = written.get("figures_used")
+        if (
+            not isinstance(selected, list)
+            or not selected
+            or len(selected) > 3
+            or len(set(selected)) != len(selected)
+            or any(item not in figures for item in selected)
+        ):
+            return Synthesis("", False, "허용되지 않은 확정 문구 선택")
+        return Synthesis(_render_figures(selected), True)
 
     def ask_for(
         self,
@@ -339,11 +352,16 @@ class Synthesizer:
             )
             + (f"\n\n사용자가 방금 한 말: {question}" if question else "")
         )
+        schema = json.loads(json.dumps(INTAKE_SCHEMA))
+        schema["schema"]["properties"]["asked_fields"]["items"]["enum"] = missing
+        schema["schema"]["properties"]["asked_fields"]["minItems"] = len(missing)
+        schema["schema"]["properties"]["asked_fields"]["maxItems"] = len(missing)
+        schema["schema"]["properties"]["asked_fields"]["uniqueItems"] = True
         try:
             completion = self._open().chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_schema", "json_schema": INTAKE_SCHEMA},
+                response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
                 max_tokens=300,
             )
@@ -351,28 +369,18 @@ class Synthesizer:
         except Exception as failure:  # noqa: BLE001
             return Synthesis("", False, f"되묻기 합성 실패: {type(failure).__name__}")
 
-        sentence = str(written.get("sentence", "")).strip()
-        if not sentence:
-            return Synthesis("", False, "빈 문장")
-
-        # Asking may repeat; answering must report. What the user themselves
-        # wrote is quotable here — echoing "10만 달러" back to the person who
-        # just said it is confirmation, not the rounding §4.2[9] forbids, and
-        # rejecting it made the question read as if it had not been heard. A
-        # third number, belonging to neither the user nor the parse, is still
-        # the model filling a slot instead of asking for it.
-        allowed = [f"{key}: {value}" for key, value in known.items()]
-        if question:
-            allowed.append(question)
-        broken = check(sentence, allowed)
-        if broken:
-            return Synthesis(sentence, False, broken)
-
-        # Self-reported, and treated as such: it catches a model that wandered
-        # off the list, not one that lies about staying on it. The guarantee
-        # that matters is upstream — `missing` was decided by the slot reader.
         claimed = {str(field) for field in written.get("asked_fields", [])}
-        stray = claimed - set(missing) - set(wanted)
-        if stray:
-            return Synthesis(sentence, False, "묻지 않기로 한 항목: " + ", ".join(sorted(stray)))
-        return Synthesis(sentence, True)
+        expected = set(missing)
+        if claimed != expected or len(written.get("asked_fields", [])) != len(missing):
+            return Synthesis("", False, "필수 질문 목록이 일치하지 않습니다")
+        acknowledgement = str(written.get("acknowledgement", ""))
+        if acknowledgement not in {"", "안녕하세요.", "확인했습니다."}:
+            return Synthesis("", False, "허용되지 않은 응답 문구")
+        return Synthesis(
+            _render_questions(
+                missing,
+                acknowledgement=acknowledgement,
+                understood=known,
+            ),
+            True,
+        )

@@ -116,6 +116,30 @@ class FactAssemblerTests(unittest.TestCase):
                 evidence=evidence,
             )
 
+    def test_company_declaration_is_usable_but_keeps_its_weaker_role(self) -> None:
+        declaration = EvidenceDescriptor(
+            "declared:C1",
+            EvidenceRole.USER_DECLARATION,
+            ("EXP-1",),
+            generated_at=datetime(2026, 7, 27, tzinfo=UTC),
+            payload={"facts": {"company.size": "small"}},
+        )
+
+        bundle = self.assembler.assemble(
+            program=self.program,
+            case=self.case,
+            assertions=(
+                FactAssertion("company.size", "small", ("declared:C1",)),
+            ),
+            evidence=(*self.base_evidence, declaration),
+        )
+
+        self.assertEqual("small", bundle.facts["company.size"])
+        self.assertEqual(
+            ("declared:C1",),
+            bundle.evidence_ids_by_fact["company.size"],
+        )
+
     def test_unknown_or_malformed_fact_is_rejected(self) -> None:
         for assertion, message in (
             (

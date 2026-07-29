@@ -1,4 +1,6 @@
+import json
 import unittest
+from types import SimpleNamespace
 
 from tradeflow.runtime.synthesis import (
     Synthesizer,
@@ -13,6 +15,33 @@ FIGURES = [
     "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
     "관측 조건: 최근 60영업일, 잔여 63영업일, 드리프트 0 고정",
 ]
+
+
+class FakeCompletions:
+    def __init__(self, payload):
+        self.payload = payload
+        self.request = None
+
+    def create(self, **request):
+        self.request = request
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(self.payload, ensure_ascii=False)
+                    )
+                )
+            ]
+        )
+
+
+def synthesizer_returning(payload):
+    synthesizer = Synthesizer(api_key="test")
+    completions = FakeCompletions(payload)
+    synthesizer._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+    return synthesizer, completions
 
 
 class DigitRunTests(unittest.TestCase):
@@ -49,6 +78,53 @@ class StrictRuleTests(unittest.TestCase):
 
     def test_prose_without_numbers_passes(self) -> None:
         self.assertEqual(check("결제일까지 환율이 불리하게 움직일 수 있습니다.", FIGURES), "")
+
+    def test_dropping_a_negative_sign_is_rejected(self) -> None:
+        self.assertIn(
+            "100,000",
+            check(
+                "순노출은 100,000 USD입니다.",
+                ["순노출: -100,000 USD"],
+            ),
+        )
+
+
+class BoundRenderingTests(unittest.TestCase):
+    def test_model_selects_exact_phrases_and_code_renders_them(self) -> None:
+        synthesizer, completions = synthesizer_returning(
+            {
+                "figures_used": [
+                    "순노출: 100,000 USD",
+                    "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
+                ],
+                "sentence": "신고 의무가 없으므로 바로 송금하세요.",
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertTrue(written.accepted)
+        self.assertEqual(
+            "순노출: 100,000 USD · "
+            "그때 원화 수취액 차이: 10,525,000 KRW (감소).",
+            written.summary,
+        )
+        self.assertNotIn("송금", written.summary)
+        schema = completions.request["response_format"]["json_schema"]
+        self.assertEqual(
+            FIGURES,
+            schema["schema"]["properties"]["figures_used"]["items"]["enum"],
+        )
+
+    def test_altered_label_unit_or_value_is_rejected(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {"figures_used": ["순노출: 10,525,000 USD"]}
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
 
 
 class FigureTests(unittest.TestCase):
@@ -109,6 +185,34 @@ class IntakePhrasingTests(unittest.TestCase):
         so declining has to be silent and total."""
         written = Synthesizer(api_key="").ask_for(["amount"])
         self.assertEqual(written.summary, "")
+
+    def test_every_missing_field_must_be_returned(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {"acknowledgement": "안녕하세요.", "asked_fields": ["amount"]}
+        )
+
+        written = synthesizer.ask_for(["amount", "expected_payment_date"])
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+
+    def test_questions_are_rendered_from_the_exact_missing_fields(self) -> None:
+        missing = ["amount", "expected_payment_date", "direction"]
+        synthesizer, completions = synthesizer_returning(
+            {"acknowledgement": "안녕하세요.", "asked_fields": missing}
+        )
+
+        written = synthesizer.ask_for(missing)
+
+        self.assertTrue(written.accepted)
+        self.assertIn("거래 금액", written.summary)
+        self.assertIn("대금을 주고받기로 한 날짜", written.summary)
+        self.assertIn("수출인지 수입인지", written.summary)
+        schema = completions.request["response_format"]["json_schema"]
+        field_schema = schema["schema"]["properties"]["asked_fields"]
+        self.assertEqual(missing, field_schema["items"]["enum"])
+        self.assertEqual(3, field_schema["minItems"])
+        self.assertEqual(3, field_schema["maxItems"])
 
 
 class WithoutAKeyTests(unittest.TestCase):
