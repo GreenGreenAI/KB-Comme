@@ -110,6 +110,58 @@ _DATE_ROLE = (
 #: refuses anything else — but only when the currency reaches it. Reading none
 #: let a euro trade default to dollars and be analysed as one, which is the
 #: refusal being bypassed rather than passed.
+#: 보증대상 자금, in the words a company uses for it.
+#:
+#: The values are the rulepack's own enum — a K-SURE 수출신용보증(선적전) rule
+#: already exists and lists them, and it has never once fired because nothing
+#: fills `financing.purpose`. The company says "제작에 들어갈 자금이
+#: 부족합니다"; the rule wants `trade_finance`; no one joined the two.
+#:
+#: Read conservatively. Claiming a purpose the company did not state would put
+#: them in front of a guarantee they cannot apply for, and the rule's own
+#: 사전 상담 condition would not catch it. Only phrases that name the money's
+#: job are here — bare 자금 is not one of them.
+_FINANCING_PURPOSE = (
+    (
+        "export_material_import_lc",
+        ("수출용 원자재", "원자재 수입", "원자재를 수입"),
+    ),
+    (
+        "trade_finance",
+        (
+            "제작 자금",
+            "제작에 들어갈 자금",
+            "제작비",
+            "생산 자금",
+            "생산에 들어갈 자금",
+            "운전자금",
+            "무역금융",
+            "선적 전 자금",
+            "선적전 자금",
+            "원자재 구매",
+            "자금이 부족",
+            "자금 조달",
+            "자금을 조달",
+        ),
+    ),
+)
+
+
+def financing_purpose(text: str | None) -> str | None:
+    """What the money is for, when the sentence says so.
+
+    Read on its own rather than into a slot: it is not part of the trade, it is
+    what the company wants to do about it, and §5.4's eligibility rules read it
+    as a fact with its own evidence.
+    """
+    if not text:
+        return None
+    for purpose, words in _FINANCING_PURPOSE:
+        if any(word in text for word in words):
+            return purpose
+    return None
+
+
 _CURRENCIES = {
     "유로": "EUR", "EUR": "EUR", "eur": "EUR",
     "엔화": "JPY", "엔": "JPY", "JPY": "JPY", "jpy": "JPY",

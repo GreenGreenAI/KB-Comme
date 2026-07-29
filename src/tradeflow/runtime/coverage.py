@@ -84,6 +84,67 @@ def missing(section: str) -> tuple[str, ...]:
     )
 
 
+@cache
+def _financing_products() -> tuple[tuple[str, frozenset[str]], ...]:
+    """Rule titles paired with the 자금 용도 each one accepts.
+
+    Derived, like `held`. A company that says 제작 자금 is not helped by
+    "지원제도는 한국무역보험공사 제도만 판정합니다" — true, and it reads as
+    having nothing, when the rulepack holds a 수출신용보증(선적전) rule aimed
+    at exactly that money.
+    """
+    found: list[tuple[str, frozenset[str]]] = []
+    for path in sorted(RULEPACKS.glob("*.json")):
+        try:
+            pack = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for rule in pack.get("rules") or []:
+            if TOPIC_SECTION.get(rule.get("topic")) != "support":
+                continue
+            for condition in rule.get("conditions") or []:
+                if condition.get("field") != "financing.purpose":
+                    continue
+                accepted = condition.get("value")
+                title = (rule.get("title") or "").removesuffix(" 후보")
+                if isinstance(accepted, list) and title:
+                    found.append((title, frozenset(accepted)))
+    return tuple(found)
+
+
+def for_financing(purpose: str | None) -> str:
+    """What this product holds for that purpose, named.
+
+    Silent when the sentence named no purpose, and silent when nothing covers
+    it — an empty promise is worse than the coverage line already shown.
+    """
+    if not purpose:
+        return ""
+    titles = [title for title, accepted in _financing_products() if purpose in accepted]
+    if not titles:
+        return ""
+    listed = " · ".join(titles)
+    return f"필요하신 자금은 {listed}{_instrumental(listed)} 판정합니다."
+
+
+def _instrumental(word: str) -> str:
+    """로 or 으로, chosen the way Korean chooses it.
+
+    Like `_particle`, and for the same reason: the word it joins is a rule
+    title read out of a rulepack, so it changes as rules are added. Brackets
+    are common in the titles — "수출신용보증(선적전)" — and the sound that
+    decides is the last syllable, not the last character.
+    """
+    for character in reversed(word.strip()):
+        code = ord(character)
+        if not 0xAC00 <= code <= 0xD7A3:
+            continue
+        final = (code - 0xAC00) % 28
+        # ㄹ takes 로, like a vowel does.
+        return "로" if final in (0, 8) else "으로"
+    return "로"
+
+
 def _particle(word: str) -> str:
     """은 or 는, chosen the way Korean chooses it.
 

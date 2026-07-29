@@ -48,6 +48,7 @@ from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.tools.intent import read_intent
+from tradeflow.tools.utterance import financing_purpose
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -188,6 +189,10 @@ def _default_knowledge_files() -> tuple[InputFile, ...]:
 
 STRUCTURE_EVIDENCE_ID = "TRADEFLOW_DERIVED_STRUCTURE"
 DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
+
+#: What the company said the money is for. Separate from the company
+#: declaration above because it comes from the sentence, not the account.
+DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
 
 #: K-SURE's country acceptance policy, as a snapshot. The source is registered
 #: and the binder is written and tested; what is absent is the snapshot itself,
@@ -343,6 +348,54 @@ def _declared_company_assertions(
     return assertions, (descriptor,)
 
 
+def _declared_financing_assertions(
+    program: TradeProgram,
+    utterance: str | None,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the purpose the company stated for the money it needs.
+
+    §5.4's 수출신용보증(선적전) rule has three conditions this program can meet
+    — 중소·중견기업, 수출 거래, 보증대상 자금 — and the third was never
+    supplied by anything, so a company asking about 제작 자금 was told about
+    its exchange-rate exposure instead. The rule was there the whole time.
+
+    It is the company's own word, so the judgement resting on it stays
+    `review_required`. Saying nothing when the
+    sentence names no purpose is the right answer, not a gap: the rule then
+    reports 보증대상 자금 as missing, which is a question the user can answer.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    purpose = financing_purpose(utterance)
+    if purpose is None:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        DECLARED_FINANCING_EVIDENCE_ID,
+        # `user_trade`, not `user_declaration`: the fact catalog fixes the role
+        # per field, and this one is the company describing its own trade.
+        EvidenceRole.USER_TRADE,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": {"financing.purpose": purpose},
+            "declared_by": program.company.company_id,
+            "basis": "기업이 문장으로 말한 자금 용도",
+        },
+    )
+    assertions = {
+        case_id: (
+            FactAssertion(
+                "financing.purpose", purpose, (DECLARED_FINANCING_EVIDENCE_ID,)
+            ),
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def analyze(
     program: TradeProgram,
     *,
@@ -415,18 +468,23 @@ def analyze(
         declared, declared_evidence = _declared_company_assertions(
             program, as_of=evaluated_at_utc
         )
+        financing, financing_evidence = _declared_financing_assertions(
+            program, utterance, as_of=evaluated_at_utc
+        )
         country, country_evidence = _country_policy_assertions(program, snapshot_root)
         assertions = {
             case_id: (
                 *assertions.get(case_id, ()),
                 *declared.get(case_id, ()),
+                *financing.get(case_id, ()),
                 *country.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *country}
+            for case_id in {*assertions, *declared, *financing, *country}
         }
         structure_evidence = (
             *structure_evidence,
             *declared_evidence,
+            *financing_evidence,
             *country_evidence,
         )
         decision_packet = _isolated(

@@ -63,5 +63,34 @@ class StatementTests(unittest.TestCase):
             coverage.held = original
 
 
+class FinancingTests(unittest.TestCase):
+    def test_it_names_the_product_that_covers_that_money(self) -> None:
+        """"지원제도는 한국무역보험공사 제도만 판정합니다" is true and reads as
+        having nothing, when the rulepack holds a rule aimed at exactly the
+        money the company just described."""
+        self.assertEqual(
+            "필요하신 자금은 K-SURE 수출신용보증(선적전)으로 판정합니다.",
+            coverage.for_financing("trade_finance"),
+        )
+
+    def test_the_particle_follows_the_last_syllable_not_the_last_character(
+        self,
+    ) -> None:
+        """Rule titles end in brackets — "수출신용보증(선적전)" — and 로/으로
+        is decided by 전, which the closing bracket hides."""
+        self.assertEqual("으로", coverage._instrumental("수출신용보증(선적전)"))
+        self.assertEqual("으로", coverage._instrumental("환변동보험"))
+        self.assertEqual("로", coverage._instrumental("수출신용보증(선적전)이"))
+        self.assertEqual("로", coverage._instrumental("수출신용보증(선적후)"))
+
+    def test_no_purpose_says_nothing(self) -> None:
+        self.assertEqual("", coverage.for_financing(None))
+
+    def test_an_uncovered_purpose_says_nothing(self) -> None:
+        """Silence rather than an empty promise — the limits line below it
+        already says what is not covered."""
+        self.assertEqual("", coverage.for_financing("other"))
+
+
 if __name__ == "__main__":
     unittest.main()

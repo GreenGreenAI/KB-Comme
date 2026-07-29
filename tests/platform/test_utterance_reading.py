@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from tradeflow.tools.utterance import krw_amount, read_utterance
+from tradeflow.tools.utterance import financing_purpose, krw_amount, read_utterance
 
 AS_OF = date(2026, 7, 28)
 
@@ -149,6 +149,37 @@ class CurrencyTests(unittest.TestCase):
         self.assertEqual("EUR", read("유로로 15만 유로 받아요")["currency"])
         self.assertEqual("JPY", read("엔화로 결제받습니다")["currency"])
         self.assertEqual("USD", read("10만 달러 수출")["currency"])
+
+
+class FinancingPurposeTests(unittest.TestCase):
+    """§5.4's 수출신용보증(선적전) rule was written, sourced and tested, and had
+    never fired: three of its four conditions were met by any signed-in
+    exporter, and the fourth — 보증대상 자금 — was filled by nothing at all.
+    The company says what the money is for; nobody was listening."""
+
+    def test_production_money_is_trade_finance(self) -> None:
+        for said in (
+            "제품 제작에 들어갈 자금이 부족합니다",
+            "생산 자금이 모자랍니다",
+            "무역금융을 받을 수 있나요",
+            "운전자금이 필요합니다",
+        ):
+            with self.subTest(said=said):
+                self.assertEqual("trade_finance", financing_purpose(said))
+
+    def test_importing_export_materials_is_its_own_purpose(self) -> None:
+        self.assertEqual(
+            "export_material_import_lc",
+            financing_purpose("수출용 원자재를 수입해야 합니다"),
+        )
+
+    def test_an_unstated_purpose_stays_unstated(self) -> None:
+        """The rule then reports 보증대상 자금 as missing, which is a question
+        the company can answer. Guessing it would put them in front of a
+        guarantee they cannot apply for."""
+        self.assertIsNone(financing_purpose("베트남에 10만 달러 수출합니다"))
+        self.assertIsNone(financing_purpose(""))
+        self.assertIsNone(financing_purpose(None))
 
 
 if __name__ == "__main__":

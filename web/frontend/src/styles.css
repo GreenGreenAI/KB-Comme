@@ -11,6 +11,7 @@
 
     --ink-70: color-mix(in srgb, var(--ink) 70%, #fff);
     --ink-45: color-mix(in srgb, var(--ink) 45%, #fff);
+    --ink-30: color-mix(in srgb, var(--ink) 30%, #fff);
     --rule: color-mix(in srgb, var(--soft) 42%, #fff);
     --rule-faint: color-mix(in srgb, var(--soft) 22%, #fff);
     --tint: color-mix(in srgb, var(--soft) 14%, #fff);
@@ -618,6 +619,16 @@
     width: 8.5rem; font-family: var(--mono); font-size: 1rem;
     font-variant-numeric: tabular-nums; color: var(--ink); text-align: right;
   }
+  /* The one field where a placeholder must not read as a value. It is right
+     aligned, tabular and monospaced exactly like a typed amount, so at full
+     strength "100,000" looked entered — and 확인 on a number nobody typed is
+     the same failure as mishearing one. */
+  .pointer.lead {
+    /* Answering first, not annotating. The same line reads as a footnote at
+       the size it has under the sentence. */
+    color: var(--ink); font-size: .9375rem; margin-bottom: .35rem;
+  }
+  .money input::placeholder { color: var(--ink-30); }
   .money-read { font-size: .75rem; color: var(--ink-45); }
 
   /* Stacked, keyboard-first. Each option is a different thing to do, so they

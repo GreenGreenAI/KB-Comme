@@ -174,6 +174,15 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         {turn.ask.issues?.map((issue) => (
           <p key={issue.field}>{issue.reason}</p>
         ))}
+        {/* What the product holds for the money they just described, before
+            what it still needs. Not a limit, so not set as one — folded into
+            the grey block below it read as a footnote to its own subject.
+
+            Above the question because it is the answer: a company that asked
+            which loan it could get should be told there is one before being
+            told what we want from them. */}
+        {turn.ask.holds && <p className="pointer lead">{turn.ask.holds}</p>}
+
         {/* §4.2[1] wrote this, over the slots the reader found missing. The
             list is what the screen falls back to — three questions stacked at
             someone who said hello, which is what this replaced. */}
@@ -184,6 +193,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             <p key={question}>{question}</p>
           ))
         )}
+
         {/* Most sessions stop on this turn, so the limits of what was asked
             about belong here too — not only on an answer the reader may never
             reach. */}
@@ -231,6 +241,10 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         opened, unread,
       });
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
+  // Which of the two opens the answer, decided by the server from the intent
+  // §4.2[2] already read. Absent — an older turn, or a trade description with
+  // no question in it — keeps the sentence first.
+  const leads = result.lead === "pointer";
   const asksProfit = !hedge && hedgeInputs.length > 0;
 
   // The order the turn arrives in, as a gap before each unit: the sentence a
@@ -281,18 +295,32 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       {/* The sentence arrives a word at a time. Written as segments rather than
           JSX so words can be mounted one by one; emphasis rides along on the
           segment. */}
+      {/* Written by code, not by §4.2[9]: the sentence is about the figures,
+          and this says what else the answer holds. Counts only — every verdict
+          is rendered from its own worker's output below.
+
+          It goes above the sentence when the question was not about what the
+          sentence can say. Someone who asked about 제작 자금 met their
+          exchange-rate exposure first, every time, because the synthesised
+          sentence may only quote figures and every figure is an exposure. The
+          server decides which; nothing here re-reads the question. */}
+      {leads && shown > 0 && result.pointer && (
+        <p className={`pointer lead${arrive}`}>{result.pointer}</p>
+      )}
+
       {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
 
-      {/* Written by code, not by §4.2[9]: the sentence above is about the
-          figures, and this says what else the answer holds. Counts only —
-          every verdict is rendered from its own worker's output below. */}
-      {shown > words && result.pointer && (
+      {!leads && shown > words && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
       )}
 
       {/* What the subject they raised is not covered by. Nothing above is
           false without it; what is missing is the sentence that stops the
           reader waiting for an answer that is not coming. */}
+      {shown > words && result.holds && (
+        <p className={`pointer lead${arrive}`}>{result.holds}</p>
+      )}
+
       {shown > words && result.coverage && (
         <p className={`pointer limit${arrive}`}>{result.coverage}</p>
       )}

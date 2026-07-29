@@ -43,6 +43,7 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
@@ -51,6 +52,7 @@ from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    financing_purpose,
     krw_amount,
     place_utterance,
     read_utterance,
@@ -370,6 +372,7 @@ def analyze_endpoint(
             # here as well as on the answer because most sessions stop here —
             # a company asking about 제작 자금 should not have to supply an
             # amount and a date to find out we do not look at 수출입은행 자금.
+            "holds": _holds(request.utterance),
             "coverage": _coverage(request.utterance),
             # §4.2[1] in words. `questions` stays — the request panel pairs a
             # field with its own wording, and this one sentence covers all
@@ -396,9 +399,14 @@ def analyze_endpoint(
                         {
                             "field": "amount",
                             "reason": (
-                                f"{stated_krw:,.0f}원으로 들었습니다. 환노출은 "
-                                "외화 기준으로 계산하므로 달러 금액이 따로 "
-                                "필요합니다."
+                                # Not "환노출은 …" — this limit holds
+                                # whatever was asked about, and naming the
+                                # exposure calculation to someone who asked
+                                # about 제작 자금 answered a question they
+                                # had not put.
+                                f"{stated_krw:,.0f}원으로 들었습니다. 지금은 "
+                                "미국 달러 거래를 기준으로 분석하므로 달러 "
+                                "금액이 따로 필요합니다."
                             ),
                         }
                     ]
@@ -438,12 +446,36 @@ def analyze_endpoint(
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
     result["pointer"] = pointer(result)
+    result["holds"] = _holds(request.utterance)
     result["coverage"] = _coverage(request.utterance)
+    # Which of the two the reader meets first. §4.2[9]'s sentence may only
+    # quote `figures()`, and every figure in it is an exposure, a rate or a
+    # hedge ratio — that is the whole safety division and it stays. But a
+    # company that asked about 제작 자금 then opened the answer on its
+    # exchange-rate exposure, because the one sentence a model may write is
+    # always about the one subject it may quote. The judgement it asked for
+    # was two lines further down, in the code-owned pointer.
+    #
+    # Ordering only. Nothing is added, removed or re-worded.
+    result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
     return {
         "status": "ready",
         "understood": heard,
         "result": result,
     }
+
+
+#: Subjects the synthesised sentence can be about. A question about anything
+#: else is answered by the pointer, so the pointer goes first.
+_SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
+
+
+def _pointer_leads(utterance: str | None) -> bool:
+    """True when the first thing the sentence asked about is not what the
+    summary can say. Silence — a trade description with no question — keeps
+    the default order."""
+    lead = next(iter(read_intent(utterance or "")), None)
+    return lead is not None and lead not in _SENTENCE_SUBJECTS
 
 
 def _coverage(utterance: str | None) -> str:
@@ -461,6 +493,16 @@ def _coverage(utterance: str | None) -> str:
     # of the question we cannot answer.
     said = [coverage_statement(section) for section in read_intent(utterance)]
     return " ".join(line for line in said if line)
+
+
+def _holds(utterance: str | None) -> str:
+    """What this product does hold for the money the company says it needs.
+
+    Separate from `_coverage` because it is not a limit and must not be set in
+    the type limits are set in. Folded into that grey block it became the
+    faintest line on a screen whose entire subject it was.
+    """
+    return coverage_for_financing(financing_purpose(utterance))
 
 
 def _hedge_measures(
