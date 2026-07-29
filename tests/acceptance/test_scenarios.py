@@ -8,7 +8,7 @@ from .harness import run_all
 #: away from the user, and should say so out loud rather than slipping through
 #: green. Raising one means updating the line here, which is the moment to ask
 #: whether it was raised by adding knowledge or by loosening a check.
-BASELINE = {"S1": 4, "S2": 4, "S3": 1, "S4": 4, "S5": 2}
+BASELINE = {"S1": 6, "S2": 4, "S3": 1, "S4": 4, "S5": 2}
 
 
 class ScenarioTests(unittest.TestCase):

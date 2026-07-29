@@ -85,9 +85,14 @@ CAPABILITIES = (
     ),
     Capability(
         "forward_quote",
-        "선물환 조건을 근거와 함께 제시한다",
-        lambda r: bool((r.get("hedge_analysis") or {}).get("quote_basis")),
-        needs="은행 선물환 호가 출처. §5.3은 호가 없이 비율을 만들지 않는다",
+        "무헤지·전액헤지 손익을 확인된 호가로 비교한다",
+        # `instrument_candidates` names the measure the ratio rests on, and
+        # `payoff_comparison` is what scenario 1 asks for by another name —
+        # 무헤지·권장·100% 비교. Written against the response as it actually is;
+        # the first version guessed a `quote_basis` key that does not exist.
+        lambda r: bool((r.get("hedge_analysis") or {}).get("instrument_candidates"))
+        and bool((r.get("hedge_analysis") or {}).get("payoff_comparison")),
+        needs="은행이 확인해 준 선물환 호가. §5.3은 호가 없이 비율을 만들지 않는다",
     ),
     Capability(
         "support_ksure",

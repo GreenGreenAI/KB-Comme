@@ -10,13 +10,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime, time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from tradeflow.agent.intake import intake
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
+from tradeflow.domain.enums import TradeDirection
+from tradeflow.knowledge.hedge_quotes import (
+    HedgeQuoteSide,
+    UserForwardQuote,
+    UserQuoteHedgeAvailabilityService,
+)
 from tradeflow.runtime.accounts import Account
 
 from .capabilities import BY_NAME
@@ -61,6 +68,43 @@ class Outcome:
         return f"{len(self.met)}/{wanted}"
 
 
+def _money(value: Any) -> Decimal | None:
+    return None if value is None else Decimal(str(value))
+
+
+def _measures(scenario: dict[str, Any], program: Any) -> tuple[Any, ...]:
+    """The scenario's bank quote, scoped the way the web layer scopes it."""
+    quote = scenario.get("forward_quote")
+    if not quote:
+        return ()
+    evaluated_at = datetime.combine(AS_OF, time(0, 0), tzinfo=UTC)
+    net = sum(
+        case.amount if case.direction is TradeDirection.EXPORT else -case.amount
+        for case in program.cases
+    )
+    confirmed = UserForwardQuote(
+        quote_id="USERQUOTE-ACCEPTANCE",
+        provider_id="BANK_acceptance",
+        company_id=program.company.company_id,
+        case_ids=tuple(case.case_id for case in program.cases),
+        base_currency=program.cases[0].currency,
+        counter_currency="KRW",
+        side=HedgeQuoteSide.SELL if net > 0 else HedgeQuoteSide.BUY,
+        notional=abs(net),
+        contract_rate=Decimal(quote["contract_rate"]),
+        cost_rate=Decimal(quote["cost_rate"]),
+        settlement_date=max(case.expected_payment_date for case in program.cases),
+        quoted_at=evaluated_at,
+        valid_until=datetime.fromisoformat(quote["valid_until"] + "T23:59:00+00:00"),
+        confirmed=bool(quote["confirmed"]),
+    )
+    return UserQuoteHedgeAvailabilityService(
+        quotes=(confirmed,),
+        evaluated_at=evaluated_at,
+        selected_quote_id=confirmed.quote_id,
+    ).assemble(program=program, as_of=AS_OF).measures
+
+
 def run(scenario: dict[str, Any]) -> Outcome:
     reading = intake(
         [scenario["case"]],
@@ -70,10 +114,14 @@ def run(scenario: dict[str, Any]) -> Outcome:
     if not reading.ready:
         result: dict[str, Any] = {}
     else:
+        profit = scenario.get("profit") or {}
         result = build_response(
             analyze(
                 reading.program,
                 snapshot_root=SNAPSHOT_ROOT,
+                baseline_profit=_money(profit.get("baseline_profit")),
+                profit_floor=_money(profit.get("profit_floor")),
+                hedge_measures=_measures(scenario, reading.program),
                 utterance=scenario["utterance"],
             )
         )

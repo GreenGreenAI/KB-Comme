@@ -87,7 +87,7 @@ function stepsFor(result) {
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {} });
+  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null });
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -233,7 +233,11 @@ export default function App() {
       ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
       : facts.cases;
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
-    setFacts({ cases: nextCases, profile: nextProfile });
+    // The quote is remembered like everything else the user has told us: the
+    // server is stateless, so it has to be resent with each turn or the hedge
+    // would vanish the moment anything else was said.
+    const nextQuote = patch.quote ?? facts.quote ?? null;
+    setFacts({ cases: nextCases, profile: nextProfile, quote: nextQuote });
 
     // What the user said, as the thread should carry it. A typed sentence is
     // its own text. An answer given through the request panel says what was
@@ -259,6 +263,7 @@ export default function App() {
         ...nextProfile,
         as_of: today(),
         ...(placement ? { placement } : {}),
+        ...(nextQuote ? { forward_quote: nextQuote } : {}),
       });
       const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
@@ -388,6 +393,11 @@ export default function App() {
                     result?.hedge_analysis
                       ? []
                       : result?.required_inputs?.hedge ?? []
+                  }
+                  quoteInputs={
+                    result?.hedge_analysis
+                      ? []
+                      : result?.required_inputs?.quote ?? []
                   }
                   onSlot={(patch, said) => send(null, patch, null, said)}
                   onPlace={(utterance, placement, said) =>

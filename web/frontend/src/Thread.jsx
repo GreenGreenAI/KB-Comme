@@ -301,6 +301,65 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
  *  a clearance, and a company that reads the second when the first was meant
  *  ships without filing.
  */
+const PAYOFF_LABEL = {
+  unhedged: "헤지하지 않으면",
+  fully_hedged: "전액 헤지하면",
+  recommended: "권장 비율로",
+};
+
+const POINT_LABEL = { adverse: "불리", median: "중앙", favourable: "유리" };
+
+/** What each choice is worth at three rates.
+ *
+ *  §5.3 computes this and it was going unread. The comparison is the answer to
+ *  "지금 환전해 두는 게 나을까요" — not a ratio, but what the same trade earns
+ *  under each decision, at a rate nobody is predicting.
+ */
+function Payoff({ hedge }) {
+  const rows = hedge.payoff_comparison ?? [];
+  if (rows.length === 0) return null;
+  const points = rows[0].points ?? [];
+  return (
+    <table className="payoff">
+      <thead>
+        <tr>
+          <th />
+          {points.map((point) => (
+            <th key={point.label}>
+              {POINT_LABEL[point.label] ?? point.label}
+              <small>{won(point.rate)}</small>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label}>
+            <th scope="row">{PAYOFF_LABEL[row.label] ?? row.label}</th>
+            {(row.points ?? []).map((point) => (
+              <td key={point.label}>{won(point.profit)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Which quote the ratio rests on. A number that cannot say where its price
+ *  came from is the thing §5.3 refuses to produce. */
+function QuoteBasis({ hedge }) {
+  const used = (hedge.instrument_candidates ?? []).filter(
+    (item) => item.status === "available",
+  );
+  if (used.length === 0) return null;
+  return (
+    <p className="sources">
+      {used.map((item) => item.measure_id).join(" · ")}
+    </p>
+  );
+}
+
 const STATUS_LABEL = {
   expert_confirmation_required: "전문가 확인 필요",
   insufficient_information: "정보 부족",
@@ -703,6 +762,8 @@ function Answer({ result, order, shown, arrive }) {
                     적자 전환 확률 {pct(hedge.loss_probability, 1)} · 불리한 환율{" "}
                     {won(hedge.adverse_rate)}원 기준
                   </p>
+                  <Payoff hedge={hedge} />
+                  <QuoteBasis hedge={hedge} />
                 </details>
               );
             }

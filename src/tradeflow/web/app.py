@@ -22,9 +22,10 @@ and deciding what to run lives in the orchestrator.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
-from datetime import date
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -35,6 +36,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from tradeflow.agent.intake import intake
+from tradeflow.domain.enums import TradeDirection
+from tradeflow.knowledge.hedge_quotes import (
+    HedgeQuoteSide,
+    UserForwardQuote,
+    UserQuoteHedgeAvailabilityService,
+)
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.runtime.synthesis import Synthesizer, figures
 from tradeflow.agent.orchestrator import analyze
@@ -71,6 +78,29 @@ logger = logging.getLogger("tradeflow.synthesis")
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class ForwardQuoteInput(BaseModel):
+    """What a bank told this company, and nothing else.
+
+    §5.3 will not produce a hedge ratio from public market data — a forward
+    rate is what one bank offered to one company, and no snapshot can stand in
+    for that. So these come from the user, who is the only one who has them,
+    while everything about the quote's *scope* is derived from the trades
+    already on file: which cases it covers, which currencies, which side, the
+    settlement date. Asking for those again would invite an answer that does
+    not match the analysis, and the availability service would then reject the
+    quote for a mismatch the screen itself had caused.
+    """
+
+    provider: str = Field(min_length=1, max_length=64)
+    contract_rate: str
+    cost_rate: str
+    valid_until: str
+    #: The company confirming the bank actually offered this. §5.3 treats an
+    #: indicative rate and a confirmed one differently, and only the person
+    #: holding the quote can say which this is.
+    confirmed: bool = False
 
 
 def _signed_in(token: str | None) -> Account | None:
@@ -177,6 +207,7 @@ class AnalyzeRequest(BaseModel):
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
     placement: Literal["append", "merge"] | None = None
+    forward_quote: ForwardQuoteInput | None = None
 
 
 FIELD_LABELS = {
@@ -361,6 +392,7 @@ def analyze_endpoint(
         snapshot_root=SNAPSHOT_ROOT,
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
+        hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
     )
     result = build_response(analysis)
@@ -381,6 +413,111 @@ def analyze_endpoint(
         "understood": heard,
         "result": result,
     }
+
+
+def _hedge_measures(
+    quote: ForwardQuoteInput | None,
+    program: Any,
+    as_of: date,
+) -> tuple[Any, ...]:
+    """The quote, scoped to the program it was given for.
+
+    Everything the availability service checks for an exact match is computed
+    here rather than asked for: the cases, the currencies, the side, the
+    settlement date and the notional all follow from trades the user already
+    entered. Collecting them a second time would let the two disagree, and the
+    service would reject the quote over a contradiction the form had invented.
+
+    Without a quote this returns nothing, and §5.3 stops with
+    `FORWARD_QUOTE_REQUIRED` — which is the right answer, not a gap.
+    """
+    if quote is None:
+        return ()
+
+    cases = program.cases
+    currency = cases[0].currency
+    net = sum(
+        case.amount if case.direction is TradeDirection.EXPORT else -case.amount
+        for case in cases
+        if case.currency == currency
+    )
+    if net == 0:
+        return ()
+
+    evaluated_at = datetime.combine(as_of, time(0, 0), tzinfo=UTC)
+    try:
+        confirmed = UserForwardQuote(
+            quote_id=f"USERQUOTE-{as_of.isoformat().replace('-', '')}",
+            provider_id=_provider_id(quote.provider),
+            company_id=program.company.company_id,
+            case_ids=tuple(case.case_id for case in cases),
+            base_currency=currency,
+            counter_currency="KRW",
+            side=HedgeQuoteSide.SELL if net > 0 else HedgeQuoteSide.BUY,
+            notional=abs(net),
+            contract_rate=_money(quote.contract_rate, "contract_rate"),
+            cost_rate=_money(quote.cost_rate, "cost_rate"),
+            settlement_date=max(case.expected_payment_date for case in cases),
+            quoted_at=evaluated_at,
+            valid_until=_valid_until(quote.valid_until),
+            confirmed=quote.confirmed,
+        )
+    except (ValueError, TypeError) as failure:
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "forward_quote", "reason": str(failure)},
+        ) from None
+
+    # The selection is the submission. §5.3 refuses to pick among quotes — with
+    # several on file the company has to say which one it will use — and this
+    # form takes one, which the user entered and sent. Leaving it unselected
+    # would leave the measure `conditional` forever with nothing on screen able
+    # to resolve it.
+    service = UserQuoteHedgeAvailabilityService(
+        quotes=(confirmed,),
+        evaluated_at=evaluated_at,
+        selected_quote_id=confirmed.quote_id,
+    )
+    return service.assemble(program=program, as_of=as_of).measures
+
+
+def _provider_id(name: str) -> str:
+    """A bank's name as an identifier the quote contract accepts.
+
+    `UserForwardQuote` allows `[A-Za-z0-9._-]` only, and `"하나은행".isalnum()`
+    is True — Python counts Hangul as alphanumeric, so a naive filter passed
+    the name through unchanged and the contract rejected it.
+
+    A digest keeps two banks apart and keeps the same bank stable across
+    re-runs, which §6.2 needs. It does not keep the name: evidence will read
+    `BANK_1f3c9a2b`, not `하나은행`. The name the user typed is on their screen
+    and nowhere in the packet — worth raising with Role A, since the quote
+    contract has no field for a display name.
+    """
+    cleaned = name.strip()
+    if not cleaned:
+        return "BANK"
+    ascii_safe = "".join(
+        ch for ch in cleaned if (ch.isascii() and ch.isalnum()) or ch in "._-"
+    )
+    if ascii_safe == cleaned:
+        return f"BANK_{ascii_safe}"
+    digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:8]
+    return f"BANK_{digest}"
+
+
+def _valid_until(value: str) -> datetime:
+    text = (value or "").strip()
+    try:
+        if len(text) == 10:
+            return datetime.combine(date.fromisoformat(text), time(23, 59), tzinfo=UTC)
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "valid_until", "reason": "ISO 날짜를 입력해 주세요"},
+        ) from None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 @app.get("/api/health")

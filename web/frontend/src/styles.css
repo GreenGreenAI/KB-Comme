@@ -835,6 +835,29 @@
   .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
   .fold > summary::-webkit-details-marker { display: none; }
 
+  /* Each decision at three rates. Figures right-aligned and tabular so the
+     columns compare by eye — that is the whole point of the table. */
+  .payoff {
+    width: 100%; border-collapse: collapse; margin: .5rem 0 .3rem;
+    font-size: .75rem; font-variant-numeric: tabular-nums;
+  }
+  .payoff th, .payoff td { padding: .3rem .5rem; text-align: right; }
+  .payoff thead th { font-weight: 500; color: var(--ink-45); }
+  .payoff thead th small {
+    display: block; font-family: var(--mono); font-size: .625rem; font-weight: 400;
+  }
+  .payoff tbody th {
+    text-align: left; font-weight: 600; color: var(--ink-70); white-space: nowrap;
+  }
+  .payoff tbody tr { border-top: 1px dashed var(--rule-faint); }
+  .payoff tbody td { font-family: var(--mono); color: var(--ink); }
+
+  /* The quote fields need their own line: five controls do not sit beside a
+     button the way one field does. */
+  .ask-row.quote { align-items: center; }
+  .ask-row.quote > input { flex: 1 1 8rem; min-width: 6rem; }
+  .ask-row.quote > .check { flex: 1 1 100%; margin: .1rem 0 0; }
+
   /* ---------- verdicts ---------- */
   /* One judgement per row. The palette has no green/amber/red to lean on, so
      state is carried by form: a filled chip for a judgement that stands, an
