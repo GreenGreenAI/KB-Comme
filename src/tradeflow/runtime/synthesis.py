@@ -457,6 +457,40 @@ def figures(result: dict[str, Any]) -> list[str]:
 WORKER_FOR_SUBJECT = {"support": "support", "compliance": "compliance", "hedge": "hedge"}
 
 
+def _named_support(result: dict[str, Any], skipped: dict[str, Any]) -> str:
+    """The support verdict as a sentence naming the products, or nothing.
+
+    Written here rather than by §4.2[9] for the reason the whole pointer is:
+    a model that can say 「환변동보험이 있습니다」 can also say 「자격이
+    됩니다」, and the division rests on it not being able to. So this names
+    what the rules named and counts what they could not decide — it does not
+    conclude anything they did not.
+    """
+    if "support" in skipped:
+        return ""
+    candidates = result.get("support_candidates") or []
+    settled = [
+        item["title"]
+        for item in candidates
+        if item.get("status") != "insufficient_information" and item.get("title")
+    ]
+    short = len(candidates) - len(settled)
+    if not settled:
+        return ""
+    said = f"{' · '.join(settled)}{_particle(settled[-1])} 조건을 충족합니다."
+    if short:
+        said += f" {short}개는 몇 가지를 더 알려주시면 판정합니다."
+    return said
+
+
+def _particle(word: str) -> str:
+    """은 or 는, chosen the way Korean chooses it. The product named last
+    changes with the trade, so `은(는)` would be visible on most answers."""
+    last = ord(word.strip()[-1])
+    syllable = 0xAC00 <= last <= 0xD7A3
+    return "은" if syllable and (last - 0xAC00) % 28 else "는"
+
+
 def pointer(result: dict[str, Any], *, intent: tuple[str, ...] = ()) -> str:
     """What else this answer holds, counted rather than judged.
 
@@ -483,6 +517,13 @@ def pointer(result: dict[str, Any], *, intent: tuple[str, ...] = ()) -> str:
         reason = skipped.get(WORKER_FOR_SUBJECT.get(subject, ""))
         if reason:
             return reason
+
+    # A count is our bookkeeping, not an answer. 「받을 수 있는 지원제도가
+    # 있나요」 is answered by a name — and when the subject asked about has one,
+    # that name is the first thing the reader should meet.
+    named = _named_support(result, skipped) if "support" in intent else ""
+    if named:
+        return named
 
     parts: list[str] = []
 

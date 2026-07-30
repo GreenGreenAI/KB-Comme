@@ -653,6 +653,13 @@
   .cites a { color: var(--ink-70); text-underline-offset: 2px; }
   .cites em { font-style: normal; margin-left: .35rem; }
 
+  /* The sections nobody asked about, and the audit. Quieter than the answer
+     because they are not it — the previous shape gave every section the same
+     size and colour, so the screen said nothing about which one was. */
+  .fold.aside > summary { color: var(--ink-45); font-size: .8125rem; }
+  .fold.aside[open] > summary { margin-bottom: .4rem; }
+  .fold.aside > .fold { margin-left: .6rem; }
+
   .turn.agent p.prose { white-space: pre-line; }
 
   .pointer.lead {

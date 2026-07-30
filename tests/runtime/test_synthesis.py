@@ -425,8 +425,8 @@ class PointerLeadsWithTheReasonTests(unittest.TestCase):
         ran = {
             "workers": {"skipped": {}},
             "support_candidates": [
-                {"status": "expert_confirmation_required"},
-                {"status": "insufficient_information"},
+                {"status": "expert_confirmation_required", "title": ""},
+                {"status": "insufficient_information", "title": ""},
             ],
             "filing_obligations": [],
             "next_actions": [],
@@ -436,6 +436,51 @@ class PointerLeadsWithTheReasonTests(unittest.TestCase):
 
         self.assertIn("지원제도 후보 1건", said)
         self.assertIn("정보 부족 1건", said)
+
+
+class NamedVerdictTests(unittest.TestCase):
+    """「받을 수 있는 지원제도가 있나요」 is answered by a name, not a count.
+
+    「지원제도 후보 1건 · 정보 부족 2건」 is our bookkeeping: it says how many
+    rows the reader is about to scroll past, which is not what was asked.
+    """
+
+    RESULT = {
+        "workers": {"skipped": {}},
+        "support_candidates": [
+            {"status": "expert_confirmation_required", "title": "K-SURE 환변동보험"},
+            {"status": "insufficient_information", "title": "K-SURE 수출신용보증"},
+        ],
+        "filing_obligations": [],
+        "next_actions": [],
+    }
+
+    def test_it_names_what_the_rules_settled(self) -> None:
+        said = pointer(self.RESULT, intent=("support",))
+
+        self.assertIn("K-SURE 환변동보험은 조건을 충족합니다", said)
+        self.assertIn("1개는 몇 가지를 더 알려주시면", said)
+
+    def test_it_concludes_nothing_the_rules_did_not(self) -> None:
+        """A pointer that could say 「신청하실 수 있습니다」 would be deciding.
+        Naming what a rule named is reporting; the rest is the rule's."""
+        said = pointer(self.RESULT, intent=("support",))
+
+        self.assertNotIn("신청", said)
+        self.assertNotIn("자격", said)
+
+    def test_a_question_about_something_else_keeps_the_counts(self) -> None:
+        self.assertIn("지원제도 후보", pointer(self.RESULT, intent=("hedge",)))
+
+    def test_nothing_settled_falls_back_to_counting(self) -> None:
+        open_only = {
+            **self.RESULT,
+            "support_candidates": [
+                {"status": "insufficient_information", "title": "K-SURE 수출신용보증"}
+            ],
+        }
+
+        self.assertIn("정보 부족 1건", pointer(open_only, intent=("support",)))
 
 
 class NaturalProseTests(unittest.TestCase):

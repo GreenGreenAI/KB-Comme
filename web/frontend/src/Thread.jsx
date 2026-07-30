@@ -923,6 +923,10 @@ function Answer({ result, order, shown, arrive }) {
   const asked = folded
     ? order.find((s) => s !== "exposure" && s !== "market_scenario")
     : null;
+  // Everything the question did not raise, in the plan's order.
+  const rest = order.filter(
+    (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
+  );
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
@@ -964,12 +968,45 @@ function Answer({ result, order, shown, arrive }) {
         </>
       </Calculation>
 
-      {/* Sections follow the order §4.2[2]'s intent reading produced. */}
+      {/* Three tiers, not six equal rows. The section the question was about
+          is the answer and stands on its own; the ones nobody asked about are
+          one folded line together; the audit is the last line.
+
+          Before this every section — 환노출, 헤지, 신고의무, 지원제도 — sat in
+          one grey card at the same size, the same colour and the same indent,
+          so the screen said nothing about which of them was the answer. §2's
+          protection is unchanged: everything is still one click away. It just
+          no longer takes the same room as the thing that was asked for. */}
       {shown > (market ? 2 : 1) && (
         <div className={`folds${arrive}`}>
-        {order
-          .filter((section) => section !== "exposure" && section !== "market_scenario")
-          .map((section) => {
+        {(asked ? [asked] : rest).map(renderSection)}
+
+        {asked && rest.length > 0 && (
+          <details className="fold aside">
+            <summary>이 거래의 다른 것들 · {rest.map((s) => SECTION_LABEL[s] ?? s).join(" · ")}</summary>
+            {rest.map(renderSection)}
+          </details>
+        )}
+
+        <Actions actions={result.next_actions} />
+
+        <details className="fold aside">
+          <summary>근거 · 재현에 필요한 입력</summary>
+          <ul className="versions">
+            {(result.calculation_versions?.snapshots ?? []).map((item) => (
+              <li key={item.source_id}>
+                <span className="vk">{item.source_id}</span>
+                <span className="vv">{item.version}</span>
+              </li>
+            ))}
+          </ul>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+
+  function renderSection(section) {
             const reason = skipped[section === "hedge" ? "hedge" : section];
             if (section === "hedge" && hedge) {
               return (
@@ -1007,25 +1044,7 @@ function Answer({ result, order, shown, arrive }) {
               );
             }
             return null;
-          })}
-
-        <Actions actions={result.next_actions} />
-
-        <details className="fold">
-          <summary>근거 · 재현에 필요한 입력</summary>
-          <ul className="versions">
-            {(result.calculation_versions?.snapshots ?? []).map((item) => (
-              <li key={item.source_id}>
-                <span className="vk">{item.source_id}</span>
-                <span className="vv">{item.version}</span>
-              </li>
-            ))}
-          </ul>
-          </details>
-        </div>
-      )}
-    </div>
-  );
+  }
 }
 
 /** Where the rate can land by the last payment date, drawn to scale. */
