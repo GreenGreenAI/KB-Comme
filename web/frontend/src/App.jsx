@@ -398,13 +398,18 @@ export default function App() {
               {!busy && !writing && (
                 <AskBar
                   pending={pending}
+                  /* The panel opens only for the worker this turn is asking
+                     about. §4.2[5]'s inputs are still named in the hedge fold
+                     whatever was asked — but a panel is a demand, and a
+                     company that asked whether its netting is reportable was
+                     being shown two boxes for its operating profit. */
                   requiredInputs={
-                    result?.hedge_analysis
+                    result?.hedge_analysis || result?.asking_for !== "hedge"
                       ? []
                       : result?.required_inputs?.hedge ?? []
                   }
                   quoteInputs={
-                    result?.hedge_analysis
+                    result?.hedge_analysis || result?.asking_for !== "hedge"
                       ? []
                       : result?.required_inputs?.quote ?? []
                   }

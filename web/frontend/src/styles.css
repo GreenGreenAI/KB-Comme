@@ -629,6 +629,12 @@
 
      Not `.said` — that is the user's own bubble, and borrowing the name put
      the product's answers in it. */
+  /* The exposure card, folded because the question was about something else.
+     It keeps the card's own ground rather than the fold's hairline, so it
+     still reads as the calculation and not as one more section. */
+  .fold.calc > summary { font-variant-numeric: tabular-nums; }
+  .fold.calc[open] > summary { margin-bottom: .5rem; }
+
   .turn.agent p.prose { white-space: pre-line; }
 
   .pointer.lead {

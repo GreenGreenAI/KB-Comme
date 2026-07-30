@@ -273,7 +273,12 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // §4.2[2] already read. Absent — an older turn, or a trade description with
   // no question in it — keeps the sentence first.
   const leads = result.lead === "pointer";
-  const asksProfit = !hedge && hedgeInputs.length > 0;
+  // The server decides whether this turn asks for the hedge inputs. It used
+  // to be "the hedge worker is blocked", which is true on almost every turn —
+  // so a question about 신고의무 was answered with a demand for the operating
+  // profit §5.3 wanted. The reason still shows in the hedge fold either way.
+  const asksProfit =
+    !hedge && hedgeInputs.length > 0 && result.asking_for === "hedge";
   // §4.2[2]'s own reason. The fold below shows it too, collapsed; this is the
   // same sentence where a reader with the input bar open will actually see it.
   const skippedHedge = result.workers?.skipped?.hedge;
@@ -827,6 +832,24 @@ function Written({ segments, shown, settled }) {
 }
 
 
+/** The exposure card, folded when the question was about something else.
+ *
+ *  Folded rather than dropped. `intent.js`'s rule — 의도는 답의 순서를 정하지
+ *  범위를 좁히지 않는다 — is why: §2's reader does not know their own exposure,
+ *  and a company asking about 상계 still has 60,000 USD open. Rendering
+ *  nothing would mean they never learn it. So the judgement they asked for
+ *  opens, and the calculation waits one click away with its headline figure
+ *  in the summary. */
+function Calculation({ folded, children, net }) {
+  if (!folded) return children;
+  return (
+    <details className="fold calc">
+      <summary>환노출 · 순노출 {won(net)} USD</summary>
+      {children}
+    </details>
+  );
+}
+
 function Answer({ result, order, shown, arrive }) {
   // The card arrives with its first figures, not before them. Drawing the grey
   // box first left an empty panel waiting to be filled, which read as
@@ -841,40 +864,49 @@ function Answer({ result, order, shown, arrive }) {
   const natural = cash.natural_hedge_amount?.[0]?.amount;
   const matched = cash.maturity_matched_amount?.[0]?.amount;
   const skipped = result.workers?.skipped ?? {};
+  // The same signal that puts the judgement above the sentence: the question
+  // was about something the exposure card does not answer.
+  const folded = result.lead === "pointer";
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
     <div className={`answer${arrive}`}>
-      <dl className="figrow">
-        <div>
-          <dt>순노출</dt>
-          <dd>
-            {Number(net) > 0 ? "+" : ""}
-            {won(net)} <small>USD</small>
-          </dd>
-        </div>
-        <div>
-          <dt>자금 공백</dt>
-          <dd className={Number(gap) > 0 ? "alarm" : ""}>
-            {won(gap)} <small>USD</small>
-          </dd>
-        </div>
-        <div>
-          <dt>자연헤지</dt>
-          <dd>
-            {won(natural)} <small>USD</small>
-          </dd>
-        </div>
-      </dl>
+      <Calculation folded={folded} net={net}>
+        <>
+          <dl className="figrow">
+            <div>
+              <dt>순노출</dt>
+              <dd>
+                {Number(net) > 0 ? "+" : ""}
+                {won(net)} <small>USD</small>
+              </dd>
+            </div>
+            <div>
+              <dt>자금 공백</dt>
+              <dd className={Number(gap) > 0 ? "alarm" : ""}>
+                {won(gap)} <small>USD</small>
+              </dd>
+            </div>
+            <div>
+              <dt>자연헤지</dt>
+              <dd>
+                {won(natural)} <small>USD</small>
+              </dd>
+            </div>
+          </dl>
 
-      {Number(natural) > 0 && Number(matched) === 0 && (
-        <p className="answer-note">
-          상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
-        </p>
-      )}
+          {Number(natural) > 0 && Number(matched) === 0 && (
+            <p className="answer-note">
+              상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
+            </p>
+          )}
 
-      {market && shown > 1 && <RateBand market={market} hedge={hedge} arrive={arrive} />}
+          {market && shown > 1 && (
+            <RateBand market={market} hedge={hedge} arrive={arrive} />
+          )}
+        </>
+      </Calculation>
 
       {/* Sections follow the order §4.2[2]'s intent reading produced. */}
       {shown > (market ? 2 : 1) && (

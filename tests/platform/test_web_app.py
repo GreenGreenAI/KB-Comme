@@ -289,5 +289,43 @@ class AnswerOrderTests(unittest.TestCase):
         self.assertFalse(app._pointer_leads(None))
 
 
+class AskingForTests(unittest.TestCase):
+    """Which blocked worker gets the top of the screen and an input panel.
+
+    Every skipped worker reports its reason in its own fold, and that does not
+    change — but an input panel is a demand, and a demand for a value the
+    question did not need reads as the product not having listened. A company
+    asking whether its netting is reportable was being asked for its operating
+    profit, which is §5.3's input and nobody's answer.
+    """
+
+    def _skipped(self, *names: str) -> dict:
+        return {"workers": {"skipped": {name: "…" for name in names}}}
+
+    def test_a_filing_question_is_not_asked_for_the_operating_profit(self) -> None:
+        self.assertIsNone(
+            app._asking_for("상계로 처리하는데 신고 대상인가요", self._skipped("hedge"))
+        )
+
+    def test_a_hedge_question_is(self) -> None:
+        self.assertEqual(
+            "hedge",
+            app._asking_for("헤지를 얼마나 해야 하나요?", self._skipped("hedge")),
+        )
+
+    def test_a_trade_description_keeps_the_funnel(self) -> None:
+        """§2's reader does not know their exposure well enough to ask about it
+        by name, so a sentence that asked about nothing keeps the old behaviour."""
+        self.assertEqual(
+            "hedge",
+            app._asking_for(
+                "10월 24일에 수출대금 10만 달러 받기로 했어요", self._skipped("hedge")
+            ),
+        )
+
+    def test_nothing_is_asked_for_when_nothing_is_blocked(self) -> None:
+        self.assertIsNone(app._asking_for("헤지를 얼마나 해야 하나요?", {}))
+
+
 if __name__ == "__main__":
     unittest.main()

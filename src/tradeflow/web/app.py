@@ -473,6 +473,12 @@ def analyze_endpoint(
     #
     # Ordering only. Nothing is added, removed or re-worded.
     result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
+    # What to ask for next, chosen by what was asked about. Every blocked
+    # worker still reports its reason in its own fold — nothing is hidden —
+    # but only one of them gets the top of the screen and an input panel.
+    # A company that asked whether its netting is reportable was being asked
+    # for its operating profit, which is §5.3's input and nobody's answer.
+    result["asking_for"] = _asking_for(request.utterance, result)
     return {
         "status": "ready",
         "understood": heard,
@@ -590,6 +596,35 @@ def _standing_answer(utterance: str | None, as_of: date) -> tuple[str, list[str]
         f"{now.last_observed.isoformat()})",
     ]
     return "\n\n".join(figures), figures
+
+
+#: Which blocked worker each subject would want unblocked. A subject not
+#: listed has nothing to collect beyond the trade itself.
+_UNBLOCKS = {"hedge": "hedge", "exposure": "hedge"}
+
+
+def _asking_for(utterance: str | None, result: dict[str, Any]) -> str | None:
+    """The one worker whose missing input is worth the top of the screen.
+
+    §4.2[2] already decides why each worker was skipped and every reason is
+    rendered in its own fold. This decides which of them is also the thing
+    the reader is asked for right now — an input panel is a demand, and a
+    demand for a value the question did not need reads as the product not
+    having listened.
+
+    A sentence that asked about nothing in particular keeps the old behaviour:
+    a plain trade description is the funnel's own case, and §2's reader does
+    not know their exposure well enough to ask about it by name.
+    """
+    skipped = (result.get("workers") or {}).get("skipped") or {}
+    topics = read_intent(utterance or "")
+    if not topics:
+        return "hedge" if "hedge" in skipped else None
+    for topic in topics:
+        worker = _UNBLOCKS.get(topic)
+        if worker and worker in skipped:
+            return worker
+    return None
 
 
 def _coverage(utterance: str | None) -> str:
