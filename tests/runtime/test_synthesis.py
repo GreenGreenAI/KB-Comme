@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from tradeflow.runtime.synthesis import (
     Synthesizer,
     check,
+    check_bound,
     digit_runs,
     TIMEOUT_S,
     figures,
@@ -92,6 +93,19 @@ class StrictRuleTests(unittest.TestCase):
             ),
         )
 
+    def test_dropping_a_required_unit_is_rejected(self) -> None:
+        self.assertIn(
+            "단위가 누락",
+            check("순노출은 100,000입니다.", ["순노출: 100,000 USD"]),
+        )
+
+    def test_swapping_semantic_labels_is_rejected(self) -> None:
+        sentence = (
+            "순노출은 10,525,000 KRW이고 "
+            "원화 수취액은 100,000 USD입니다."
+        )
+        self.assertIn("의미가 바뀌", check_bound(sentence, FIGURES[:3:2]))
+
 
 class BoundRenderingTests(unittest.TestCase):
     def test_a_verdict_the_model_invented_never_reaches_the_user(self) -> None:
@@ -130,6 +144,25 @@ class BoundRenderingTests(unittest.TestCase):
             FIGURES,
             schema["schema"]["properties"]["figures_used"]["items"]["enum"],
         )
+
+    def test_claimed_figure_must_keep_its_label_binding(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {
+                "figures_used": [
+                    "순노출: 100,000 USD",
+                    "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
+                ],
+                "sentence": (
+                    "순노출은 10,525,000 KRW이고 "
+                    "원화 수취액 차이는 100,000 USD입니다."
+                ),
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertIn("의미가 바뀌", written.reason)
 
     def test_altered_label_unit_or_value_is_rejected(self) -> None:
         synthesizer, _ = synthesizer_returning(

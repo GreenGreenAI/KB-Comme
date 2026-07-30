@@ -278,9 +278,63 @@ def check(sentence: str, figures: list[str]) -> str:
     allowed_units = units_by_run(joined)
     for run, worn in units_by_run(sentence).items():
         for unit in worn:
-            if unit is not None and unit not in allowed_units.get(run, set()):
+            allowed = allowed_units.get(run, set())
+            if unit is None and allowed and None not in allowed:
+                return f"단위가 누락된 수치: {run}"
+            if unit is not None and unit not in allowed:
                 return f"단위가 바뀐 수치: {run} {unit}"
 
+    return ""
+
+
+_CLAUSE_BREAK = re.compile(r"(?:이며|이고|하고|지만|,(?!\d)|\.(?!\d)|[!?;。])")
+
+
+def _label_anchors(label: str) -> tuple[str, ...]:
+    shortened = re.sub(r"^(?:그때|현재)\s+", "", label).strip()
+    shortened = re.sub(r"\s+(?:금액|차이)$", "", shortened).strip()
+    return tuple(dict.fromkeys(item for item in (label.strip(), shortened) if item))
+
+
+def _number_clauses(text: str) -> list[str]:
+    return [part.strip() for part in _CLAUSE_BREAK.split(text) if digit_runs(part)]
+
+
+def check_bound(sentence: str, figures: list[str]) -> str:
+    """Verify that quoted numbers keep both their units and their labels.
+
+    A digit-and-unit check alone accepts a semantic swap such as calling a KRW
+    cashflow difference the net exposure. The deterministic label preceding
+    each figure is therefore part of the quotation contract as well.
+    """
+    broken = check(sentence, figures)
+    if broken:
+        return broken
+
+    bindings: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
+    for figure in figures:
+        label, separator, _ = figure.partition(":")
+        if not separator:
+            continue
+        for run in digit_runs(figure):
+            bindings.setdefault(run, []).append((figure, _label_anchors(label)))
+
+    referenced: set[str] = set()
+    for clause in _number_clauses(sentence):
+        for run in digit_runs(clause):
+            candidates = bindings.get(run, [])
+            matched = [
+                figure
+                for figure, anchors in candidates
+                if any(anchor in clause for anchor in anchors)
+            ]
+            if not matched:
+                return f"의미가 바뀌거나 라벨이 누락된 수치: {run}"
+            referenced.update(matched)
+
+    unused = [figure for figure in figures if figure not in referenced]
+    if unused:
+        return "사용했다고 표시했지만 문장에 결합되지 않은 수치: " + ", ".join(unused)
     return ""
 
 
@@ -520,18 +574,32 @@ class Synthesizer:
         if not sentence:
             return Synthesis("", False, "빈 문장")
 
-        broken = check(sentence, figures)
-        if broken:
-            return Synthesis(sentence, False, broken)
-
         if REDACTION in sentence:
             return Synthesis(sentence, False, "편집 표시가 문장에 남았습니다")
 
-        # Only the answer carries this. §4.2[1] asks the user to do something
-        # by definition, and blocking that would block the question itself.
-        claimed = verdicts(sentence)
-        if claimed:
-            return Synthesis(sentence, False, "규칙이 내려야 할 판단: " + ", ".join(claimed))
+        # A semantic verdict is more dangerous than a malformed quotation, so
+        # report and reject it before checking which figures the model claimed.
+        claimed_verdicts = verdicts(sentence)
+        if claimed_verdicts:
+            return Synthesis(
+                sentence,
+                False,
+                "규칙이 내려야 할 판단: " + ", ".join(claimed_verdicts),
+            )
+
+        used = written.get("figures_used")
+        if (
+            not isinstance(used, list)
+            or not used
+            or len(used) > 3
+            or len(set(used)) != len(used)
+            or any(not isinstance(item, str) or item not in figures for item in used)
+        ):
+            return Synthesis(sentence, False, "사용 수치 목록이 허용된 값과 일치하지 않습니다")
+
+        broken = check_bound(sentence, used)
+        if broken:
+            return Synthesis(sentence, False, broken)
         return Synthesis(sentence, True)
 
     def ask_for(

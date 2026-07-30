@@ -19,6 +19,10 @@ class CountryTests(unittest.TestCase):
         self.assertEqual("VN", read("베트남에 장비를 수출합니다")["country"])
         self.assertEqual("BR", read("브라질 바이어와 D/A 거래")["country"])
 
+    def test_a_longer_country_name_wins_over_its_prefix(self) -> None:
+        self.assertEqual("ID", read("인도네시아 바이어에게 수출합니다")["country"])
+        self.assertEqual("IN", read("인도 바이어에게 수출합니다")["country"])
+
     def test_an_unlisted_country_stays_a_question(self) -> None:
         """The map is the partners this product was designed against, not a
         world list. Guessing at an unlisted name would be worse than asking."""

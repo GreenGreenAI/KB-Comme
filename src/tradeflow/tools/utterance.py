@@ -238,7 +238,7 @@ def _currency(text: str) -> str | None:
 
 def _country(text: str) -> str | None:
     """The counterparty country, when the sentence names one plainly."""
-    for name, code in _COUNTRIES.items():
+    for name, code in sorted(_COUNTRIES.items(), key=lambda item: len(item[0]), reverse=True):
         if name in text:
             return code
     return None

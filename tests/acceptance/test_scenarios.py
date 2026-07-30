@@ -1,4 +1,8 @@
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from .capabilities import BY_NAME
 from .harness import run_all
@@ -9,6 +13,7 @@ from .harness import run_all
 #: green. Raising one means updating the line here, which is the moment to ask
 #: whether it was raised by adding knowledge or by loosening a check.
 BASELINE = {"S1": 6, "S2": 4, "S3": 1, "S4": 4, "S5": 2}
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class ScenarioTests(unittest.TestCase):
@@ -39,6 +44,22 @@ class ScenarioTests(unittest.TestCase):
 
         item = {"reasons": ["missing fact: counterparty.country_restricted"]}
         self.assertEqual(satisfied(item), [])
+
+    def test_report_runs_under_a_cp949_parent_console(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "cp949"
+        completed = subprocess.run(
+            [sys.executable, "scripts/acceptance.py"],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        report = completed.stdout.decode("utf-8")
+        self.assertIn("시나리오 수용 현황 — 17/22", report)
 
 
 if __name__ == "__main__":
