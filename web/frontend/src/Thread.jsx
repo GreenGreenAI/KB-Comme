@@ -535,16 +535,39 @@ function Support({ result, open }) {
   );
 }
 
+/** What a verdict means, said rather than labelled.
+ *
+ *  A chip reading 「전문가 확인 필요」 tells a company nothing it can act on:
+ *  does it qualify or not? These say what happened and what is left, which is
+ *  the same information the status carries and the only form of it a reader
+ *  can use. */
+const VERDICT_LINE = {
+  expert_confirmation_required:
+    "조건은 모두 맞습니다. 초안 규칙이라 공식 확인을 받으셔야 합니다.",
+  matched: "조건을 모두 충족합니다.",
+  not_matched: "이 거래에는 해당하지 않습니다.",
+  source_expired: "근거로 쓴 출처가 만료되어 판정을 보류했습니다.",
+};
+
+const CHECK_MARK = { passed: "✓", uncertain: "?", failed: "✗" };
+
 function Candidate({ candidate, excluded }) {
   const missing = candidate.missing_fields ?? [];
+  // The rule's own conditions, in the words the rulepack wrote them in. The
+  // comparison that produced each one stays one fold deeper — nobody should
+  // have to read `company.size=small in [...]` to learn what was checked,
+  // and nobody auditing one should be unable to.
+  const checks = candidate.checks ?? [];
+  const verdict = excluded
+    ? VERDICT_LINE.not_matched
+    : VERDICT_LINE[candidate.status];
+
   return (
     <div className="verdict">
       <div className="verdict-head">
         <b>{candidate.title}</b>
-        <span className={`chip ${excluded ? "out" : candidate.status}`}>
-          {excluded ? "조건 불충족" : STATUS_LABEL[candidate.status] ?? candidate.status}
-        </span>
       </div>
+      {verdict && <p className="fold-note">{verdict}</p>}
       {missing.length > 0 && (
         <p className="fold-note">
           {(() => {
@@ -553,15 +576,41 @@ function Candidate({ candidate, excluded }) {
           })()}
         </p>
       )}
+      {checks.length > 0 && (
+        <ul className="checks">
+          {checks.map((check) => (
+            <li className={check.status} key={check.field + check.description}>
+              <span className="check-mark">{CHECK_MARK[check.status] ?? "·"}</span>
+              {check.description}
+            </li>
+          ))}
+        </ul>
+      )}
       {/* The conditions as the rule wrote them. Summary first, the rule's own
           text one fold deeper (AC-5): nobody should have to read
           `company.size=small in [...]` to learn that a judgement was made, and
           nobody checking one should be unable to. */}
+      {candidate.sources?.length > 0 && (
+        <ul className="cites">
+          {candidate.sources.map((source) => (
+            <li key={source.source_id}>
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer">
+                  {source.title}
+                </a>
+              ) : (
+                source.title
+              )}
+              {source.organization && <em>{source.organization}</em>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* The comparisons as the engine made them. A count is not a citation,
+          and this fold is where the audit lives — not where the answer does. */}
       <details className="why">
-        <summary>
-          근거 {candidate.reasons?.length ?? 0}건 · 출처{" "}
-          {candidate.source_ids?.length ?? 0}건
-        </summary>
+        <summary>이 판정을 만든 비교 {candidate.reasons?.length ?? 0}건</summary>
         <ul className="reasons">
           {(candidate.reasons ?? []).map((line) => (
             <li key={line}>{line}</li>

@@ -635,6 +635,24 @@
   .fold.calc > summary { font-variant-numeric: tabular-nums; }
   .fold.calc[open] > summary { margin-bottom: .5rem; }
 
+  /* What the rule checked, in the rule's own words. A list, because it is
+     one — the previous shape was a status chip and a count, neither of which
+     a company can act on. */
+  .checks { list-style: none; margin: .3rem 0 0; padding: 0; display: grid; gap: .15rem; }
+  .checks li {
+    display: grid; grid-template-columns: 1rem 1fr; gap: .4rem;
+    font-size: .8125rem; color: var(--ink-70); line-height: 1.55;
+  }
+  .checks li.uncertain { color: var(--ink-45); }
+  .check-mark { font-family: var(--mono); font-size: .75rem; }
+  .checks li.passed .check-mark { color: var(--accent-deep); }
+
+  /* Named, not counted. 「출처 2건」 is not a citation. */
+  .cites { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .15rem; }
+  .cites li { font-size: .75rem; color: var(--ink-45); }
+  .cites a { color: var(--ink-70); text-underline-offset: 2px; }
+  .cites em { font-style: normal; margin-left: .35rem; }
+
   .turn.agent p.prose { white-space: pre-line; }
 
   .pointer.lead {

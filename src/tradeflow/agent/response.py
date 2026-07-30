@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.runtime.analysis_service import decision_packet_document
+from tradeflow.runtime.sources import cite
 
 def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
@@ -52,6 +53,18 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
         "rounding": band.rounding,
         "drift": "0 고정",
     }
+
+
+#: What a rulepack title says about itself and the reader does not need.
+_RULE_SUFFIXES = (" 후보", " 검토")
+
+
+def _product_name(title: str) -> str:
+    """The rule's title with its own bookkeeping removed."""
+    for suffix in _RULE_SUFFIXES:
+        if title.endswith(suffix):
+            return title[: -len(suffix)]
+    return title
 
 
 def _engaged(decision: dict[str, Any], declared: Mapping[str, bool]) -> bool:
@@ -91,12 +104,21 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
         projected = {
             "subject_id": decision["subject_id"],
             "rule_id": decision["rule_id"],
-            "title": decision["title"],
+            # The product, not the rule. A rulepack title ends in 후보 or 검토
+            # because that is what the rule produces; the company reading it
+            # wants the name of the thing it might apply for.
+            "title": _product_name(decision["title"]),
             "status": decision["status"],
             "matched": decision["matched"],
             "reasons": decision["reasons"],
             "missing_fields": decision["missing_fields"],
             "source_ids": decision["source_ids"],
+            # Named rather than counted. 「출처 2건」 is not a citation.
+            "sources": cite(decision["source_ids"]),
+            # Each condition in the words the rulepack wrote it in, so the
+            # answer can say what was checked instead of showing the
+            # comparison that checked it.
+            "checks": decision.get("checks") or [],
             "outcome": outcome,
         }
         if outcome.get("kind") == "support_candidate":

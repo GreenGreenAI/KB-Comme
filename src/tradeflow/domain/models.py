@@ -235,6 +235,22 @@ class DecisionRequirement:
 
 
 @dataclass(frozen=True)
+class DecisionCheck:
+    """One condition of a rule, in the words the rule wrote it in.
+
+    The rulepack says 「중소·중견기업」 beside `company.size in [...]`, and that
+    sentence is the only part of a judgement a company can read. It was being
+    dropped at evaluation, leaving the answer with the comparison and nothing
+    else.
+    """
+
+    field: str
+    description: str
+    #: passed | failed | uncertain, as `evaluate_condition` decided.
+    status: str
+
+
+@dataclass(frozen=True)
 class RuleDecision:
     rule_id: str
     title: str
@@ -248,6 +264,7 @@ class RuleDecision:
     subject_id: str | None = None
     matched: bool | None = None
     categories: tuple[DecisionCategory, ...] = ()
+    checks: tuple[DecisionCheck, ...] = ()
 
 
 @dataclass(frozen=True)
