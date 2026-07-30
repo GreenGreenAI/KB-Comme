@@ -43,12 +43,14 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.runtime import introduction
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
-from tradeflow.agent.orchestrator import analyze
+from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
+from tradeflow.tools.utterance_kind import ABOUT, GREETING, TRADE, read_kind
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
@@ -355,6 +357,19 @@ def analyze_endpoint(
                     }
                 supplied = [*supplied[:-1], merged] if supplied else [merged]
 
+    # What the sentence is doing, before what it is missing. §4.2[1] counts
+    # slots, and a greeting is missing all three exactly as a half-described
+    # trade is — so counting alone answered "안녕" with a request for the
+    # amount and the settlement date. Only turns with nothing else to say
+    # reach the slot reader; a described trade goes straight past this.
+    kind = read_kind(
+        request.utterance,
+        heard=heard,
+        topics=read_intent(request.utterance or ""),
+    )
+    if kind != TRADE and not supplied_trade(supplied):
+        return _answer_without_a_trade(kind, request.utterance, as_of)
+
     reading = intake(
         supplied,
         company=account.profile() if account else None,
@@ -476,6 +491,105 @@ def _pointer_leads(utterance: str | None) -> bool:
     the default order."""
     lead = next(iter(read_intent(utterance or "")), None)
     return lead is not None and lead not in _SENTENCE_SUBJECTS
+
+
+def supplied_trade(cases: list[dict[str, Any]]) -> bool:
+    """Whether the form already holds anything about a trade.
+
+    A greeting typed into a session that has a trade on screen is still a
+    greeting, but it must not discard what is there — so the trade-less path
+    is only taken when there is genuinely no trade anywhere.
+    """
+    return any(any(value for value in case.values()) for case in cases)
+
+
+def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> dict[str, Any]:
+    """The three turns that are not a trade description.
+
+    None of them needs a trade, and all three used to get the same three
+    questions. What is said here is either fixed prose or read straight off a
+    snapshot — no worker runs, no packet is produced, and nothing is judged.
+    """
+    if kind == GREETING:
+        return {"status": "said", "understood": {}, "spoken": introduction.opening()}
+    if kind == ABOUT:
+        return {"status": "said", "understood": {}, "spoken": introduction.paragraph()}
+
+    # TOPIC. Some subjects have an answer that stands on its own; the rest
+    # still need the trade, and asking for it is right — after saying what
+    # did not need it.
+    said, figures = _standing_answer(utterance, as_of)
+    return {
+        "status": "said" if said else "needs_input",
+        "understood": {},
+        "spoken": said,
+        "figures": figures,
+        "questions": [] if said else [],
+        "coverage": _coverage(utterance),
+        "holds": _holds(utterance),
+        # Said whether or not the standing part answered: the subject they
+        # raised may still need the trade, and this is the sentence that says
+        # so instead of leaving them waiting.
+        "asks_for_trade": ASK_FOR_TRADE.get(
+            next(iter(read_intent(utterance or "")), ""), DEFAULT_ASK
+        ),
+    }
+
+
+#: What each subject still needs from the trade, once the standing part of the
+#: answer has been given. Written per subject because "금액과 날짜를 알려주세요"
+#: after a rate quote reads as the product having ignored its own answer.
+ASK_FOR_TRADE = {
+    "market_scenario": (
+        "이 환율이 특정 거래에 얼마인지 보시려면, 수출인지 수입인지와 금액, "
+        "대금을 주고받기로 한 날짜를 알려주세요."
+    ),
+    "hedge": (
+        "헤지비율은 거래가 있어야 계산합니다. 수출인지 수입인지와 금액, "
+        "대금을 주고받기로 한 날짜를 알려주세요."
+    ),
+    "exposure": (
+        "노출을 계산하려면 수출인지 수입인지와 금액, 대금을 주고받기로 한 "
+        "날짜가 필요합니다."
+    ),
+    "support": (
+        "자격을 판정하려면 수출인지 수입인지와 금액, 대금을 주고받기로 한 "
+        "날짜를 알려주세요."
+    ),
+    "compliance": (
+        "신고 의무는 거래 구조에서 발생하므로, 거래를 알려주시면 판정합니다."
+    ),
+}
+
+DEFAULT_ASK = (
+    "거래를 알려주시면 노출과 지원제도·신고의무를 함께 봐 드립니다."
+)
+
+
+def _standing_answer(utterance: str | None, as_of: date) -> tuple[str, list[str]]:
+    """The part of the subject that holds without a trade.
+
+    Today that is the published rate and the window behind it. It is read from
+    the same snapshot the band uses, under the same freshness policy, so a
+    number said here cannot disagree with the same number said in an answer.
+    A stale or absent snapshot says nothing rather than quoting an old rate.
+    """
+    topics = read_intent(utterance or "")
+    if "market_scenario" not in topics:
+        return "", []
+    try:
+        now = market_now(SNAPSHOT_ROOT, as_of=datetime.combine(as_of, time(0, 0), tzinfo=UTC))
+    except Exception as failure:  # noqa: BLE001 — stale, missing, unreadable
+        logger.info("환율 단독 응답 미채택: %s", type(failure).__name__)
+        return "", []
+    figures = [
+        f"현재 환율: {now.spot_rate} (KRW per USD, 한국은행 매매기준율 "
+        f"{now.observed_on.isoformat()} 기준)",
+        f"연환산 변동성: {now.annualized_volatility:.1%} "
+        f"(최근 {now.window}영업일, {now.first_observed.isoformat()}~"
+        f"{now.last_observed.isoformat()})",
+    ]
+    return "\n\n".join(figures), figures
 
 
 def _coverage(utterance: str | None) -> str:

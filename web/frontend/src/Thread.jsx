@@ -166,6 +166,34 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     );
   }
 
+  if (turn.kind === "said") {
+    // Nothing was computed for this turn and nothing is folded away beneath
+    // it. What the server sent is the whole answer, so it is set as prose —
+    // the answer blocks below belong to a decision and there is none here.
+    return (
+      <div className="turn agent">
+        <span className="who">TradeFlow</span>
+        {turn.ask.spoken
+          ?.split("\n\n")
+          .map((block) => (
+            <p className="prose" key={block}>
+              {block}
+            </p>
+          ))}
+
+        {/* Still owed. The subject may have had a part that holds on its own
+            — today's rate does — and a part that needs the trade. Saying so
+            is what stops the reader waiting for the rest. */}
+        {turn.ask.asks_for_trade && <p>{turn.ask.asks_for_trade}</p>}
+
+        {turn.ask.holds && <p className="pointer lead">{turn.ask.holds}</p>}
+        {turn.ask.coverage && (
+          <p className="pointer limit">{turn.ask.coverage}</p>
+        )}
+      </div>
+    );
+  }
+
   if (turn.kind === "ask") {
     return (
       <div className="turn agent">

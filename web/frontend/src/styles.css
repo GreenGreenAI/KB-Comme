@@ -623,6 +623,14 @@
      aligned, tabular and monospaced exactly like a typed amount, so at full
      strength "100,000" looked entered — and 확인 on a number nobody typed is
      the same failure as mishearing one. */
+  /* The only prose the screen receives with its own line breaks. Everything
+     else is one sentence per element, so a list assembled server-side lost
+     its lines to HTML collapsing and read as one run-on line.
+
+     Not `.said` — that is the user's own bubble, and borrowing the name put
+     the product's answers in it. */
+  .turn.agent p.prose { white-space: pre-line; }
+
   .pointer.lead {
     /* Answering first, not annotating. The same line reads as a footnote at
        the size it has under the sentence. */

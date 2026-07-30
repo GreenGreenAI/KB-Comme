@@ -57,7 +57,12 @@ from tradeflow.domain.snapshot_file import SnapshotNotFoundError
 from tradeflow.knowledge.facts import FactContractError
 from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.tools.source_freshness import load_source_verification
-from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
+from tradeflow.tools.volatility import (
+    ScenarioBand,
+    estimate_volatility,
+    require_fresh,
+    scenario_band,
+)
 
 FX_SOURCE = "ECOS_USD_KRW"
 
@@ -346,6 +351,58 @@ def _declared_company_assertions(
         for case_id in case_ids
     }
     return assertions, (descriptor,)
+
+
+@dataclass(frozen=True)
+class MarketNow:
+    """Today's rate and the window it was read over, with its snapshot.
+
+    §4.2[4]'s band needs a horizon, and a horizon needs a payment date — but
+    the rate itself and the volatility behind it need no trade at all. They
+    were being withheld anyway, because intake gated every worker on a trade
+    the user had not described yet: "환율이 요즘 어때?" was answered with a
+    request for the amount and the settlement date.
+    """
+
+    spot_rate: Decimal
+    observed_on: date
+    annualized_volatility: float
+    window: int
+    first_observed: date
+    last_observed: date
+    source_id: str
+    version: str
+
+
+def market_now(
+    snapshot_root: Path | str,
+    *,
+    as_of: datetime | None = None,
+) -> MarketNow:
+    """The published rate and the realized volatility around it.
+
+    Same snapshot, same freshness policy and same estimator the band uses, so
+    a number said here cannot disagree with the same number said in an answer.
+    Staleness raises rather than degrading: §4.2[4] makes it the stopping
+    condition, and a rate quoted without one is worse than no rate.
+    """
+    evaluated_at = as_of or datetime.now(UTC)
+    path = latest_snapshot_path(snapshot_root, FX_SOURCE)
+    ref, payload = read_snapshot(path)
+    require_fresh(ref, FX_FRESHNESS, evaluated_at)
+    observations = usd_krw_series(payload)
+    estimate = estimate_volatility(observations)
+    observed_on, spot = observations[-1]
+    return MarketNow(
+        spot_rate=spot,
+        observed_on=observed_on,
+        annualized_volatility=estimate.annualized,
+        window=estimate.window,
+        first_observed=estimate.first_observed,
+        last_observed=estimate.last_observed,
+        source_id=ref.source_id,
+        version=ref.version,
+    )
 
 
 def _declared_financing_assertions(

@@ -309,6 +309,15 @@ export default function App() {
           heard: data.understood ?? {},
           spoken: Boolean(utterance),
         });
+      } else if (data.status === "said") {
+        // A greeting, a question about the product, or a subject that holds
+        // without a trade. No worker ran and nothing was judged, so there is
+        // no request panel to open — clearing `pending` matters, or the
+        // amount field from a previous turn stays on screen asking for a
+        // number this turn never needed.
+        await walk([], setThinking, spent);
+        setPending(null);
+        say({ who: "agent", kind: "said", ask: data });
       } else {
         await walk(stepsForAsk(data, utterance), setThinking, spent);
         setPending(data);
