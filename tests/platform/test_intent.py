@@ -46,6 +46,22 @@ class ReadingTests(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertIn(topic, read_intent(sentence))
 
+    def test_money_the_company_needs_is_not_money_it_is_owed(self) -> None:
+        """"제작에 들어갈 자금이 부족합니다" is a question about raising money.
+
+        Bare 자금 sat in `exposure`, and because intent is ordered by where a
+        topic first appears, it beat the 정책자금 at the end of the sentence.
+        The whole answer then came back about exchange-rate exposure, and asked
+        for the amount and date that calculation wanted — to a company that had
+        asked which loan it could get.
+        """
+        intent = read_intent(
+            "베트남에 3억 원 규모 장비를 수출하는데 제품 제작에 들어갈 자금이 "
+            "부족합니다. 중소기업이 쓸 수 있는 무역금융이나 정책자금이 있을까요?"
+        )
+
+        self.assertEqual(("support",), intent)
+
     def test_a_sentence_may_ask_about_several_things(self) -> None:
         intent = read_intent("환율 때문에 손해 볼까 걱정인데 헤지가 필요할까요?")
 

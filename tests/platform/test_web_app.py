@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 from fastapi import HTTPException
 
+from tradeflow.web import app
 from tradeflow.web.app import AnalyzeRequest, analyze_endpoint
 
 
@@ -255,6 +256,37 @@ class SecondTradeTests(unittest.TestCase):
         timeline = corrected["result"]["trade_timeline"]
         self.assertEqual(1, len(timeline))
         self.assertEqual("import", timeline[0]["direction"])
+
+
+class AnswerOrderTests(unittest.TestCase):
+    """Which of the two things the reader meets first.
+
+    §4.2[9]'s sentence may only quote `figures()`, and every figure in it is an
+    exposure, a rate or a hedge ratio. That division is the safety of the whole
+    design and it stays — but it meant a company asking about 제작 자금 always
+    opened the answer on its exchange-rate exposure, with the judgement it had
+    asked for two lines below in the code-owned pointer.
+    """
+
+    def test_a_financing_question_is_answered_first(self) -> None:
+        self.assertTrue(
+            app._pointer_leads(
+                "제품 제작에 들어갈 자금이 부족합니다. 무역금융이 있을까요?"
+            )
+        )
+
+    def test_a_filing_question_is_answered_first(self) -> None:
+        self.assertTrue(app._pointer_leads("신고해야 할 게 있나요?"))
+
+    def test_an_exposure_question_keeps_the_sentence_first(self) -> None:
+        self.assertFalse(app._pointer_leads("환율이 얼마나 오를까요?"))
+
+    def test_a_trade_description_keeps_the_sentence_first(self) -> None:
+        """No question in it, so nothing was asked out of order."""
+        self.assertFalse(
+            app._pointer_leads("10월 24일에 수출대금 10만 달러 받기로 했어요")
+        )
+        self.assertFalse(app._pointer_leads(None))
 
 
 if __name__ == "__main__":

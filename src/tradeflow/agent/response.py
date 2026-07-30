@@ -210,7 +210,20 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
         },
-        "required_inputs": {"hedge": list(analysis.required_inputs)},
+        # What §5.3 is still waiting on. The profit inputs come from the
+        # analysis; the quote is named here because nothing upstream can — a
+        # forward rate is what one bank offered one company, so the only place
+        # it can come from is the person holding it, and the screen needs to
+        # know to ask. Without this the hedge section said "계산하지 않았습니다"
+        # with no way for the reader to change that.
+        "required_inputs": {
+            "hedge": list(analysis.required_inputs),
+            "quote": (
+                []
+                if analysis.hedge is not None
+                else ["provider", "contract_rate", "cost_rate", "valid_until"]
+            ),
+        },
         # §4.2[2]'s output. A reader can see which workers were called and, for
         # the rest, what would call them — so an empty section is never left to
         # be read as "nothing to report".

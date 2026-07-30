@@ -41,9 +41,6 @@ const STEP_FLOOR_MS = 120;
 const WRITE_CEILING_MS = 4000;
 
 
-/** How close the newest question sits to the top of the view. */
-const HEAD_GAP = 8;
-
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The steps an intake turn actually took.
@@ -90,7 +87,7 @@ function stepsFor(result) {
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {} });
+  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null });
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -136,74 +133,35 @@ export default function App() {
   const threadRef = useRef(null);
   const stick = useRef(true);
 
-  /** Leave room under the conversation so the newest exchange can reach the
-   *  top of the view.
+  /** The conversation continues where it left off, at the bottom.
    *
-   *  Without it a short exchange simply cannot be scrolled up — there is
-   *  nothing below it to scroll into — so it stays pinned to the bottom edge
-   *  and the answer is written downward out of sight. The spacer holds exactly
-   *  what is left over, so it disappears the moment an exchange is tall enough
-   *  to fill the thread on its own and never leaves a gap behind. */
-  function fitTail(el) {
-    const spacer = el.querySelector(".tail");
-    if (!spacer) return;
-    const heads = el.querySelectorAll(".turn.user");
-    const head = heads[heads.length - 1];
-    const last = spacer.previousElementSibling;
-    if (!head || !last) {
-      spacer.style.height = "0px";
-      return;
-    }
-    // Measured from the neighbour rather than from the spacer itself: reading
-    // the spacer's own box would mean zeroing it first, and a forced reflow
-    // every frame of the cascade.
-    const used = last.getBoundingClientRect().bottom - head.getBoundingClientRect().top;
-    spacer.style.height = `${Math.max(0, Math.round(el.clientHeight - used - HEAD_GAP))}px`;
-  }
-
-  /** Where the bottom of the real conversation sits, in scroll coordinates.
-   *  Not scrollHeight — that includes the spacer, and easing into empty space
-   *  would carry the answer off the top of the view for no reason. */
-  function contentFoot(el) {
-    const spacer = el.querySelector(".tail");
-    if (!spacer) return el.scrollHeight;
-    return spacer.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-  }
-
-  const exchange = turns.filter((turn) => turn.who === "user").length;
-
-  /** The newest question goes to the top of the view when it is asked.
+   *  A new turn is added below the last one and the view goes with it. This
+   *  briefly anchored the newest question to the top of the view instead,
+   *  which reads well for one exchange and badly for a conversation: every
+   *  answer pushed the one before it out of sight, so the thread stopped
+   *  looking like a thread. Following the foot keeps what was just said
+   *  next to what is being said now.
    *
-   *  The answer is then written downward into empty space. Pinning to the
-   *  bottom instead started every answer at the bottom edge of the thread, so
-   *  the reader watched its first line leave while the rest arrived. */
+   *  Set scrollTop directly rather than scrollIntoView({behavior:"smooth"}):
+   *  smooth scrolling does not run in a background tab, which left the thread
+   *  pinned near the top with the newest answer out of sight. */
   useLayoutEffect(() => {
     const el = threadRef.current;
     if (!el || !stick.current) return;
-    fitTail(el);
-    const max = el.scrollHeight - el.clientHeight;
-    const heads = el.querySelectorAll(".turn.user");
-    const head = heads[heads.length - 1];
-    if (!head) {
-      el.scrollTop = max;
-      return;
-    }
-    const top =
-      head.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-    el.scrollTop = Math.max(0, Math.min(top - HEAD_GAP, max));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exchange]);
+    el.scrollTop = el.scrollHeight;
+  }, [turns, busy]);
 
   /** Follow the exchange down as it arrives.
    *
-   *  The anchor above happens once, when the question is asked — at which point
-   *  there is no answer yet. Everything that gives it height arrives over the
-   *  next few seconds, and without this the answer grows past the bottom of the
-   *  thread while the reader watches the top of it.
+   *  The jump above happens once, when the turn is added — at which point the
+   *  turn is still empty. Everything that gives it height arrives over the next
+   *  few seconds, and without this the answer grows past the bottom of the
+   *  thread while the reader watches its first line.
    *
    *  It eases rather than pins, so the view moves at the pace the answer is
-   *  being written, and it stops at the foot of the conversation rather than at
-   *  the foot of the spacer.
+   *  being written instead of snapping on every word. And it only ever moves
+   *  down to what is already off screen — an exchange that fits needs no
+   *  scrolling at all, and gets none.
    *
    *  What makes it yield is a real input — a wheel, a drag, a key. The previous
    *  version watched scrollTop for a value it had not set, which cannot tell a
@@ -218,30 +176,40 @@ export default function App() {
     const release = () => {
       stick.current = false;
     };
+
+    // The thread's own box changes under it: the request panel appears above
+    // the composer and takes 88px, the composer grows with a long draft. The
+    // content did not move, so the follower has nothing to chase — but the
+    // window onto it shrank, and what was at the bottom is now below it.
+    // Measured 70px of the newest answer cut off this way, after the follower
+    // had already settled and stopped.
+    const refit = new ResizeObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    });
+    refit.observe(el);
     el.addEventListener("wheel", release, { passive: true });
     el.addEventListener("touchmove", release, { passive: true });
     el.addEventListener("keydown", release);
 
     const follow = setInterval(() => {
-      fitTail(el);
       if (!stick.current) {
         clearInterval(follow);
         return;
       }
-      const target = Math.min(
-        contentFoot(el) - el.clientHeight,
-        el.scrollHeight - el.clientHeight,
-      );
-      const delta = target - el.scrollTop;
-      if (delta <= 0.5) {
+      const delta = el.scrollHeight - el.clientHeight - el.scrollTop;
+      // A proportional ease approaches the foot without reaching it, so the
+      // last pixel is closed by the floor rather than by the curve. Without
+      // one it crawls: from three pixels away, sixteen percent at a time.
+      if (delta <= 1) {
         if (!busy && !writing) clearInterval(follow);
         return;
       }
-      el.scrollTop += Math.max(delta * 0.16, 0.5);
+      el.scrollTop += Math.max(delta * 0.16, 1.5);
     }, 16);
 
     return () => {
       clearInterval(follow);
+      refit.disconnect();
       el.removeEventListener("wheel", release);
       el.removeEventListener("touchmove", release);
       el.removeEventListener("keydown", release);
@@ -265,7 +233,11 @@ export default function App() {
       ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
       : facts.cases;
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
-    setFacts({ cases: nextCases, profile: nextProfile });
+    // The quote is remembered like everything else the user has told us: the
+    // server is stateless, so it has to be resent with each turn or the hedge
+    // would vanish the moment anything else was said.
+    const nextQuote = patch.quote ?? facts.quote ?? null;
+    setFacts({ cases: nextCases, profile: nextProfile, quote: nextQuote });
 
     // What the user said, as the thread should carry it. A typed sentence is
     // its own text. An answer given through the request panel says what was
@@ -291,6 +263,7 @@ export default function App() {
         ...nextProfile,
         as_of: today(),
         ...(placement ? { placement } : {}),
+        ...(nextQuote ? { forward_quote: nextQuote } : {}),
       });
       const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
@@ -420,6 +393,11 @@ export default function App() {
                     result?.hedge_analysis
                       ? []
                       : result?.required_inputs?.hedge ?? []
+                  }
+                  quoteInputs={
+                    result?.hedge_analysis
+                      ? []
+                      : result?.required_inputs?.quote ?? []
                   }
                   onSlot={(patch, said) => send(null, patch, null, said)}
                   onPlace={(utterance, placement, said) =>

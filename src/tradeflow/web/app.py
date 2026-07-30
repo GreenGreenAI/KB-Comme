@@ -22,9 +22,10 @@ and deciding what to run lives in the orchestrator.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
-from datetime import date
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -35,13 +36,24 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from tradeflow.agent.intake import intake
+from tradeflow.domain.enums import TradeDirection
+from tradeflow.knowledge.hedge_quotes import (
+    HedgeQuoteSide,
+    UserForwardQuote,
+    UserQuoteHedgeAvailabilityService,
+)
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
-from tradeflow.runtime.synthesis import Synthesizer, figures
+from tradeflow.runtime.coverage import for_financing as coverage_for_financing
+from tradeflow.runtime.coverage import statement as coverage_statement
+from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
+from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    financing_purpose,
+    krw_amount,
     place_utterance,
     read_utterance,
 )
@@ -71,6 +83,29 @@ logger = logging.getLogger("tradeflow.synthesis")
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class ForwardQuoteInput(BaseModel):
+    """What a bank told this company, and nothing else.
+
+    §5.3 will not produce a hedge ratio from public market data — a forward
+    rate is what one bank offered to one company, and no snapshot can stand in
+    for that. So these come from the user, who is the only one who has them,
+    while everything about the quote's *scope* is derived from the trades
+    already on file: which cases it covers, which currencies, which side, the
+    settlement date. Asking for those again would invite an answer that does
+    not match the analysis, and the availability service would then reject the
+    quote for a mismatch the screen itself had caused.
+    """
+
+    provider: str = Field(min_length=1, max_length=64)
+    contract_rate: str
+    cost_rate: str
+    valid_until: str
+    #: The company confirming the bank actually offered this. §5.3 treats an
+    #: indicative rate and a confirmed one differently, and only the person
+    #: holding the quote can say which this is.
+    confirmed: bool = False
 
 
 def _signed_in(token: str | None) -> Account | None:
@@ -177,6 +212,7 @@ class AnalyzeRequest(BaseModel):
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
     placement: Literal["append", "merge"] | None = None
+    forward_quote: ForwardQuoteInput | None = None
 
 
 FIELD_LABELS = {
@@ -332,6 +368,12 @@ def analyze_endpoint(
         return {
             "status": "needs_input",
             "understood": heard,
+            # What the subject they raised is, and is not, covered by. Said
+            # here as well as on the answer because most sessions stop here —
+            # a company asking about 제작 자금 should not have to supply an
+            # amount and a date to find out we do not look at 수출입은행 자금.
+            "holds": _holds(request.utterance),
+            "coverage": _coverage(request.utterance),
             # §4.2[1] in words. `questions` stays — the request panel pairs a
             # field with its own wording, and this one sentence covers all
             # three at once. What is asked for is still decided by the slot
@@ -341,6 +383,7 @@ def analyze_endpoint(
                 list(reading.missing),
                 understood=heard,
                 question=request.utterance,
+                subjects=list(read_intent(request.utterance or "")),
             ).summary,
             "questions": list(reading.questions),
             # Field and wording paired, so the screen asks for the thing it is
@@ -351,8 +394,30 @@ def analyze_endpoint(
             ],
             "missing": list(reading.missing),
             "issues": [
-                {"field": issue.field, "reason": issue.reason}
-                for issue in reading.issues
+                *(
+                    [
+                        {
+                            "field": "amount",
+                            "reason": (
+                                # Not "환노출은 …" — this limit holds
+                                # whatever was asked about, and naming the
+                                # exposure calculation to someone who asked
+                                # about 제작 자금 answered a question they
+                                # had not put.
+                                f"{stated_krw:,.0f}원으로 들었습니다. 지금은 "
+                                "미국 달러 거래를 기준으로 분석하므로 달러 "
+                                "금액이 따로 필요합니다."
+                            ),
+                        }
+                    ]
+                    if (stated_krw := krw_amount(request.utterance or ""))
+                    and "amount" in reading.missing
+                    else []
+                ),
+                *(
+                    {"field": issue.field, "reason": issue.reason}
+                    for issue in reading.issues
+                ),
             ],
         }
 
@@ -361,6 +426,7 @@ def analyze_endpoint(
         snapshot_root=SNAPSHOT_ROOT,
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
+        hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
     )
     result = build_response(analysis)
@@ -376,11 +442,172 @@ def analyze_endpoint(
         result["summary"] = written.sentence
     elif written.reason:
         logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
+
+    # Code-owned, and true whether or not the model answered. The sentence is
+    # about the figures; this says what else the answer holds.
+    result["pointer"] = pointer(result)
+    result["holds"] = _holds(request.utterance)
+    result["coverage"] = _coverage(request.utterance)
+    # Which of the two the reader meets first. §4.2[9]'s sentence may only
+    # quote `figures()`, and every figure in it is an exposure, a rate or a
+    # hedge ratio — that is the whole safety division and it stays. But a
+    # company that asked about 제작 자금 then opened the answer on its
+    # exchange-rate exposure, because the one sentence a model may write is
+    # always about the one subject it may quote. The judgement it asked for
+    # was two lines further down, in the code-owned pointer.
+    #
+    # Ordering only. Nothing is added, removed or re-worded.
+    result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
     return {
         "status": "ready",
         "understood": heard,
         "result": result,
     }
+
+
+#: Subjects the synthesised sentence can be about. A question about anything
+#: else is answered by the pointer, so the pointer goes first.
+_SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
+
+
+def _pointer_leads(utterance: str | None) -> bool:
+    """True when the first thing the sentence asked about is not what the
+    summary can say. Silence — a trade description with no question — keeps
+    the default order."""
+    lead = next(iter(read_intent(utterance or "")), None)
+    return lead is not None and lead not in _SENTENCE_SUBJECTS
+
+
+def _coverage(utterance: str | None) -> str:
+    """The limits of whatever the user just asked about.
+
+    Only for the subject they raised. Reciting every limit on every turn
+    teaches the reader to skip the line, and then it is not there on the turn
+    that needed it — §4.2[2] already reads the subject, so this follows it.
+    """
+    if not utterance:
+        return ""
+    # Every subject the sentence named, not just the first. "베트남에 수출하는데
+    # 정책자금이 있을까요" reads as (exposure, support) — exposure leads because
+    # 수출 comes first — and taking only the lead said nothing about the half
+    # of the question we cannot answer.
+    said = [coverage_statement(section) for section in read_intent(utterance)]
+    return " ".join(line for line in said if line)
+
+
+def _holds(utterance: str | None) -> str:
+    """What this product does hold for the money the company says it needs.
+
+    Separate from `_coverage` because it is not a limit and must not be set in
+    the type limits are set in. Folded into that grey block it became the
+    faintest line on a screen whose entire subject it was.
+    """
+    return coverage_for_financing(financing_purpose(utterance))
+
+
+def _hedge_measures(
+    quote: ForwardQuoteInput | None,
+    program: Any,
+    as_of: date,
+) -> tuple[Any, ...]:
+    """The quote, scoped to the program it was given for.
+
+    Everything the availability service checks for an exact match is computed
+    here rather than asked for: the cases, the currencies, the side, the
+    settlement date and the notional all follow from trades the user already
+    entered. Collecting them a second time would let the two disagree, and the
+    service would reject the quote over a contradiction the form had invented.
+
+    Without a quote this returns nothing, and §5.3 stops with
+    `FORWARD_QUOTE_REQUIRED` — which is the right answer, not a gap.
+    """
+    if quote is None:
+        return ()
+
+    cases = program.cases
+    currency = cases[0].currency
+    net = sum(
+        case.amount if case.direction is TradeDirection.EXPORT else -case.amount
+        for case in cases
+        if case.currency == currency
+    )
+    if net == 0:
+        return ()
+
+    evaluated_at = datetime.combine(as_of, time(0, 0), tzinfo=UTC)
+    try:
+        confirmed = UserForwardQuote(
+            quote_id=f"USERQUOTE-{as_of.isoformat().replace('-', '')}",
+            provider_id=_provider_id(quote.provider),
+            company_id=program.company.company_id,
+            case_ids=tuple(case.case_id for case in cases),
+            base_currency=currency,
+            counter_currency="KRW",
+            side=HedgeQuoteSide.SELL if net > 0 else HedgeQuoteSide.BUY,
+            notional=abs(net),
+            contract_rate=_money(quote.contract_rate, "contract_rate"),
+            cost_rate=_money(quote.cost_rate, "cost_rate"),
+            settlement_date=max(case.expected_payment_date for case in cases),
+            quoted_at=evaluated_at,
+            valid_until=_valid_until(quote.valid_until),
+            confirmed=quote.confirmed,
+        )
+    except (ValueError, TypeError) as failure:
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "forward_quote", "reason": str(failure)},
+        ) from None
+
+    # The selection is the submission. §5.3 refuses to pick among quotes — with
+    # several on file the company has to say which one it will use — and this
+    # form takes one, which the user entered and sent. Leaving it unselected
+    # would leave the measure `conditional` forever with nothing on screen able
+    # to resolve it.
+    service = UserQuoteHedgeAvailabilityService(
+        quotes=(confirmed,),
+        evaluated_at=evaluated_at,
+        selected_quote_id=confirmed.quote_id,
+    )
+    return service.assemble(program=program, as_of=as_of).measures
+
+
+def _provider_id(name: str) -> str:
+    """A bank's name as an identifier the quote contract accepts.
+
+    `UserForwardQuote` allows `[A-Za-z0-9._-]` only, and `"하나은행".isalnum()`
+    is True — Python counts Hangul as alphanumeric, so a naive filter passed
+    the name through unchanged and the contract rejected it.
+
+    A digest keeps two banks apart and keeps the same bank stable across
+    re-runs, which §6.2 needs. It does not keep the name: evidence will read
+    `BANK_1f3c9a2b`, not `하나은행`. The name the user typed is on their screen
+    and nowhere in the packet — worth raising with Role A, since the quote
+    contract has no field for a display name.
+    """
+    cleaned = name.strip()
+    if not cleaned:
+        return "BANK"
+    ascii_safe = "".join(
+        ch for ch in cleaned if (ch.isascii() and ch.isalnum()) or ch in "._-"
+    )
+    if ascii_safe == cleaned:
+        return f"BANK_{ascii_safe}"
+    digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:8]
+    return f"BANK_{digest}"
+
+
+def _valid_until(value: str) -> datetime:
+    text = (value or "").strip()
+    try:
+        if len(text) == 10:
+            return datetime.combine(date.fromisoformat(text), time(23, 59), tzinfo=UTC)
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "valid_until", "reason": "ISO 날짜를 입력해 주세요"},
+        ) from None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 @app.get("/api/health")

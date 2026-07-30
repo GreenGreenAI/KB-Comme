@@ -26,7 +26,7 @@ const DIRECTION_OPTIONS = [
   { value: "수입", label: "수입", hint: "대금을 지급합니다" },
 ];
 
-export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
+export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, onPlace }) {
   if (pending?.status === "needs_placement") {
     return (
       <Ask key="placement" label="어느 거래인가요">
@@ -80,7 +80,96 @@ export default function AskBar({ pending, requiredInputs, onSlot, onPlace }) {
     );
   }
 
+  if (quoteInputs?.length > 0) {
+    return (
+      <Ask key="quote" label="거래 은행이 제시한 선물환 조건을 알려주세요">
+        <QuoteFields onSlot={onSlot} />
+      </Ask>
+    );
+  }
+
   return null;
+}
+
+/** The forward quote, which only the company has.
+ *
+ *  §5.3 will not produce a hedge ratio from public market data — a forward
+ *  rate is what one bank offered to one company, and no snapshot stands in for
+ *  that. So the four things a bank tells you are asked for, and everything
+ *  about the quote's scope (which trades, which currencies, which side, the
+ *  settlement date) is derived server-side from the trades already entered.
+ *  Asking for those too would let the two disagree.
+ */
+function QuoteFields({ onSlot }) {
+  const [provider, setProvider] = useState("");
+  const [rate, setRate] = useState("");
+  const [cost, setCost] = useState("");
+  const [until, setUntil] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const focus = useAutoFocus();
+  const ready = provider && rate && cost && until && confirmed;
+
+  const submit = () =>
+    ready &&
+    onSlot(
+      {
+        quote: {
+          provider,
+          contract_rate: rate,
+          cost_rate: cost,
+          valid_until: until,
+          confirmed,
+        },
+      },
+      `${provider} 선물환 ${rate}원 · 수수료율 ${cost} · ${until}까지 유효`,
+    );
+
+  return (
+    <div className="ask-row quote">
+      <input
+        ref={focus}
+        value={provider}
+        placeholder="은행"
+        aria-label="은행"
+        onChange={(e) => setProvider(e.target.value)}
+      />
+      <input
+        inputMode="decimal"
+        value={rate}
+        placeholder="계약환율"
+        aria-label="계약환율"
+        onChange={(e) => setRate(e.target.value)}
+      />
+      <input
+        inputMode="decimal"
+        value={cost}
+        placeholder="수수료율 (0.0025)"
+        aria-label="수수료율"
+        onChange={(e) => setCost(e.target.value)}
+      />
+      <input
+        type="date"
+        value={until}
+        aria-label="유효기한"
+        onChange={(e) => setUntil(e.target.value)}
+      />
+      {/* An indicative rate and a confirmed one are different facts, and §5.3
+          treats them differently. Only the person holding the quote can say
+          which this is, so it is asked rather than assumed. */}
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(e) => setConfirmed(e.target.checked)}
+        />
+        <span className="tickbox" aria-hidden="true" />
+        은행이 확인해 준 호가입니다
+      </label>
+      <button type="button" onClick={submit} disabled={!ready}>
+        계산
+      </button>
+    </div>
+  );
 }
 
 /** The request panel, and the way it comes in.
