@@ -51,8 +51,32 @@ OBJECT = ("을", "를")
 SUBJECT = ("이", "가")
 
 
+#: How many items a sentence may name before it becomes a list. Past this the
+#: reader stops reading the sentence and starts scanning it, and the sentence
+#: was the point.
+NAMED = 2
+
+
 def _joined(words: list[str]) -> str:
     return " · ".join(words)
+
+
+def _some(words: list[str]) -> str:
+    """The first few by name, the rest counted.
+
+    Every condition and every document used to be named inline. Five checks,
+    four requirements and six document titles in three paragraphs is a record
+    again, in sentence clothing — the reader has to hold two lists at once to
+    tell which requirement belongs to which product. The full lists are still
+    carried; they are just not in the first thing anyone reads.
+    """
+    # The count is always stated, even for a short list. §4.2[9]'s rewrite may
+    # only quote numbers it was given, and a list without its count made the
+    # model count for itself — arithmetically right, and an invention by the
+    # only definition that matters here.
+    if len(words) <= NAMED:
+        return f"{_joined(words)} {len(words)}가지"
+    return f"{_joined(words[:NAMED])} 등 {len(words)}가지"
 
 
 def support(result: dict[str, Any]) -> list[str]:
@@ -79,7 +103,7 @@ def support(result: dict[str, Any]) -> list[str]:
         ]
         line = f"{title}{_particle(title, TOPIC)} 조건을 충족합니다."
         if met:
-            line += f" 확인한 것은 {_joined(met)}입니다."
+            line += f" 확인한 조건은 {len(met)}가지입니다."
         if candidate.get("status") == "expert_confirmation_required":
             line += " 초안 규칙이라 공식 확인을 받으셔야 합니다."
         said.append(line)
@@ -96,7 +120,7 @@ def support(result: dict[str, Any]) -> list[str]:
         ]
         if not wants:
             continue
-        listed = _joined(wants)
+        listed = _some(wants)
         said.append(
             f"{title}{_particle(title, TOPIC)} 아직 판정하지 못했습니다. "
             f"{listed}{_particle(listed, OBJECT)} 알려주시면 판정합니다."
@@ -134,7 +158,7 @@ def compliance(result: dict[str, Any]) -> list[str]:
         ]
         line = f"{title}{_particle(title, TOPIC)} 이 거래에 해당합니다."
         if wants:
-            listed = _joined(wants)
+            listed = _some(wants)
             line += f" 갈래를 가르려면 {listed}{_particle(listed, SUBJECT)} 필요합니다."
         said.append(line)
 
@@ -154,7 +178,7 @@ def actions(result: dict[str, Any]) -> list[str]:
         line = f"다음은 {authority} {ACTION_NAME.get(action.get('action'), '상담 및 신청')}입니다."
         documents = action.get("required_documents") or []
         if documents:
-            line += f" 필요서류는 {len(documents)}건입니다 — {_joined(documents)}."
+            line += f" 필요서류는 {len(documents)}건입니다."
         said.append(line)
     return said
 
@@ -172,6 +196,38 @@ ACTION_NAME = {
     "consult_and_apply_for_preshipment_guarantee": "선적전 보증 상담 및 신청",
     "file_with_authority": "신고",
 }
+
+
+def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """The full lists, for the reader who wants them.
+
+    Carried rather than dropped: what a rule checked and what a form requires
+    is exactly what someone about to apply needs, and §6.1 asks that a
+    judgement be inspectable. It is one fold away instead of in the first
+    paragraph.
+    """
+    rows: list[dict[str, Any]] = []
+    for candidate in result.get("support_candidates") or []:
+        rows.append(
+            {
+                "title": candidate.get("title") or "",
+                "met": [
+                    check["description"]
+                    for check in candidate.get("checks") or []
+                    if check.get("status") == "passed"
+                ],
+                "wanted": [
+                    check["description"]
+                    for check in candidate.get("checks") or []
+                    if check.get("status") == "uncertain"
+                ],
+            }
+        )
+    for action in result.get("next_actions") or []:
+        documents = action.get("required_documents") or []
+        if documents:
+            rows.append({"title": "필요서류", "met": [], "wanted": documents})
+    return rows
 
 
 def sources(result: dict[str, Any]) -> list[dict[str, str]]:

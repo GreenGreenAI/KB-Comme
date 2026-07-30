@@ -44,12 +44,41 @@ class SupportTests(unittest.TestCase):
         ]
     }
 
-    def test_a_settled_product_says_what_was_checked(self) -> None:
+    def test_a_settled_product_counts_what_was_checked(self) -> None:
+        """Five conditions, four requirements and six document titles named
+        inline is a record again, in sentence clothing. The full lists are
+        carried in `detail`; they are just not in the first thing anyone
+        reads."""
         said = narration.support(self.RESULT)
 
         self.assertIn("K-SURE 환변동보험은 조건을 충족합니다", said[0])
-        self.assertIn("중소·중견기업 · 수출 거래", said[0])
+        self.assertIn("확인한 조건은 2가지입니다", said[0])
         self.assertIn("공식 확인을 받으셔야 합니다", said[0])
+
+    def test_the_full_lists_are_carried_not_dropped(self) -> None:
+        """§6.1 asks that a judgement be inspectable, and what a rule checked
+        is exactly what someone about to apply needs."""
+        rows = narration.detail(self.RESULT)
+
+        self.assertEqual("K-SURE 환변동보험", rows[0]["title"])
+        self.assertEqual(["중소·중견기업", "수출 거래"], rows[0]["met"])
+        self.assertEqual(["취급 금융기관 사전 상담"], rows[1]["wanted"])
+
+    def test_a_long_list_is_named_in_part_and_counted(self) -> None:
+        many = {
+            "support_candidates": [
+                {
+                    "title": "K-SURE 단기수출보험",
+                    "status": "insufficient_information",
+                    "checks": [
+                        {"description": f"조건 {n}", "status": "uncertain"}
+                        for n in range(1, 5)
+                    ],
+                }
+            ]
+        }
+
+        self.assertIn("조건 1 · 조건 2 등 4가지", narration.support(many)[0])
 
     def test_each_open_product_gets_its_own_sentence(self) -> None:
         """Joined into one paragraph the reader had to hold two lists at once
@@ -57,7 +86,7 @@ class SupportTests(unittest.TestCase):
         said = narration.support(self.RESULT)
 
         self.assertEqual(2, len(said))
-        self.assertIn("취급 금융기관 사전 상담을 알려주시면", said[1])
+        self.assertIn("취급 금융기관 사전 상담 1가지를 알려주시면", said[1])
         self.assertNotIn("K-SURE 환변동보험", said[1])
 
     def test_it_concludes_nothing_the_rules_did_not(self) -> None:

@@ -993,12 +993,48 @@ function Answer({ result, order, shown, arrive }) {
             band above (a position on a scale) and the payoff table (three
             choices at three rates). A picture of a number is worse than the
             number. */}
-        {[...(said.support ?? []), ...(said.compliance ?? []), ...(said.actions ?? [])].map(
-          (line) => (
-            <p className="told" key={line}>
-              {line}
-            </p>
-          ),
+        {/* §4.2[9] retold these when it could do so without adding or dropping
+            anything; otherwise they arrive as assembled. Compliance is never
+            retold — §5.5's 「신고가 불필요하다는 판정은 아닙니다」 is the one
+            sentence a paraphrase must not be allowed to shorten away. */}
+        {(said.retold
+          ? [said.retold, ...(said.compliance ?? [])]
+          : [
+              ...(said.support ?? []),
+              ...(said.compliance ?? []),
+              ...(said.actions ?? []),
+            ]
+        ).map((line) => (
+          <p className="told" key={line}>
+            {line}
+          </p>
+        ))}
+
+        {said.detail?.length > 0 && (
+          <details className="fold aside">
+            <summary>규칙이 확인한 것과 필요서류</summary>
+            {said.detail.map((row) => (
+              <div className="verdict" key={row.title}>
+                <div className="verdict-head">
+                  <b>{row.title}</b>
+                </div>
+                <ul className="checks">
+                  {row.met.map((word) => (
+                    <li className="passed" key={word}>
+                      <span className="check-mark">✓</span>
+                      {word}
+                    </li>
+                  ))}
+                  {row.wanted.map((word) => (
+                    <li className="uncertain" key={word}>
+                      <span className="check-mark">?</span>
+                      {word}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </details>
         )}
 
         {hedge && <Payoff hedge={hedge} />}

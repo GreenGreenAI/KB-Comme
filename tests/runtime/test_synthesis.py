@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 
 from tradeflow.runtime.synthesis import (
+    check_retold,
     Synthesizer,
     check,
     check_bound,
@@ -540,3 +541,77 @@ class NaturalProseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetoldContractTests(unittest.TestCase):
+    """「정보를 추가생성하지 말고 결과만 조합하라」 is a request when it is
+    written in a prompt and a contract when it is checked here.
+
+    The same model was asked not to instruct and answered 「담당 부서로
+    연결해 드리겠습니다」; asked not to calculate and answered 「1억 3,610만
+    5,000원」; and asked to keep it short, dropped two of four judgements.
+    Each was caught by a check, none by the instruction.
+    """
+
+    SOURCE = (
+        "K-SURE 일반형 수출 환변동보험은 조건을 충족합니다. 확인한 조건은 5가지입니다. "
+        "다음은 한국무역보험공사 상담 및 청약입니다. 필요서류는 6건입니다."
+    )
+    SUBJECTS = ("K-SURE 일반형 수출 환변동보험",)
+
+    def test_a_faithful_rewrite_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험은 조건 5가지를 충족합니다. "
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_an_institution_that_was_not_judged_is_refused(self) -> None:
+        self.assertIn(
+            "KOTRA",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험 외에 KOTRA 수출바우처도 있습니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_number_the_model_worked_out_is_refused(self) -> None:
+        """Arithmetically right and an invention by the only definition that
+        matters: it was not in what the rules produced."""
+        self.assertIn(
+            "11",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험은 모두 11가지를 요구합니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_dropped_judgement_is_refused(self) -> None:
+        """Invention is the loud failure; omission is the quiet one. A summary
+        that leaves a product out reads well and leaves the company believing
+        it was never considered."""
+        self.assertIn(
+            "환변동보험",
+            check_retold(
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_shortened_product_name_is_not_an_omission(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "환변동보험은 조건 5가지를 충족합니다. "
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )

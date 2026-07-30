@@ -506,7 +506,32 @@ def analyze_endpoint(
         "compliance": narration.compliance(result),
         "actions": narration.actions(result),
         "sources": narration.sources(result),
+        "detail": narration.detail(result),
     }
+    # §4.2[9] again, on the judgements this time — but only to retell them.
+    # The instruction asks it to invent nothing; `check_retold` is what makes
+    # that a contract rather than a request. A refusal leaves the assembled
+    # sentences, which are already true and already complete.
+    #
+    # 신고의무는 넘기지 않는다. §5.5는 「아직 모름」이 「없음」으로 읽히는 것을
+    # 금지하고, 그 금지는 「신고가 불필요하다는 판정은 아닙니다」라는 한 문장에
+    # 실려 있다. 재작성은 그 문장을 지웠다 — 짧아졌고, 잘 읽히고, 회사는
+    # 신고 의무가 없다고 믿게 된다. 모델은 찾은 것을 다시 말할 수 있고,
+    # 보류한 것을 다시 말할 수는 없다.
+    told = [*result["said"]["support"], *result["said"]["actions"]]
+    retold = synthesizer.retell(
+        told,
+        # Every subject the rules judged. A rewrite may shorten a name; it may
+        # not leave a judgement out.
+        subjects=tuple(
+            row["title"] for row in result["said"]["detail"] if row["title"] != "필요서류"
+        ),
+        seed=f"retell|{result.get('packet_id')}",
+    )
+    if retold.accepted:
+        result["said"]["retold"] = retold.sentence
+    elif retold.reason:
+        logger.info("재작성 미채택: %s | %s", retold.reason, retold.sentence[:120])
     # The pointer exists because the synthesised sentence may not carry a
     # verdict. When the narration carries one, the pointer is the same claim
     # twice — and the reader met it twice, three lines apart.

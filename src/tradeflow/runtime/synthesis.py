@@ -137,6 +137,114 @@ def _seed(material: str | None) -> int:
     return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:8], 16)
 
 
+SUMMARY_INSTRUCTION = """\
+아래는 규칙 엔진이 내린 판정을 그대로 옮겨 적은 문장들입니다. 당신의 일은
+이것을 사람이 읽기 좋은 두세 문장으로 다시 쓰는 것뿐입니다.
+
+절대 규칙 — 없는 것을 만들지 마세요:
+- 아래에 없는 제도·기관·부서·서류 이름을 쓰지 마세요. 하나도 만들 수 없습니다.
+- 아래에 없는 숫자를 쓰지 마세요. 더하거나 세지 마세요.
+- 아래에 없는 판단을 하지 마세요. 「자격이 됩니다」, 「신청하시면 됩니다」,
+  「신고 대상이 아닙니다」처럼 판정을 새로 내릴 수 없습니다.
+- 연결해 드리겠다거나 알아봐 드리겠다고 하지 마세요. 그럴 수 없습니다.
+
+당신이 할 수 있는 것:
+- 같은 말을 두 번 하는 문장을 합치기
+- 순서를 읽기 좋게 바꾸기
+- 딱딱한 표현을 자연스럽게 다듬기
+
+길이 규칙 — 이것을 어기면 쓰지 않습니다:
+- 세 문장을 넘기지 마세요.
+- 한 문장에 제도 하나만 담으세요. 「A는 …이며, B는 …」처럼 잇지 마세요.
+- 한 문장을 45자 안에서 끝내세요.
+
+- 나쁨: "환변동보험은 5가지 조건 충족 시 가능하나 공식 확인이 필요하며,
+  단기수출보험은 4가지 정보 제공 시 판정 가능합니다."
+  → 두 제도를 한 문장에 이었고, 길어졌습니다.
+- 좋음: "환변동보험은 조건을 충족합니다. 다만 공식 확인이 필요합니다.
+  나머지 두 제도는 몇 가지를 더 알려주시면 판정합니다."
+"""
+
+SUMMARY_SCHEMA = {
+    "name": "summary",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"sentence": {"type": "string"}},
+        "required": ["sentence"],
+        "additionalProperties": False,
+    },
+}
+
+#: Words that name something in the world — a body, a product, a form. A new
+#: one in the output is an invention, and an invented institution is the most
+#: expensive thing this product could say.
+_NAME_TAIL = re.compile(
+    r"[가-힣A-Za-z0-9()·\-]*?"
+    r"(?:보험|보증|은행|공사|공단|기금|기관|센터|부서|약정서|신청서|계획서|확인서|청약서|현황표|조사표)"
+)
+
+#: Latin runs — K-SURE, ECOS, USD. A model that writes KOTRA where the input
+#: said K-SURE has named a body that had no part in the judgement.
+_LATIN = re.compile(r"[A-Za-z][A-Za-z\-]{1,}")
+
+
+def names(text: str) -> set[str]:
+    """Everything in the text that names an institution, product or form."""
+    return {match.group() for match in _NAME_TAIL.finditer(text)} | {
+        match.group() for match in _LATIN.finditer(text)
+    }
+
+
+def _bare(title: str) -> str:
+    """A title with the parts a rewrite legitimately drops removed.
+
+    「K-SURE 수출신용보증(선적전)」 and 「수출신용보증」 are the same product, and
+    a rewrite that shortens the name has not omitted the judgement. What must
+    survive is the product, not its full registered form.
+    """
+    return re.sub(r"[\s()·]|K-SURE|선적전|선적후|개별|일반형|수출|일반", "", title)
+
+
+def check_retold(sentence: str, source: str, subjects: tuple[str, ...] = ()) -> str:
+    """Verify a rewrite added nothing to what it was given.
+
+    The user's constraint — combine the results, invent nothing — is a request
+    when it is written in a prompt and a contract when it is checked here. The
+    same model was asked not to instruct and answered 「담당 부서로 연결해
+    드리겠습니다」, and asked not to calculate and answered 「1억 3,610만
+    5,000원」. Both were caught by a check, neither by the instruction.
+
+    Three things must not be new: a number, a name, or a verdict. Everything
+    else — order, joining, phrasing — is what the rewrite is for.
+    """
+    known = set(digit_runs(source))
+    invented = [run for run in digit_runs(sentence) if run not in known]
+    if invented:
+        return "판정에 없던 수치: " + ", ".join(invented)
+
+    unknown = sorted(name for name in names(sentence) if name not in names(source))
+    if unknown:
+        return "판정에 없던 이름: " + ", ".join(unknown)
+
+    # Verdict words are allowed only where the judgement already used them:
+    # 「지원제도」 is in the source, so repeating it is reporting, not deciding.
+    added = [word for word in verdicts(sentence) if word not in source]
+    if added:
+        return "판정에 없던 판단: " + ", ".join(added)
+
+    # And nothing may be dropped. Invention is the loud failure and this is the
+    # quiet one: a rewrite that omits 「수출신용보증은 아직 판정하지 못했습니다」
+    # is shorter, reads well, and leaves the company believing two products
+    # were never considered. §5.5 is built on 「아직 모름」 never being allowed
+    # to read as 「없음」, and a summary that drops it does exactly that.
+    said = _bare(sentence)
+    dropped = [title for title in subjects if _bare(title) and _bare(title) not in said]
+    if dropped:
+        return "재작성에서 빠진 판정: " + ", ".join(dropped)
+    return ""
+
+
 INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석 결과를 설명합니다. 계산은 이미 끝났습니다.
 당신의 일은 아래 「확정된 수치」를 사람의 문장으로 옮기는 것뿐입니다.
@@ -725,6 +833,52 @@ class Synthesizer:
             return Synthesis(sentence, False, "사용 수치 목록이 허용된 값과 일치하지 않습니다")
 
         broken = check_bound(sentence, used)
+        if broken:
+            return Synthesis(sentence, False, broken)
+        return Synthesis(sentence, True)
+
+    def retell(
+        self,
+        lines: list[str],
+        *,
+        subjects: tuple[str, ...] = (),
+        seed: str | None = None,
+    ) -> Synthesis:
+        """The judgements, rewritten shorter — or the judgements, unchanged.
+
+        The rewrite may reorder, join and smooth. It may not introduce a
+        number, a name or a verdict, and `check_retold` decides that rather
+        than the instruction that asked for it. A refusal costs the phrasing
+        and nothing else: the caller keeps the assembled sentences, which are
+        already true and already complete.
+        """
+        source = " ".join(lines)
+        if not self.available or not source.strip():
+            return Synthesis("", False, "재작성할 판정이 없습니다")
+        try:
+            completion = self._open().chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"{SUMMARY_INSTRUCTION}\n판정:\n"
+                        + "\n".join(f"- {line}" for line in lines),
+                    }
+                ],
+                response_format={"type": "json_schema", "json_schema": SUMMARY_SCHEMA},
+                temperature=TEMPERATURE,
+                seed=_seed(seed),
+                max_tokens=400,
+                timeout=TIMEOUT_S,
+            )
+            written = json.loads(completion.choices[0].message.content or "{}")
+        except Exception as failure:  # noqa: BLE001 — any failure is the same failure
+            return Synthesis("", False, f"재작성 호출 실패: {type(failure).__name__}")
+
+        sentence = str(written.get("sentence", "")).strip()
+        if not sentence:
+            return Synthesis("", False, "빈 문장")
+        broken = check_retold(sentence, source, subjects)
         if broken:
             return Synthesis(sentence, False, broken)
         return Synthesis(sentence, True)
