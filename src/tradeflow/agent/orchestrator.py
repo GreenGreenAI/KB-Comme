@@ -375,34 +375,73 @@ def _declared_financing_assertions(
     sentence names no purpose is the right answer, not a gap: the rule then
     reports 보증대상 자금 as missing, which is a question the user can answer.
     """
-    empty = {case.case_id: () for case in program.cases}
-    purpose = financing_purpose(utterance)
-    if purpose is None:
-        return empty, ()
-
-    case_ids = tuple(case.case_id for case in program.cases)
-    descriptor = EvidenceDescriptor(
-        DECLARED_FINANCING_EVIDENCE_ID,
-        # `user_trade`, not `user_declaration`: the fact catalog fixes the role
-        # per field, and this one is the company describing its own trade.
-        EvidenceRole.USER_TRADE,
-        case_ids,
-        generated_at=as_of,
-        payload={
-            "facts": {"financing.purpose": purpose},
-            "declared_by": program.company.company_id,
-            "basis": "기업이 문장으로 말한 자금 용도",
-        },
+    assertions: dict[str, tuple[FactAssertion, ...]] = {}
+    descriptors: list[EvidenceDescriptor] = []
+    utterance_purpose = (
+        financing_purpose(utterance) if len(program.cases) == 1 else None
     )
-    assertions = {
-        case_id: (
-            FactAssertion(
-                "financing.purpose", purpose, (DECLARED_FINANCING_EVIDENCE_ID,)
-            ),
-        )
-        for case_id in case_ids
-    }
-    return assertions, (descriptor,)
+
+    for case in program.cases:
+        facts = case.facts()
+        trade_facts: dict[str, Any] = {}
+        procedure_facts: dict[str, Any] = {}
+
+        if "trade.payment_term_days" in facts:
+            trade_facts["trade.payment_term_days"] = facts[
+                "trade.payment_term_days"
+            ]
+        purpose = facts.get("financing.purpose", utterance_purpose)
+        if purpose is not None:
+            trade_facts["financing.purpose"] = purpose
+        if "financing.has_bank_consultation" in facts:
+            procedure_facts["financing.has_bank_consultation"] = facts[
+                "financing.has_bank_consultation"
+            ]
+
+        case_assertions: list[FactAssertion] = []
+        if trade_facts:
+            evidence_id = f"{DECLARED_FINANCING_EVIDENCE_ID}:{case.case_id}"
+            descriptors.append(
+                EvidenceDescriptor(
+                    evidence_id,
+                    EvidenceRole.USER_TRADE,
+                    (case.case_id,),
+                    generated_at=as_of,
+                    payload={
+                        "facts": trade_facts,
+                        "declared_by": program.company.company_id,
+                        "basis": "기업이 거래별로 확인한 결제·금융 정보",
+                    },
+                )
+            )
+            case_assertions.extend(
+                FactAssertion(field, value, (evidence_id,))
+                for field, value in trade_facts.items()
+            )
+        if procedure_facts:
+            evidence_id = (
+                f"{DECLARED_FINANCING_EVIDENCE_ID}:procedure:{case.case_id}"
+            )
+            descriptors.append(
+                EvidenceDescriptor(
+                    evidence_id,
+                    EvidenceRole.PROCEDURE,
+                    (case.case_id,),
+                    generated_at=as_of,
+                    payload={
+                        "facts": procedure_facts,
+                        "declared_by": program.company.company_id,
+                        "basis": "기업이 확인한 취급 금융기관 상담 상태",
+                    },
+                )
+            )
+            case_assertions.extend(
+                FactAssertion(field, value, (evidence_id,))
+                for field, value in procedure_facts.items()
+            )
+        assertions[case.case_id] = tuple(case_assertions)
+
+    return assertions, tuple(descriptors)
 
 
 def analyze(

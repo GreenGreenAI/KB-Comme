@@ -46,6 +46,7 @@ export default function Entry({ onSend, busy }) {
         신고의무를 규칙으로 판정합니다. 출처와 기준일을 함께 보여드리고,
         환율을 예측하지는 않습니다.
       </p>
+      <p className="scope-badge">현재 자동 계산 범위 · USD · T/T 송금</p>
 
       <div className="prompt">
         <textarea

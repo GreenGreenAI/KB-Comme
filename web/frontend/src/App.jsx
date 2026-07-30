@@ -60,7 +60,8 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function stepsForAsk(data, utterance) {
   const steps = [];
   if (utterance) steps.push("read");
-  if (data.status === "needs_placement") steps.push("placement");
+  if (data.status === "needs_trade_split") steps.push("trade_split");
+  else if (data.status === "needs_placement") steps.push("placement");
   else steps.push("slots");
   return steps;
 }
@@ -258,21 +259,25 @@ export default function App() {
    *  수정인가" question. Sending it unasked would reintroduce the guess the
    *  server refuses to make. */
   async function send(utterance, patch = {}, placement = null, said = null) {
-    // A slot answer always completes the trade currently being described,
-    // which is the last one.
+    // A split confirmation replaces the draft with the server's two
+    // candidates. A fact answer updates the case named by the decision
+    // packet; ordinary slot filling still targets the last draft case.
+    const baseCases = patch.cases ?? facts.cases;
+    const targetIndex = patch.caseIndex ?? Math.max(baseCases.length - 1, 0);
     const nextCases = patch.case
-      ? [
-          ...facts.cases.slice(0, -1),
-          {
-            ...facts.cases.at(-1),
-            ...patch.case,
-            case_facts: {
-              ...(facts.cases.at(-1)?.case_facts ?? {}),
-              ...(patch.case.case_facts ?? {}),
-            },
-          },
-        ]
-      : facts.cases;
+      ? baseCases.map((item, index) =>
+          index === targetIndex
+            ? {
+                ...item,
+                ...patch.case,
+                case_facts: {
+                  ...(item?.case_facts ?? {}),
+                  ...(patch.case.case_facts ?? {}),
+                },
+              }
+            : item,
+        )
+      : baseCases;
     const nextProfile = {
       ...facts.profile,
       ...(patch.profile ?? {}),
@@ -328,12 +333,19 @@ export default function App() {
       // them from the session, so the screen cannot show one company while the
       // analysis runs for another.
 
-      if (data.status === "needs_placement") {
+      if (
+        data.status === "needs_placement" ||
+        data.status === "needs_trade_split"
+      ) {
         await walk(stepsForAsk(data, utterance), setThinking, spent);
-        // Nothing is recorded yet — the sentence has no home until the user
-        // says which trade it belongs to.
+        // Nothing is recorded yet: the user must confirm either where a
+        // sentence belongs or that one sentence contains two trades.
         setPending(data);
-        say({ who: "agent", kind: "placement", ask: data });
+        say({
+          who: "agent",
+          kind: data.status === "needs_trade_split" ? "trade_split" : "placement",
+          ask: data,
+        });
         return;
       }
 
@@ -362,7 +374,13 @@ export default function App() {
             ...trade,
           })),
         }));
-        setResult(data.result);
+        const displayResult = {
+          ...data.result,
+          ...(data.analysis_run_id
+            ? { analysis_run_id: data.analysis_run_id }
+            : {}),
+        };
+        setResult(displayResult);
         if (data.analysis_run_id) {
           listAnalyses()
             .then(setAnalysisHistory)
@@ -374,7 +392,7 @@ export default function App() {
         say({
           who: "agent",
           kind: "result",
-          result: data.result,
+          result: displayResult,
           heard: data.understood ?? {},
           spoken: Boolean(utterance),
         });
@@ -420,11 +438,15 @@ export default function App() {
         onOpenAnalysis={async (runId) => {
           try {
             const stored = await readAnalysis(runId);
-            setResult(stored.result);
+            const displayResult = {
+              ...stored.result,
+              analysis_run_id: stored.run_id,
+            };
+            setResult(displayResult);
             setTurns([{
               who: "agent",
               kind: "result",
-              result: stored.result,
+              result: displayResult,
               heard: {},
               spoken: false,
             }]);
@@ -498,6 +520,14 @@ export default function App() {
                   }
                   onPlace={(utterance, placement, said) =>
                     send(utterance, {}, placement, said)
+                  }
+                  onSplit={(cases) =>
+                    send(
+                      null,
+                      { cases },
+                      null,
+                      `${cases.length}건의 거래로 나누어 계산`,
+                    )
                   }
                 />
               )}

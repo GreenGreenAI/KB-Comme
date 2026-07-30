@@ -136,6 +136,11 @@ def run(scenario: dict[str, Any]) -> Outcome:
                 profit_floor=_money(profit.get("profit_floor")),
                 hedge_measures=_measures(scenario, reading.program),
                 utterance=scenario["utterance"],
+                # Acceptance fixtures are a historical replay. Using the wall
+                # clock makes their market snapshot and confirmed quote expire
+                # as the calendar advances, lowering the score without a code
+                # regression.
+                as_of=datetime.combine(AS_OF, time(0, 0), tzinfo=UTC),
             )
         )
         if scenario["id"] == "S3":

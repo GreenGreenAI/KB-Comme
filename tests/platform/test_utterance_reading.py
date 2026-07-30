@@ -2,7 +2,12 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from tradeflow.tools.utterance import financing_purpose, krw_amount, read_utterance
+from tradeflow.tools.utterance import (
+    financing_purpose,
+    krw_amount,
+    read_utterance,
+    split_trade_candidates,
+)
 
 AS_OF = date(2026, 7, 28)
 
@@ -184,6 +189,41 @@ class FinancingPurposeTests(unittest.TestCase):
         self.assertIsNone(financing_purpose("베트남에 10만 달러 수출합니다"))
         self.assertIsNone(financing_purpose(""))
         self.assertIsNone(financing_purpose(None))
+
+
+class MultipleTradeTests(unittest.TestCase):
+    def test_mixed_import_export_sentence_is_split_before_analysis(self) -> None:
+        candidates = split_trade_candidates(
+            "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, "
+            "완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다.",
+            as_of=AS_OF,
+        )
+
+        self.assertEqual(2, len(candidates))
+        self.assertEqual("수입", candidates[0]["direction"])
+        self.assertEqual("60000", candidates[0]["amount"])
+        self.assertEqual("2026-08-25", candidates[0]["expected_payment_date"])
+        self.assertEqual("수출", candidates[1]["direction"])
+        self.assertEqual("100000", candidates[1]["amount"])
+        self.assertEqual("2026-10-24", candidates[1]["expected_payment_date"])
+
+    def test_generic_export_import_category_is_not_split(self) -> None:
+        self.assertEqual(
+            (),
+            split_trade_candidates(
+                "수출입 거래의 환위험을 검토하고 싶어요",
+                as_of=AS_OF,
+            ),
+        )
+
+    def test_one_export_with_receipt_words_is_not_duplicated(self) -> None:
+        self.assertEqual(
+            (),
+            split_trade_candidates(
+                "미국에 10만 달러 수출해서 10월 24일에 대금을 받아요",
+                as_of=AS_OF,
+            ),
+        )
 
 
 if __name__ == "__main__":

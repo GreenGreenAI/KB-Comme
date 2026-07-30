@@ -33,8 +33,25 @@ export default function AskBar({
   quoteInputs,
   onSlot,
   onPlace,
+  onSplit,
   onUnknown,
 }) {
+  if (pending?.status === "needs_trade_split") {
+    return (
+      <Ask key="trade-split" label={pending.question}>
+        <ChoiceList
+          options={[
+            {
+              value: "confirm",
+              label: `${pending.candidates.length}건의 거래로 나누어 계산`,
+            },
+          ]}
+          onPick={() => onSplit(pending.candidates)}
+        />
+      </Ask>
+    );
+  }
+
   if (pending?.status === "needs_placement") {
     return (
       <Ask key="placement" label="어느 거래인가요">
@@ -124,6 +141,7 @@ const FACT_LABEL = {
   "payment.uses_foreign_exchange_bank": "외국환은행을 통해 지급하나요?",
   "trade.payment_term_days": "선적 또는 일람 후 결제일까지 며칠인가요?",
   "financing.purpose": "검토 중인 금융 목적은 무엇인가요?",
+  "financing.has_bank_consultation": "취급 금융기관과 보증부 대출 가능성을 상담했나요?",
 };
 
 const FACT_OPTIONS = {
@@ -157,6 +175,7 @@ function MissingFactField({ item, onSlot, onUnknown }) {
   const boolean =
     item.field === "company.credit_issue_free" ||
     item.field === "company.is_domestic" ||
+    item.field === "financing.has_bank_consultation" ||
     item.scope === "compliance_declaration";
 
   function answer(value, spoken) {
@@ -177,7 +196,10 @@ function MissingFactField({ item, onSlot, onUnknown }) {
       return;
     }
     onSlot(
-      { case: { case_facts: { [item.field]: value } } },
+      {
+        caseIndex: caseIndex(item.subject_id),
+        case: { case_facts: { [item.field]: value } },
+      },
       spoken,
     );
   }

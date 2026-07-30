@@ -410,6 +410,11 @@
     to { opacity: 1; transform: none; }
   }
   .standfirst { margin: 0; max-width: 34rem; color: var(--ink-70); font-size: 1.0625rem; }
+  .scope-badge {
+    margin: -.25rem 0 0; padding: .3rem .65rem; border: 1px solid var(--rule);
+    border-radius: 99px; color: var(--ink-70); background: var(--paper);
+    font-size: .6875rem; font-weight: 650; letter-spacing: .01em;
+  }
 
   .prompt {
     width: 100%; margin-top: 1.4rem; background: var(--paper);
@@ -1012,6 +1017,21 @@
   }
   .decision-section h3 {
     margin: 0 0 .6rem; font-size: .78rem; font-weight: 700; letter-spacing: -.01em;
+  }
+  .consultation-handoff {
+    display: grid; gap: .55rem;
+    border-left: 3px solid var(--accent);
+  }
+  .consultation-handoff p {
+    margin: 0; color: var(--ink-70); font-size: .6875rem; line-height: 1.55;
+  }
+  .consultation-consent {
+    display: flex; gap: .45rem; align-items: flex-start;
+    color: var(--ink-70); font-size: .6875rem; line-height: 1.45;
+  }
+  .consultation-handoff button {
+    justify-self: start; padding: .52rem .72rem; border: 0; border-radius: 7px;
+    background: var(--accent); color: var(--paper); font-weight: 650; cursor: pointer;
   }
   .document-panel > header {
     display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem;

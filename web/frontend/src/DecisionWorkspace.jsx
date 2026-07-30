@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { createConsultationHandoff } from "./api.js";
 import DocumentPanel from "./DocumentPanel.jsx";
 
 const STATUS = {
@@ -19,6 +21,9 @@ const FIELD = {
   "payment.is_third_party": "제3자 지급 여부",
   "payment.uses_mutual_account": "상호계산계정 사용 여부",
   "payment.uses_foreign_exchange_bank": "외국환은행 이용 여부",
+  "trade.payment_term_days": "결제기간",
+  "financing.purpose": "금융 목적",
+  "financing.has_bank_consultation": "은행 상담 여부",
   baseline_profit: "기준 영업이익",
   profit_floor: "목표 손익 하한",
 };
@@ -295,6 +300,82 @@ export function EvidenceSummary({ result }) {
   );
 }
 
+export function ConsultationHandoff({ result, signedIn }) {
+  const [consented, setConsented] = useState(false);
+  const [state, setState] = useState("idle");
+  const [error, setError] = useState("");
+  const runId = result.analysis_run_id;
+
+  async function prepare() {
+    if (!consented || !runId) return;
+    setState("working");
+    setError("");
+    try {
+      const packet = await createConsultationHandoff(runId);
+      const blob = new Blob(
+        [JSON.stringify(packet, null, 2)],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${packet.handoff_id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setState("ready");
+    } catch (caught) {
+      setError(caught.message);
+      setState("idle");
+    }
+  }
+
+  return (
+    <section
+      className="decision-section consultation-handoff"
+      aria-labelledby="consultation-title"
+    >
+      <h3 id="consultation-title">KB국민은행 상담 인계</h3>
+      <p>
+        현재는 은행 시스템에 자동 전송하지 않고, 분석·자금공백·지원제도·필요서류를
+        하나의 상담 패킷으로 내려받아 담당자에게 전달합니다.
+      </p>
+      {!signedIn ? (
+        <p className="decision-empty">
+          로그인하면 분석 이력에 연결된 상담 패킷을 만들 수 있습니다.
+        </p>
+      ) : !runId ? (
+        <p className="decision-empty">
+          저장된 분석에서 상담 패킷을 만들 수 있습니다.
+        </p>
+      ) : (
+        <>
+          <label className="consultation-consent">
+            <input
+              type="checkbox"
+              checked={consented}
+              onChange={(event) => setConsented(event.target.checked)}
+            />
+            이 분석 정보를 무역금융 상담 목적으로 전달하는 데 동의합니다.
+          </label>
+          <button
+            type="button"
+            onClick={prepare}
+            disabled={!consented || state === "working"}
+          >
+            {state === "working" ? "패킷 준비 중" : "KB 상담 패킷 내려받기"}
+          </button>
+          {state === "ready" ? (
+            <p role="status">
+              수동 인계용 패킷을 준비했습니다. 자동 전송된 정보는 없습니다.
+            </p>
+          ) : null}
+          {error ? <p role="alert">{error}</p> : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function DecisionWorkspace({ result, signedIn = false }) {
   return (
     <div className="decision-workspace">
@@ -306,6 +387,7 @@ export default function DecisionWorkspace({ result, signedIn = false }) {
       <ComplianceFindings result={result} />
       <MissingInputQueue result={result} />
       <ActionPlan result={result} />
+      <ConsultationHandoff result={result} signedIn={signedIn} />
       <EvidenceSummary result={result} />
     </div>
   );

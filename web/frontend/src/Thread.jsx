@@ -92,6 +92,7 @@ const STEP_LABEL = {
   read: "문장에서 거래 정보 읽기",
   slots: "빠진 정보 확인",
   placement: "앞 거래와 대조",
+  trade_split: "복합 거래 분리 확인",
 };
 
 /** What the agent is doing, while it is doing it.
@@ -164,6 +165,23 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
         <span className="who">TradeFlow</span>
         <Understood heard={turn.ask.understood} />
         <p>{turn.ask.question}</p>
+      </div>
+    );
+  }
+
+  if (turn.kind === "trade_split") {
+    return (
+      <div className="turn agent">
+        <span className="who">TradeFlow</span>
+        <p>{turn.ask.question}</p>
+        <ul className="reasons">
+          {turn.ask.candidates.map((candidate, index) => (
+            <li key={`${candidate.direction}:${candidate.expected_payment_date}:${index}`}>
+              {candidate.direction} · {Number(candidate.amount).toLocaleString()} USD ·{" "}
+              {candidate.expected_payment_date}
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }

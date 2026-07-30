@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import DecisionWorkspace from "./DecisionWorkspace.jsx";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import DecisionWorkspace, { ConsultationHandoff } from "./DecisionWorkspace.jsx";
 
 const result = {
   company_profile: {
@@ -93,6 +93,10 @@ const result = {
 };
 
 describe("DecisionWorkspace", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
   it("renders the company, decisions, action owner, deadline and review state", () => {
     render(<DecisionWorkspace result={result} />);
 
@@ -130,5 +134,46 @@ describe("DecisionWorkspace", () => {
     render(<DecisionWorkspace result={skipped} />);
     expect(screen.getByText(/미실행 · 거래 구조 확인 필요/)).toBeInTheDocument();
     expect(screen.queryByText(/신고 검토사항이 발견되지 않았습니다/)).not.toBeInTheDocument();
+  });
+
+  it("requires consent and downloads a non-transmitting KB handoff packet", async () => {
+    const user = userEvent.setup();
+    const click = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        handoff: {
+          handoff_id: "HANDOFF-test",
+          state: "ready_for_manual_handoff",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:test"),
+      revokeObjectURL: vi.fn(),
+    });
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag) => {
+      if (tag === "a") return { click };
+      return createElement(tag);
+    });
+    render(
+      <ConsultationHandoff
+        result={{ ...result, analysis_run_id: "RUN-1" }}
+        signedIn
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "KB 상담 패킷 내려받기" });
+    expect(button).toBeDisabled();
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(button);
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/analyses/RUN-1/consultation-handoff",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(click).toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("자동 전송된 정보는 없습니다");
   });
 });

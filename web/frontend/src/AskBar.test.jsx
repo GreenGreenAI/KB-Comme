@@ -6,7 +6,10 @@ import AskBar from "./AskBar.jsx";
 const base = {
   pending: null,
   requiredInputs: [],
+  missingInputs: [],
+  quoteInputs: [],
   onPlace: vi.fn(),
+  onSplit: vi.fn(),
 };
 
 describe("AskBar decision input queue", () => {
@@ -75,6 +78,59 @@ describe("AskBar decision input queue", () => {
     expect(onSlot).toHaveBeenCalledWith(
       { profile: { company_facts: { "company.size": "small" } } },
       "중소기업",
+    );
+  });
+
+  it("confirms a mixed sentence as two structured trades", async () => {
+    const user = userEvent.setup();
+    const onSplit = vi.fn();
+    const candidates = [
+      { direction: "수입", amount: "60000", expected_payment_date: "2026-08-25" },
+      { direction: "수출", amount: "100000", expected_payment_date: "2026-10-24" },
+    ];
+    render(
+      <AskBar
+        {...base}
+        pending={{
+          status: "needs_trade_split",
+          question: "두 거래로 나누어 계산할까요?",
+          candidates,
+        }}
+        onSplit={onSplit}
+        onSlot={vi.fn()}
+        onUnknown={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("option", { name: /2건의 거래/ }));
+    expect(onSplit).toHaveBeenCalledWith(candidates);
+  });
+
+  it("sends bank consultation to the case named by the packet", async () => {
+    const user = userEvent.setup();
+    const onSlot = vi.fn();
+    render(
+      <AskBar
+        {...base}
+        missingInputs={[{
+          field: "financing.has_bank_consultation",
+          scope: "case",
+          subject_id: "EXPORT-002",
+        }]}
+        onSlot={onSlot}
+        onUnknown={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("option", { name: /예/ }));
+    expect(onSlot).toHaveBeenCalledWith(
+      {
+        caseIndex: 1,
+        case: {
+          case_facts: { "financing.has_bank_consultation": true },
+        },
+      },
+      "예",
     );
   });
 });

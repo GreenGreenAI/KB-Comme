@@ -227,7 +227,11 @@ def _input_scope(field: str) -> str:
         return "profile"
     if field in DECLARABLE_GATEWAY_FIELDS:
         return "compliance_declaration"
-    if field in {"trade.payment_term_days", "financing.purpose"}:
+    if field in {
+        "trade.payment_term_days",
+        "financing.purpose",
+        "financing.has_bank_consultation",
+    }:
         return "case"
     return "external_evidence"
 

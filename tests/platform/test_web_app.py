@@ -10,9 +10,11 @@ from tradeflow.runtime.accounts import AccountStore
 from tradeflow.web import app
 from tradeflow.web.app import (
     AnalyzeRequest,
+    ConsultationHandoffRequest,
     ProfileFactsRequest,
     analysis_history,
     analyze_endpoint,
+    create_consultation_handoff,
     saved_analysis,
     update_profile,
 )
@@ -141,6 +143,64 @@ class AskedPairingTests(unittest.TestCase):
             self.assertIn(item["field"], body["missing"])
 
 
+class MultipleTradeIntakeTests(unittest.TestCase):
+    def test_mixed_trade_sentence_never_returns_partial_normal_result(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                utterance=(
+                    "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, "
+                    "완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다."
+                ),
+            )
+        )
+
+        self.assertEqual("needs_trade_split", body["status"])
+        self.assertNotIn("result", body)
+        self.assertEqual(2, len(body["candidates"]))
+        self.assertEqual("수입", body["candidates"][0]["direction"])
+        self.assertEqual("60000", body["candidates"][0]["amount"])
+        self.assertEqual("수출", body["candidates"][1]["direction"])
+        self.assertEqual("100000", body["candidates"][1]["amount"])
+
+    def test_confirmed_split_cases_produce_the_expected_maturity_gap(self) -> None:
+        as_of = date.today()
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=as_of.isoformat(),
+                opening_balance_usd="0",
+                cases=[
+                    {
+                        "direction": "import",
+                        "amount": "60000",
+                        "currency": "USD",
+                        "payment_method": "TT",
+                        "expected_payment_date": (
+                            as_of + timedelta(days=30)
+                        ).isoformat(),
+                    },
+                    {
+                        "direction": "export",
+                        "amount": "100000",
+                        "currency": "USD",
+                        "payment_method": "TT",
+                        "expected_payment_date": (
+                            as_of + timedelta(days=90)
+                        ).isoformat(),
+                    },
+                ],
+            )
+        )
+
+        self.assertEqual("ready", body["status"])
+        exposure = body["result"]["cashflow_analysis"]
+        self.assertEqual("60000", exposure["funding_gap"][0]["peak_amount"])
+        self.assertEqual(
+            "40000",
+            exposure["net_exposure"][0]["amount"],
+        )
+
+
 class DecisionWorkspaceContractTests(unittest.TestCase):
     def _case(self, **changes) -> dict:
         return {
@@ -179,6 +239,57 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
         self.assertEqual(
             "small", packet_inputs["cases"]["EXPORT-001"]["company.size"]
         )
+
+    def test_case_financing_answers_are_evidenced_and_reused_for_redecision(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                is_sme=True,
+                company_facts={"company.size": "small"},
+                cases=[
+                    self._case(
+                        case_facts={
+                            "trade.payment_term_days": 180,
+                            "financing.purpose": "trade_finance",
+                            "financing.has_bank_consultation": True,
+                        }
+                    )
+                ],
+            )
+        )
+
+        self.assertEqual("ready", body["status"])
+        packet_inputs = {
+            item["name"]: item["value"]
+            for item in body["result"]["decision_packet"]["inputs"]
+        }
+        facts = packet_inputs["cases"]["EXPORT-001"]
+        self.assertEqual(180, facts["trade.payment_term_days"])
+        self.assertEqual("trade_finance", facts["financing.purpose"])
+        self.assertIs(True, facts["financing.has_bank_consultation"])
+        missing = {
+            item["field"] for item in body["result"]["missing_input_queue"]
+        }
+        self.assertNotIn("trade.payment_term_days", missing)
+        self.assertNotIn("financing.purpose", missing)
+        self.assertNotIn("financing.has_bank_consultation", missing)
+
+    def test_invalid_case_financing_answers_are_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as context:
+            analyze_endpoint(
+                AnalyzeRequest(
+                    as_of=date.today().isoformat(),
+                    cases=[
+                        self._case(
+                            case_facts={
+                                "financing.has_bank_consultation": "yes"
+                            }
+                        )
+                    ],
+                )
+            )
+
+        self.assertEqual(422, context.exception.status_code)
 
     def test_confirmed_gateway_declaration_runs_compliance_with_evidence(self) -> None:
         body = analyze_endpoint(
@@ -281,10 +392,32 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
                 )
                 history = analysis_history(token)["analyses"]
                 stored = saved_analysis(body["analysis_run_id"], token)
+                handoff = create_consultation_handoff(
+                    body["analysis_run_id"],
+                    ConsultationHandoffRequest(consent=True),
+                    token,
+                )["handoff"]
+                audit = store.list_audit(account)
 
         self.assertEqual("small", updated["account"]["facts"]["company.size"])
         self.assertEqual(1, len(history))
         self.assertEqual(body["result"]["packet_id"], stored["packet_id"])
+        self.assertEqual(
+            "KB_KOOKMIN_BANK",
+            handoff["channel"]["target_bank"],
+        )
+        self.assertEqual(
+            "ready_for_manual_handoff",
+            handoff["state"],
+        )
+        self.assertFalse(handoff["privacy"]["raw_document_content_included"])
+        self.assertFalse(handoff["privacy"]["transmission_performed"])
+        self.assertTrue(
+            any(
+                item["action"] == "consultation_handoff.prepare"
+                for item in audit
+            )
+        )
 
 
 class SecondTradeTests(unittest.TestCase):

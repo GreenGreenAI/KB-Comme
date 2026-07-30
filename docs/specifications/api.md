@@ -67,3 +67,33 @@ API가 도입될 때 각 엔드포인트에 다음을 정의한다.
 
 오류 코드는 transport가 변환할 수 있지만, stale 또는 invalid 데이터를 정상 응답으로
 승격해서는 안 된다. 같은 요청·스냅샷·규칙 버전은 같은 `packet_id`를 생성한다.
+
+## 웹 거래 사실과 재판정
+
+`trade.payment_term_days`, `financing.purpose`,
+`financing.has_bank_consultation`은 웹 요청의 거래 사실 허용 목록에 포함된다. 각 값은
+결정 패킷의 대상 거래에 결합된 증거로 조립되며, 누락 정보 큐에서 답한 뒤 동일 분석 흐름을
+재실행한다.
+
+## 은행 상담 수동 인계
+
+`POST /api/analyses/{run_id}/consultation-handoff`는 로그인된 tenant의 저장 분석을
+`bank_consultation.v1` 패킷으로 투영한다.
+
+```json
+{
+  "consent": true,
+  "target_bank": "KB_KOOKMIN_BANK"
+}
+```
+
+- 필요한 권한: `analysis:read`
+- 현재 모드: `manual_packet`
+- 상태: `ready_for_manual_handoff`
+- 원문 문서·문서 바이너리: 포함하지 않음
+- 자동 전송·KB 접수: 수행하지 않음
+- 감사 이벤트: `consultation_handoff.prepare`
+
+응답 패킷에는 분석 식별자, 기업·거래, 순노출·자금공백, 지원·신고 판정, 다음 행동, 문서
+체크리스트, 누락 정보, 근거와 계산 버전이 포함된다. 실제 KB API가 확보되면 이 계약을
+소비하는 integration 어댑터를 추가하고 핵심 분석 계약은 변경하지 않는다.

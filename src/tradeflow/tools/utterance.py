@@ -176,6 +176,14 @@ _ADDITIONAL_TRADE = re.compile(
     re.IGNORECASE,
 )
 
+# Explicit trade nouns are the safe boundary for deciding that one sentence
+# contains more than one cash-flow event. Other direction hints such as
+# "수출해서 대금을 받아요" can occur twice while describing one export, so
+# counting every receipt/payment verb would create false duplicates. The
+# negative lookarounds keep the generic word "수출입" from becoming two trades.
+_TRADE_ANCHOR = re.compile(r"수출(?!입)|(?<!수출)수입")
+_CLAUSE_SEPARATOR = re.compile(r"[,;]\s*|(?:하고|하며|그리고)\s*")
+
 
 def _direction(text: str) -> str | None:
     export = next((h for h in _EXPORT_HINTS if h in text), None)
@@ -407,6 +415,56 @@ def read_utterance(text: str, *, as_of: date) -> dict[str, Any]:
         slots["currency"] = currency
 
     return slots
+
+
+def split_trade_candidates(
+    text: str,
+    *,
+    as_of: date,
+) -> tuple[dict[str, Any], ...]:
+    """Return independently readable import/export clauses, or no candidates.
+
+    This is deliberately a guard before it is a general multi-trade parser.
+    A mixed import/export sentence used to be reduced to whichever direction,
+    amount and date appeared first and then returned as a normal analysis.
+    When both explicit trade anchors are present, each clause must survive as
+    its own candidate and the user must confirm the split before calculation.
+
+    We do not split a bare ``수출입`` category word and we do not infer two
+    same-direction shipments from repeated receipt verbs. Those remain normal
+    slot-reading or placement questions.
+    """
+    if not text or not text.strip():
+        return ()
+    anchors = tuple(_TRADE_ANCHOR.finditer(text))
+    directions = {
+        "수출" if match.group(0) == "수출" else "수입"
+        for match in anchors
+    }
+    if len(anchors) < 2 or len(directions) < 2:
+        return ()
+
+    boundaries = [0]
+    for current, following in zip(anchors, anchors[1:]):
+        between = text[current.end() : following.start()]
+        separators = tuple(_CLAUSE_SEPARATOR.finditer(between))
+        if separators:
+            boundary = current.end() + separators[-1].end()
+        else:
+            boundary = (current.end() + following.start()) // 2
+        boundaries.append(boundary)
+    boundaries.append(len(text))
+
+    candidates: list[dict[str, Any]] = []
+    for index, anchor in enumerate(anchors):
+        clause = text[boundaries[index] : boundaries[index + 1]].strip()
+        heard = read_utterance(clause, as_of=as_of)
+        # The anchor itself is authoritative even when another directional
+        # verb appears in the same clause near the boundary.
+        heard["direction"] = "수출" if anchor.group(0) == "수출" else "수입"
+        if heard:
+            candidates.append(heard)
+    return tuple(candidates)
 
 
 #: Fields that describe *which* trade a sentence is about. A sentence that

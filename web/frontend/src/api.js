@@ -90,6 +90,27 @@ export async function readAnalysis(runId) {
   return response.json();
 }
 
+export async function createConsultationHandoff(runId) {
+  const response = await ask(
+    `/api/analyses/${encodeURIComponent(runId)}/consultation-handoff`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consent: true,
+        target_bank: "KB_KOOKMIN_BANK",
+      }),
+    },
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(
+      payload?.detail?.reason ?? "은행 상담 패킷을 준비하지 못했습니다.",
+    );
+  }
+  return (await response.json()).handoff;
+}
+
 async function documentRequest(url, init, fallback) {
   const response = await ask(url, init);
   if (!response.ok) {

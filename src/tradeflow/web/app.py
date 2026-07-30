@@ -38,6 +38,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from tradeflow.agent.intake import intake
+from tradeflow.contracts.consultation_packet import (
+    ManualBankConsultationHandoffProvider,
+)
 from tradeflow.domain.enums import TradeDirection
 from tradeflow.knowledge.hedge_quotes import (
     HedgeQuoteSide,
@@ -71,6 +74,7 @@ from tradeflow.tools.utterance import (
     krw_amount,
     place_utterance,
     read_utterance,
+    split_trade_candidates,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -232,6 +236,11 @@ class ForwardQuoteInput(BaseModel):
 
 class ProfileFactsRequest(BaseModel):
     facts: dict[str, Any]
+
+
+class ConsultationHandoffRequest(BaseModel):
+    consent: Literal[True]
+    target_bank: Literal["KB_KOOKMIN_BANK"] = "KB_KOOKMIN_BANK"
 
 
 class DocumentUploadRequest(BaseModel):
@@ -396,6 +405,18 @@ CASE_FACT_INPUT_FIELDS = frozenset(
     {
         "trade.payment_term_days",
         "financing.purpose",
+        "financing.has_bank_consultation",
+    }
+)
+consultation_handoff_provider = ManualBankConsultationHandoffProvider()
+FINANCING_PURPOSES = frozenset(
+    {
+        "trade_finance",
+        "recognized_export_finance",
+        "trade_bill_acceptance",
+        "export_material_import_lc",
+        "recognized_export_promotion_fund",
+        "other",
     }
 )
 
@@ -494,6 +515,49 @@ def saved_analysis(
         target_id=run_id,
     )
     return stored
+
+
+@app.post("/api/analyses/{run_id}/consultation-handoff")
+def create_consultation_handoff(
+    run_id: str,
+    body: ConsultationHandoffRequest,
+    session: SessionCookie = None,
+) -> dict[str, Any]:
+    """Prepare, but do not transmit, the bank consultation packet."""
+    account = _require_account(session)
+    _require_permission(
+        account,
+        "analysis:read",
+        target_type="analysis",
+        target_id=run_id,
+    )
+    stored = accounts.read_analysis(account, run_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason": "분석을 찾을 수 없습니다"},
+        )
+    packet = consultation_handoff_provider.prepare(
+        run_id=run_id,
+        analysis_created_at=stored["created_at"],
+        consented_at=datetime.now(UTC).isoformat(),
+        result=stored["result"],
+        requested_by=account.email,
+        target_bank=body.target_bank,
+    )
+    accounts.append_audit(
+        account,
+        action="consultation_handoff.prepare",
+        target_type="consultation_handoff",
+        target_id=packet["handoff_id"],
+        details={
+            "analysis_run_id": run_id,
+            "target_bank": body.target_bank,
+            "mode": "manual_packet",
+            "transmitted": False,
+        },
+    )
+    return {"handoff": packet}
 
 
 def _document_validation_error(exc: DocumentValidationError) -> HTTPException:
@@ -710,6 +774,42 @@ def _validate_case_facts(cases: list[CaseInput]) -> None:
                 "reason": "지원하지 않는 거래 사실: " + ", ".join(sorted(unknown)),
             },
         )
+    for index, case in enumerate(cases):
+        facts = case.case_facts
+        term = facts.get("trade.payment_term_days")
+        if term is not None and (
+            isinstance(term, bool)
+            or not isinstance(term, int)
+            or term < 0
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "field": f"cases.{index}.case_facts.trade.payment_term_days",
+                    "reason": "결제기간은 0 이상의 정수여야 합니다",
+                },
+            )
+        purpose = facts.get("financing.purpose")
+        if purpose is not None and purpose not in FINANCING_PURPOSES:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "field": f"cases.{index}.case_facts.financing.purpose",
+                    "reason": "지원하지 않는 금융 목적입니다",
+                },
+            )
+        consulted = facts.get("financing.has_bank_consultation")
+        if consulted is not None and not isinstance(consulted, bool):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "field": (
+                        f"cases.{index}.case_facts."
+                        "financing.has_bank_consultation"
+                    ),
+                    "reason": "은행 상담 여부는 true 또는 false여야 합니다",
+                },
+            )
 
 
 def _declarations(
@@ -795,6 +895,22 @@ def _placement_question(
     }
 
 
+def _trade_split_question(
+    utterance: str,
+    candidates: tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    """Stop before calculating a sentence that contains multiple trades."""
+    return {
+        "status": "needs_trade_split",
+        "utterance": utterance,
+        "question": (
+            f"서로 다른 거래 {len(candidates)}건이 함께 들어 있습니다. "
+            "아래처럼 나누어 계산할까요?"
+        ),
+        "candidates": list(candidates),
+    }
+
+
 def _money(raw: str | None, field_name: str) -> Decimal | None:
     if raw is None or str(raw).strip() == "":
         return None
@@ -874,6 +990,9 @@ def analyze_endpoint(
     supplied = [case.model_dump() for case in request.cases]
     heard: dict[str, Any] = {}
     if request.utterance:
+        split = split_trade_candidates(request.utterance, as_of=as_of)
+        if split:
+            return _trade_split_question(request.utterance, split)
         heard = read_utterance(request.utterance, as_of=as_of)
         if heard:
             action = request.placement or place_utterance(

@@ -48,3 +48,18 @@ class HedgeMeasureAvailabilityService(Protocol):
         as_of: date,
     ) -> tuple[HedgeMeasure, ...]: ...
 
+
+class BankConsultationHandoffProvider(Protocol):
+    """Prepare a bank-channel handoff without changing analysis semantics."""
+
+    def prepare(
+        self,
+        *,
+        run_id: str,
+        analysis_created_at: str,
+        consented_at: str,
+        result: Mapping[str, Any],
+        requested_by: str,
+        target_bank: str,
+    ) -> dict[str, Any]: ...
+

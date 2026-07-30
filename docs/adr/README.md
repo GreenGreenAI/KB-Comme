@@ -38,6 +38,7 @@ last-reviewed: 2026-07-27
 | [ADR-0025](0025-hedge-model-champion-challenger-governance.md) | proposed | 헤지 모델 champion/challenger 거버넌스 |
 | [ADR-0026](0026-accounts-as-the-source-of-company-facts.md) | accepted | 계정은 관문이 아니라 기업 사실의 출처 |
 | [ADR-0027](0027-tenant-document-and-production-security-boundary.md) | proposed | tenant 문서와 운영 보안 경계 |
+| [ADR-0028](0028-bank-neutral-consultation-handoff.md) | proposed | 금융기관 중립 상담 인계와 KB 어댑터 경계 |
 
 ## 운영 규칙
 
