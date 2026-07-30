@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "checked_on": "2026-07-30",
+  "checks": [
+    {
+      "provider_id": "KRX_USD_FUTURES",
+      "endpoint_class": "official_production",
+      "network_result": "success",
+      "contract_result": "usd_futures_outright_normalized",
+      "request_date": "2026-07-29",
+      "record_count": 40,
+      "returned_product_scope": "USD futures outright; calendar spreads excluded",
+      "usd_futures_verified": true,
+      "next_requirement": "none for demo benchmark scope"
+    },
+    {
+      "provider_id": "CURRENCYCLOUD_DEMO",
+      "endpoint_class": "official_demo",
+      "network_result": "success",
+      "contract_result": "USD_EUR_future_detailed_rate_and_session_close_verified",
+      "usd_futures_verified": false,
+      "next_requirement": "KRW is unsupported; use KRX and ECOS for USD/KRW"
+    }
+  ]
+}

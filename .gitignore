@@ -7,12 +7,19 @@ dist/
 build/
 *.egg-info/
 .env
+.env.*
+!.env.example
 
 # Runtime customer/ERP snapshots contain confidential business data.
 data/runtime/
 
 node_modules/
 web/frontend/dist/
+web/frontend/test-results/
+web/frontend/playwright-report/
 
 # Accounts are seeded locally, never committed — the file holds password hashes.
 data/accounts.db
+data/.document-key
+data/documents/
+data/governance/*.db

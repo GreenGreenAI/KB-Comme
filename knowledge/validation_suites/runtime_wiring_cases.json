@@ -1,0 +1,165 @@
+{
+  "schema_version": "1.0",
+  "contract_id": "ROLE_B_USER_INPUT_WIRING",
+  "related_issue": 25,
+  "program": {
+    "program_id": "P-WIRING",
+    "company_id": "C1",
+    "company_name": "Fixture Exporter",
+    "as_of": "2026-07-28",
+    "cases": [
+      {
+        "case_id": "EXP-1",
+        "direction": "export",
+        "currency": "USD",
+        "amount": "100000",
+        "expected_payment_date": "2026-10-31",
+        "payment_method": "tt"
+      }
+    ]
+  },
+  "evaluated_at": "2026-07-28T10:00:00+09:00",
+  "cases": [
+    {
+      "case_id": "ACTIVE_SELECTED_QUOTE",
+      "declarations": [
+        {
+          "declaration_id": "D-1",
+          "company_id": "C1",
+          "case_id": "EXP-1",
+          "declared_at": "2026-07-28T09:50:00+09:00",
+          "declared_by_role": "company_user",
+          "confirmed": true,
+          "is_netting": false,
+          "is_third_party": false,
+          "uses_mutual_account": false,
+          "uses_foreign_exchange_bank": true
+        }
+      ],
+      "quotes": [
+        {
+          "quote_id": "Q-1",
+          "provider_id": "BANK-A",
+          "company_id": "C1",
+          "case_ids": ["EXP-1"],
+          "base_currency": "USD",
+          "counter_currency": "KRW",
+          "side": "sell",
+          "notional": "100000",
+          "contract_rate": "1482",
+          "cost_rate": "0.001",
+          "settlement_date": "2026-10-31",
+          "quoted_at": "2026-07-28T09:55:00+09:00",
+          "valid_until": "2026-07-28T10:05:00+09:00",
+          "confirmed": true
+        }
+      ],
+      "selected_quote_id": "Q-1",
+      "expected": {
+        "declaration_fields": [
+          "payment.is_netting",
+          "payment.is_third_party",
+          "payment.uses_foreign_exchange_bank",
+          "payment.uses_mutual_account"
+        ],
+        "measure_statuses": ["available"],
+        "evidence_roles": ["compliance", "market_data"],
+        "may_execute_hedge": true
+      }
+    },
+    {
+      "case_id": "NO_QUOTE",
+      "declarations": [],
+      "quotes": [],
+      "selected_quote_id": null,
+      "expected": {
+        "declaration_fields": [],
+        "measure_statuses": ["insufficient_information"],
+        "evidence_roles": [],
+        "may_execute_hedge": false
+      }
+    },
+    {
+      "case_id": "QUOTE_NOT_SELECTED",
+      "declarations": [],
+      "quotes": [
+        {
+          "quote_id": "Q-2",
+          "provider_id": "BANK-A",
+          "company_id": "C1",
+          "case_ids": ["EXP-1"],
+          "base_currency": "USD",
+          "counter_currency": "KRW",
+          "side": "sell",
+          "notional": "100000",
+          "contract_rate": "1480",
+          "cost_rate": "0.001",
+          "settlement_date": "2026-10-31",
+          "quoted_at": "2026-07-28T09:55:00+09:00",
+          "valid_until": "2026-07-28T10:05:00+09:00",
+          "confirmed": true
+        }
+      ],
+      "selected_quote_id": null,
+      "expected": {
+        "declaration_fields": [],
+        "measure_statuses": ["conditional"],
+        "evidence_roles": ["market_data"],
+        "may_execute_hedge": false
+      }
+    },
+    {
+      "case_id": "EXPIRED_QUOTE",
+      "declarations": [],
+      "quotes": [
+        {
+          "quote_id": "Q-3",
+          "provider_id": "BANK-A",
+          "company_id": "C1",
+          "case_ids": ["EXP-1"],
+          "base_currency": "USD",
+          "counter_currency": "KRW",
+          "side": "sell",
+          "notional": "100000",
+          "contract_rate": "1475",
+          "cost_rate": "0.001",
+          "settlement_date": "2026-10-31",
+          "quoted_at": "2026-07-28T09:40:00+09:00",
+          "valid_until": "2026-07-28T09:59:59+09:00",
+          "confirmed": true
+        }
+      ],
+      "selected_quote_id": "Q-3",
+      "expected": {
+        "declaration_fields": [],
+        "measure_statuses": ["unavailable"],
+        "evidence_roles": ["market_data"],
+        "may_execute_hedge": false
+      }
+    },
+    {
+      "case_id": "QUOTE_COMPANY_MISMATCH",
+      "declarations": [],
+      "quotes": [
+        {
+          "quote_id": "Q-4",
+          "provider_id": "BANK-A",
+          "company_id": "OTHER",
+          "case_ids": ["EXP-1"],
+          "base_currency": "USD",
+          "counter_currency": "KRW",
+          "side": "sell",
+          "notional": "100000",
+          "contract_rate": "1482",
+          "cost_rate": "0.001",
+          "settlement_date": "2026-10-31",
+          "quoted_at": "2026-07-28T09:55:00+09:00",
+          "valid_until": "2026-07-28T10:05:00+09:00",
+          "confirmed": true
+        }
+      ],
+      "selected_quote_id": "Q-4",
+      "expected_error": "quote company does not match program"
+    }
+  ]
+}

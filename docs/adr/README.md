@@ -29,14 +29,15 @@ last-reviewed: 2026-07-27
 | [ADR-0016](0016-fail-closed-erp-provider-mapping.md) | proposed | ERP 공급자 응답의 fail-closed 매핑 |
 | [ADR-0017](0017-evidence-bound-ksure-country-policy.md) | proposed | K-SURE 국별인수방침의 스냅샷 기반 fact 파생 |
 | [ADR-0018](0018-versioned-application-document-catalog.md) | proposed | 버전형 신청서류 카탈로그와 실행계획 계약 |
-| [ADR-0019](0019-rulepack-promotion-and-review-policy.md) | proposed | 규칙팩 승격 게이트와 전문가 검토 정책 분리 |
+| [ADR-0019](0019-rulepack-promotion-and-review-policy.md) | accepted | 규칙팩 승격 게이트와 전문가 검토 정책 분리 |
 | [ADR-0020](0020-subject-scoped-operational-evidence.md) | proposed | 회사·케이스 범위 운영 자격 증거와 fail-closed 결합 |
 | [ADR-0021](0021-private-eligibility-evidence-snapshots.md) | proposed | 기업 자격·신용정보의 비공개 snapshot·tenant 경계 |
 | [ADR-0022](0022-koreaexim-reference-fx-catalog.md) | proposed | 한국수출입은행 다통화 기준환율 catalog와 출처 역할 |
 | [ADR-0023](0023-user-declared-compliance-gates.md) | proposed | 사용자 확정 진술로 규정 적용 관문만 입력하는 계약 |
 | [ADR-0024](0024-user-confirmed-forward-quote-availability.md) | proposed | 사용자 확인 선물환 호가의 범위·최신성·가용성 계약 |
 | [ADR-0025](0025-hedge-model-champion-challenger-governance.md) | proposed | 헤지 모델 champion/challenger 거버넌스 |
-| [ADR-0026](0026-accounts-as-the-source-of-company-facts.md) | proposed | 계정은 관문이 아니라 기업 사실의 출처 |
+| [ADR-0026](0026-accounts-as-the-source-of-company-facts.md) | accepted | 계정은 관문이 아니라 기업 사실의 출처 |
+| [ADR-0027](0027-tenant-document-and-production-security-boundary.md) | proposed | tenant 문서와 운영 보안 경계 |
 
 ## 운영 규칙
 

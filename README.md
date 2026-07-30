@@ -35,6 +35,16 @@ python -m unittest discover -s tests -v
 python examples/linked_trade_demo.py
 ```
 
+외부 API를 사용하는 로컬 개발에서는 `.env.example`을 `.env`로 복사해 필요한
+값만 채우고, 같은 PowerShell 프로세스에서 먼저 불러옵니다. `.env`와 그 변형은
+Git에서 제외되며 실제 키를 `.env.example`에 넣지 않습니다.
+
+```powershell
+. .\scripts\import_env.ps1
+$env:PYTHONPATH='src'
+python -m tradeflow.integration.ecos 20260701 20260729
+```
+
 ## 주요 디렉터리
 
 - `src/tradeflow/domain`: 거래, 회사, 현금흐름, 판정 모델과 계층 공통 값객체

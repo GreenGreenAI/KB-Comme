@@ -13,9 +13,11 @@ from typing import Any, Iterable, Mapping, Protocol
 from tradeflow.domain.datasets import (
     DatasetContractError,
     FxSeries,
+    ListedFxFutureDailyDataset,
     EligibilityEvidenceDataset,
     KsureCountryPolicyCatalog,
     ReferenceFxCatalog,
+    ProviderIndicativeForwardQuoteDataset,
     SnapshotDataset,
     StaleDatasetError,
     SupportProgramCatalog,
@@ -25,6 +27,8 @@ from tradeflow.domain.datasets import (
     parse_bizinfo_support_payload,
     parse_ksure_country_policy_payload,
     parse_koreaexim_reference_fx_payload,
+    parse_listed_fx_futures_daily_payload,
+    parse_provider_indicative_forward_quote_payload,
     parse_trade_feed_payload,
 )
 from tradeflow.domain.enums import Freshness
@@ -39,6 +43,8 @@ class DatasetKind(StrEnum):
     COUNTRY_POLICY_CATALOG = "country_policy_catalog"
     ELIGIBILITY_EVIDENCE = "eligibility_evidence"
     REFERENCE_FX_CATALOG = "reference_fx_catalog"
+    PROVIDER_INDICATIVE_FORWARD_QUOTE = "provider_indicative_forward_quote"
+    LISTED_FX_FUTURES_DAILY = "listed_fx_futures_daily"
 
 
 class StorageScope(StrEnum):
@@ -103,6 +109,8 @@ class DatasetParser(Protocol):
         | SupportProgramCatalog
         | KsureCountryPolicyCatalog
         | EligibilityEvidenceDataset
+        | ProviderIndicativeForwardQuoteDataset
+        | ListedFxFutureDailyDataset
     ): ...
 
 
@@ -189,6 +197,36 @@ class EligibilityEvidenceV1Parser:
         if data.observed_at != ref.observed_at:
             raise DatasetContractError(
                 "eligibility evidence observed_at does not match snapshot"
+            )
+        return data
+
+
+@dataclass(frozen=True)
+class ProviderIndicativeForwardQuoteV1Parser:
+    kind: DatasetKind = DatasetKind.PROVIDER_INDICATIVE_FORWARD_QUOTE
+    schema_version: str = "1.0"
+
+    def parse(
+        self, payload: Any, ref: SnapshotRef
+    ) -> ProviderIndicativeForwardQuoteDataset:
+        data = parse_provider_indicative_forward_quote_payload(payload)
+        if data.dataset_id != ref.version or data.observed_at != ref.observed_at:
+            raise DatasetContractError(
+                "provider quote identity does not match snapshot"
+            )
+        return data
+
+
+@dataclass(frozen=True)
+class ListedFxFuturesDailyV1Parser:
+    kind: DatasetKind = DatasetKind.LISTED_FX_FUTURES_DAILY
+    schema_version: str = "1.0"
+
+    def parse(self, payload: Any, ref: SnapshotRef) -> ListedFxFutureDailyDataset:
+        data = parse_listed_fx_futures_daily_payload(payload)
+        if data.dataset_id != ref.version or data.observed_at != ref.observed_at:
+            raise DatasetContractError(
+                "listed FX futures identity does not match snapshot"
             )
         return data
 
@@ -291,6 +329,10 @@ def default_parser_registry() -> ParserRegistry:
             "bizinfo_support_v1": BizinfoSupportV1Parser(),
             "ksure_country_policy_v1": KsureCountryPolicyV1Parser(),
             "eligibility_evidence_v1": EligibilityEvidenceV1Parser(),
+            "provider_indicative_forward_quote_v1": (
+                ProviderIndicativeForwardQuoteV1Parser()
+            ),
+            "listed_fx_futures_daily_v1": ListedFxFuturesDailyV1Parser(),
         }
     )
 

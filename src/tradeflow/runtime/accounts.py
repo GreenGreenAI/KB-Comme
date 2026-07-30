@@ -65,17 +65,53 @@ RESERVED_FACTS = frozenset({
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
-    account_id   TEXT PRIMARY KEY,
-    email        TEXT NOT NULL UNIQUE,
-    password     TEXT NOT NULL,
-    company_name TEXT NOT NULL,
-    facts        TEXT NOT NULL DEFAULT '{}'
+    account_id      TEXT PRIMARY KEY,
+    organization_id TEXT,
+    role            TEXT NOT NULL DEFAULT 'company_admin',
+    email           TEXT NOT NULL UNIQUE,
+    password        TEXT NOT NULL,
+    company_name    TEXT NOT NULL,
+    facts           TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(account_id),
     expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS analysis_runs (
+    run_id      TEXT PRIMARY KEY,
+    account_id  TEXT NOT NULL REFERENCES accounts(account_id),
+    packet_id   TEXT,
+    created_at  TEXT NOT NULL,
+    result      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS analysis_runs_tenant_time
+    ON analysis_runs(account_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id         TEXT PRIMARY KEY,
+    organization_id  TEXT NOT NULL,
+    actor_account_id TEXT NOT NULL,
+    action           TEXT NOT NULL,
+    target_type      TEXT NOT NULL,
+    target_id        TEXT,
+    outcome          TEXT NOT NULL,
+    occurred_at      TEXT NOT NULL,
+    previous_hash    TEXT,
+    event_hash       TEXT NOT NULL UNIQUE,
+    details          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS audit_events_tenant_time
+    ON audit_events(organization_id, occurred_at DESC);
+CREATE TRIGGER IF NOT EXISTS audit_events_no_update
+BEFORE UPDATE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit events are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit events are immutable');
+END;
 CREATE TABLE IF NOT EXISTS login_attempts (
     identity_hash   TEXT PRIMARY KEY,
     failed_count    INTEGER NOT NULL,
@@ -83,6 +119,43 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     locked_until    TEXT
 );
 """
+
+ACCOUNT_ROLES = frozenset(
+    {
+        "company_user",
+        "company_admin",
+        "rm",
+        "data_admin",
+        "operations_admin",
+    }
+)
+ROLE_PERMISSIONS = {
+    "company_user": frozenset(
+        {
+            "analysis:read",
+            "analysis:write",
+            "document:read",
+            "document:upload",
+            "document:confirm",
+            "document:check",
+        }
+    ),
+    "company_admin": frozenset(
+        {
+            "analysis:read",
+            "analysis:write",
+            "document:read",
+            "document:upload",
+            "document:confirm",
+            "document:check",
+            "profile:write",
+            "audit:read",
+        }
+    ),
+    "rm": frozenset(),
+    "data_admin": frozenset({"knowledge:write"}),
+    "operations_admin": frozenset({"operations:read"}),
+}
 
 
 @dataclass(frozen=True)
@@ -97,9 +170,14 @@ class Account:
     """
 
     account_id: str
+    organization_id: str
+    role: str
     email: str
     company_name: str
     facts: dict[str, Any] = field(default_factory=dict)
+
+    def can(self, permission: str) -> bool:
+        return permission in ROLE_PERMISSIONS[self.role]
 
     def profile(self) -> CompanyProfile:
         """The company as the analysis will see it.
@@ -115,7 +193,7 @@ class Account:
             if name not in RESERVED_FACTS
         }
         return CompanyProfile(
-            company_id=self.account_id,
+            company_id=self.organization_id,
             name=self.company_name,
             is_sme=self.facts.get("company.is_sme"),
             country_code=self.facts.get("company.country_code", "KR"),
@@ -173,6 +251,21 @@ class AccountStore:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.executescript(SCHEMA)
+            columns = {
+                row["name"]
+                for row in db.execute("PRAGMA table_info(accounts)").fetchall()
+            }
+            if "organization_id" not in columns:
+                db.execute("ALTER TABLE accounts ADD COLUMN organization_id TEXT")
+            if "role" not in columns:
+                db.execute(
+                    "ALTER TABLE accounts ADD COLUMN role TEXT"
+                    " NOT NULL DEFAULT 'company_admin'"
+                )
+            db.execute(
+                "UPDATE accounts SET organization_id = account_id"
+                " WHERE organization_id IS NULL OR organization_id = ''"
+            )
 
     @contextlib.contextmanager
     def _connect(self):
@@ -200,9 +293,18 @@ class AccountStore:
         company_name: str,
         facts: dict[str, Any] | None = None,
         account_id: str | None = None,
+        organization_id: str | None = None,
+        role: str = "company_admin",
     ) -> Account:
+        if role not in ACCOUNT_ROLES:
+            raise ValueError(f"unsupported account role: {role}")
+        resolved_account_id = (
+            account_id or f"ACCOUNT-{secrets.token_hex(4).upper()}"
+        )
         account = Account(
-            account_id=account_id or f"COMPANY-{secrets.token_hex(4).upper()}",
+            account_id=resolved_account_id,
+            organization_id=organization_id or resolved_account_id,
+            role=role,
             email=email.strip().lower(),
             company_name=company_name,
             facts=dict(facts or {}),
@@ -210,10 +312,12 @@ class AccountStore:
         with self._connect() as db:
             db.execute(
                 "INSERT INTO accounts"
-                " (account_id, email, password, company_name, facts)"
-                " VALUES (?, ?, ?, ?, ?)",
+                " (account_id, organization_id, role, email, password,"
+                " company_name, facts) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     account.account_id,
+                    account.organization_id,
+                    account.role,
                     account.email,
                     hash_password(password),
                     account.company_name,
@@ -309,6 +413,32 @@ class AccountStore:
             ).fetchone()
         return _account(row) if row else None
 
+    def update_facts(
+        self,
+        account: Account,
+        facts: dict[str, Any],
+    ) -> Account:
+        """Merge company facts under the authenticated account's tenant."""
+        merged = {**account.facts, **facts}
+        with self._connect() as db:
+            cursor = db.execute(
+                "UPDATE accounts SET facts = ? WHERE organization_id = ?",
+                (
+                    json.dumps(merged, ensure_ascii=False),
+                    account.organization_id,
+                ),
+            )
+            if cursor.rowcount < 1:
+                raise ValueError("account no longer exists")
+        return Account(
+            account_id=account.account_id,
+            organization_id=account.organization_id,
+            role=account.role,
+            email=account.email,
+            company_name=account.company_name,
+            facts=merged,
+        )
+
     # ---- sessions ----
 
     def open_session(self, account: Account, *, now: datetime | None = None) -> str:
@@ -355,6 +485,204 @@ class AccountStore:
         with self._connect() as db:
             db.execute("DELETE FROM sessions WHERE token = ?", (_session_key(token),))
 
+    # ---- tenant-scoped analysis history ----
+
+    def save_analysis(
+        self,
+        account: Account,
+        result: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> str:
+        run_id = f"RUN-{secrets.token_hex(12)}"
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO analysis_runs"
+                " (run_id, account_id, packet_id, created_at, result)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    account.account_id,
+                    result.get("packet_id"),
+                    (now or _now()).isoformat(),
+                    json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+        return run_id
+
+    def list_analyses(
+        self,
+        account: Account,
+        *,
+        limit: int = 20,
+    ) -> tuple[dict[str, Any], ...]:
+        limit = max(1, min(int(limit), 100))
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT run_id, packet_id, created_at, result"
+                " FROM analysis_runs"
+                " WHERE account_id IN ("
+                " SELECT account_id FROM accounts WHERE organization_id = ?"
+                " )"
+                " ORDER BY created_at DESC LIMIT ?",
+                (account.organization_id, limit),
+            ).fetchall()
+        return tuple(_analysis_summary(row) for row in rows)
+
+    def read_analysis(
+        self,
+        account: Account,
+        run_id: str,
+    ) -> dict[str, Any] | None:
+        """Read through both identifiers so cross-tenant IDs reveal nothing."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT run_id, packet_id, created_at, result"
+                " FROM analysis_runs"
+                " WHERE account_id IN ("
+                " SELECT account_id FROM accounts WHERE organization_id = ?"
+                " ) AND run_id = ?",
+                (account.organization_id, run_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "run_id": row["run_id"],
+            "packet_id": row["packet_id"],
+            "created_at": row["created_at"],
+            "result": json.loads(row["result"]),
+        }
+
+    # ---- append-only audit trail ----
+
+    def append_audit(
+        self,
+        account: Account,
+        *,
+        action: str,
+        target_type: str,
+        target_id: str | None = None,
+        outcome: str = "success",
+        details: dict[str, Any] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if outcome not in {"success", "denied", "failed"}:
+            raise ValueError("unsupported audit outcome")
+        occurred_at = (now or _now()).isoformat()
+        event_id = f"AUDIT-{secrets.token_hex(12)}"
+        safe_details = dict(details or {})
+        encoded_details = json.dumps(
+            safe_details,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with self._connect() as db:
+            previous = db.execute(
+                "SELECT event_hash FROM audit_events"
+                " WHERE organization_id = ?"
+                " ORDER BY occurred_at DESC, event_id DESC LIMIT 1",
+                (account.organization_id,),
+            ).fetchone()
+            previous_hash = previous["event_hash"] if previous else None
+            material = _audit_material(
+                event_id=event_id,
+                organization_id=account.organization_id,
+                actor_account_id=account.account_id,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                outcome=outcome,
+                occurred_at=occurred_at,
+                previous_hash=previous_hash,
+                details=safe_details,
+            )
+            event_hash = "sha256:" + hashlib.sha256(
+                material.encode("utf-8")
+            ).hexdigest()
+            db.execute(
+                "INSERT INTO audit_events"
+                " (event_id, organization_id, actor_account_id, action,"
+                " target_type, target_id, outcome, occurred_at, previous_hash,"
+                " event_hash, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id,
+                    account.organization_id,
+                    account.account_id,
+                    action,
+                    target_type,
+                    target_id,
+                    outcome,
+                    occurred_at,
+                    previous_hash,
+                    event_hash,
+                    encoded_details,
+                ),
+            )
+        return {
+            "event_id": event_id,
+            "organization_id": account.organization_id,
+            "actor_account_id": account.account_id,
+            "action": action,
+            "target_type": target_type,
+            "target_id": target_id,
+            "outcome": outcome,
+            "occurred_at": occurred_at,
+            "previous_hash": previous_hash,
+            "event_hash": event_hash,
+            "details": safe_details,
+        }
+
+    def list_audit(
+        self,
+        account: Account,
+        *,
+        limit: int = 100,
+    ) -> tuple[dict[str, Any], ...]:
+        limit = max(1, min(int(limit), 500))
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT * FROM audit_events WHERE organization_id = ?"
+                " ORDER BY occurred_at DESC, event_id DESC LIMIT ?",
+                (account.organization_id, limit),
+            ).fetchall()
+        return tuple(
+            {
+                **dict(row),
+                "details": json.loads(row["details"]),
+            }
+            for row in rows
+        )
+
+    def verify_audit_chain(self, organization_id: str) -> bool:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT * FROM audit_events WHERE organization_id = ?"
+                " ORDER BY occurred_at, event_id",
+                (organization_id,),
+            ).fetchall()
+        previous_hash = None
+        for row in rows:
+            details = json.loads(row["details"])
+            expected = "sha256:" + hashlib.sha256(
+                _audit_material(
+                    event_id=row["event_id"],
+                    organization_id=row["organization_id"],
+                    actor_account_id=row["actor_account_id"],
+                    action=row["action"],
+                    target_type=row["target_type"],
+                    target_id=row["target_id"],
+                    outcome=row["outcome"],
+                    occurred_at=row["occurred_at"],
+                    previous_hash=previous_hash,
+                    details=details,
+                ).encode("utf-8")
+            ).hexdigest()
+            if row["previous_hash"] != previous_hash or row["event_hash"] != expected:
+                return False
+            previous_hash = row["event_hash"]
+        return True
+
 
 #: A real-looking hash that no password matches, so authenticating a
 #: non-existent account does the same work as authenticating a real one.
@@ -369,10 +697,34 @@ def _session_key(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _audit_material(**values: Any) -> str:
+    return json.dumps(
+        values,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _account(row: sqlite3.Row) -> Account:
     return Account(
         account_id=row["account_id"],
+        organization_id=row["organization_id"] or row["account_id"],
+        role=row["role"],
         email=row["email"],
         company_name=row["company_name"],
         facts=json.loads(row["facts"] or "{}"),
     )
+
+
+def _analysis_summary(row: sqlite3.Row) -> dict[str, Any]:
+    result = json.loads(row["result"])
+    profile = result.get("company_profile") or {}
+    return {
+        "run_id": row["run_id"],
+        "packet_id": row["packet_id"],
+        "created_at": row["created_at"],
+        "company_name": profile.get("company_name"),
+        "trade_count": len(result.get("trade_timeline") or []),
+        "review_required": bool(result.get("review_required")),
+    }

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 owner: platform-runtime
 reviewers: knowledge-domain
 last-reviewed: 2026-07-28
@@ -7,7 +7,7 @@ last-reviewed: 2026-07-28
 
 # ADR-0026: 계정은 관문이 아니라 기업 사실의 출처다
 
-- 상태: 제안(Role A 검토 대기)
+- 상태: 채택
 - 날짜: 2026-07-28
 - 관련: ADR-0001, ADR-0003, MVP 아키텍처 정의서 §1.1, §3, §5.4
 
@@ -43,12 +43,17 @@ missing fact: company.credit_issue_free
    않으므로, 규칙이 묻는 사실과 계정이 말하는 사실이 같은 문자열이다.
 4. **계정이 말하지 않은 사실은 없는 채로 둔다.** `False`로 채우지 않는다. §1.1의
    규율이 여기에도 적용된다 — 없는 사실은 질문이지 기본값이 아니다.
+5. **분석 결과는 계정 tenant에 저장한다.** 저장과 조회 모두 `account_id` 조건을
+   포함하며, 다른 tenant의 `run_id`는 존재 여부조차 드러내지 않고 `404`로 처리한다.
+6. **기업 사실 수정은 전용 인증 API를 사용한다.** 분석 요청 본문이 계정 사실을
+   덮어쓰지 않는다. 화면에서 보완한 값은 `/api/auth/profile`을 거쳐 계정에 먼저
+   저장된 후 다음 분석에 사용된다.
 
 ### 계층
 
 | 위치 | 내용 |
 |---|---|
-| `runtime/accounts.py` | 계정 레코드, scrypt 해시, 세션, 계정 → `CompanyProfile` |
+| `runtime/accounts.py` | 계정 레코드, scrypt 해시, 세션, tenant별 분석 이력, 계정 → `CompanyProfile` |
 | `web/auth.py`(=`web/app.py`) | 라우트와 쿠키 |
 | `domain`, `agent` | **변경 없음.** 신원은 환위험의 도메인 개념이 아니고, 에이전트가 알 일도 아니다 |
 
@@ -100,12 +105,13 @@ missing fact: company.credit_issue_free
 - **회사 SSO와 공동인증서.** 화면에는 남기되 비활성이다. 한국 중소기업이 실제로
   쓰는 경로라 자리를 비워두는 편이 정직하고, 눌리는데 아무 데도 가지 않는 버튼은
   준비 중이라고 말하는 버튼보다 나쁜 약속이다.
-- **분석 저장.** 계정이 생기면 가능해지지만 §6.2 재현성(`packet_id`, content
-  hash)과 함께 설계해야 한다. 그때까지 계정 메뉴는 저장 건수를 지어내지 않는다.
+- **외부 문서 원본 저장.** 분석 이력에는 `DecisionPacket`과 재현 hash를 저장하지만,
+  계약서·신용자료 원본은 별도 암호화 저장소와 보존 정책 전까지 받지 않는다.
 
 ## 결과
 
 - 화면의 기업 사실과 `DecisionPacket.inputs`가 같아진다 (PR #51 AC-4).
+- 계정 메뉴의 저장 건수는 SQLite의 실제 tenant별 분석 이력과 일치한다.
 - 지원제도 판정이 실제로 열린다. 로그인 전후 같은 거래에 대해:
 
   ```

@@ -5,7 +5,14 @@ import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
 import Notices from "./Notices.jsx";
-import { analyze, signOut, whoami } from "./api.js";
+import {
+  analyze,
+  listAnalyses,
+  readAnalysis,
+  signOut,
+  updateProfile,
+  whoami,
+} from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -87,7 +94,12 @@ function stepsFor(result) {
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null });
+  const [facts, setFacts] = useState({
+    cases: [{}],
+    profile: {},
+    declarations: [],
+    quote: null,
+  });
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -103,6 +115,8 @@ export default function App() {
   // stays on it: a failed analysis is a turn in the thread, a rejected password
   // sits by the password field.
   const [notices, setNotices] = useState([]);
+  const [knownUnknowns, setKnownUnknowns] = useState([]);
+  const [analysisHistory, setAnalysisHistory] = useState([]);
   const noticeId = useRef(0);
 
   function notify(text) {
@@ -130,6 +144,23 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!account) {
+      setAnalysisHistory([]);
+      return;
+    }
+    let live = true;
+    listAnalyses()
+      .then((items) => live && setAnalysisHistory(items))
+      .catch(() => live && notify("저장된 분석 이력을 불러오지 못했습니다."));
+    return () => {
+      live = false;
+    };
+    // The account id is the tenant boundary. A changed profile should not
+    // refetch history; a changed tenant must.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.account_id]);
   const threadRef = useRef(null);
   const stick = useRef(true);
 
@@ -230,14 +261,36 @@ export default function App() {
     // A slot answer always completes the trade currently being described,
     // which is the last one.
     const nextCases = patch.case
-      ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
+      ? [
+          ...facts.cases.slice(0, -1),
+          {
+            ...facts.cases.at(-1),
+            ...patch.case,
+            case_facts: {
+              ...(facts.cases.at(-1)?.case_facts ?? {}),
+              ...(patch.case.case_facts ?? {}),
+            },
+          },
+        ]
       : facts.cases;
-    const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
-    // The quote is remembered like everything else the user has told us: the
-    // server is stateless, so it has to be resent with each turn or the hedge
-    // would vanish the moment anything else was said.
+    const nextProfile = {
+      ...facts.profile,
+      ...(patch.profile ?? {}),
+      company_facts: {
+        ...(facts.profile.company_facts ?? {}),
+        ...(patch.profile?.company_facts ?? {}),
+      },
+    };
+    const nextDeclarations = patch.declaration
+      ? mergeDeclaration(facts.declarations, patch.declaration)
+      : facts.declarations;
     const nextQuote = patch.quote ?? facts.quote ?? null;
-    setFacts({ cases: nextCases, profile: nextProfile, quote: nextQuote });
+    setFacts({
+      cases: nextCases,
+      profile: nextProfile,
+      declarations: nextDeclarations,
+      quote: nextQuote,
+    });
 
     // What the user said, as the thread should carry it. A typed sentence is
     // its own text. An answer given through the request panel says what was
@@ -257,10 +310,15 @@ export default function App() {
 
     try {
       const started = performance.now();
+      if (account && Object.keys(patch.profile?.company_facts ?? {}).length > 0) {
+        const updated = await updateProfile(patch.profile.company_facts);
+        setAccount(updated);
+      }
       const data = await analyze({
         cases: nextCases,
         utterance,
         ...nextProfile,
+        compliance_declarations: nextDeclarations,
         as_of: today(),
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
@@ -297,8 +355,19 @@ export default function App() {
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
-        setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
+        setFacts((prev) => ({
+          ...prev,
+          cases: data.result.trade_timeline.map((trade, index) => ({
+            ...(prev.cases[index] ?? {}),
+            ...trade,
+          })),
+        }));
         setResult(data.result);
+        if (data.analysis_run_id) {
+          listAnalyses()
+            .then(setAnalysisHistory)
+            .catch(() => notify("방금 분석은 저장됐지만 이력 목록을 갱신하지 못했습니다."));
+        }
         setPending(null);
         setWriting(true);
         setTimeout(() => setWriting(false), WRITE_CEILING_MS);
@@ -339,11 +408,29 @@ export default function App() {
           try {
             await signOut();
             setAccount(null);
+            setAnalysisHistory([]);
           } catch {
             // The session is still open on the server. Showing a signed-out
             // screen over it would be the screen lying about the state that
             // matters most here.
             notify("로그아웃하지 못했습니다. 세션이 아직 열려 있습니다.");
+          }
+        }}
+        analyses={analysisHistory}
+        onOpenAnalysis={async (runId) => {
+          try {
+            const stored = await readAnalysis(runId);
+            setResult(stored.result);
+            setTurns([{
+              who: "agent",
+              kind: "result",
+              result: stored.result,
+              heard: {},
+              spoken: false,
+            }]);
+            setView("work");
+          } catch (error) {
+            notify(error.message);
           }
         }}
       />
@@ -373,6 +460,7 @@ export default function App() {
           <section className="chat">
             <Thread
               turns={turns}
+              account={account}
               busy={busy}
               thinking={thinking}
               onArrived={() => setWriting(false)}
@@ -394,12 +482,20 @@ export default function App() {
                       ? []
                       : result?.required_inputs?.hedge ?? []
                   }
+                  missingInputs={(result?.missing_input_queue ?? []).filter(
+                    (item) => !knownUnknowns.includes(item.field),
+                  )}
                   quoteInputs={
                     result?.hedge_analysis
                       ? []
                       : result?.required_inputs?.quote ?? []
                   }
                   onSlot={(patch, said) => send(null, patch, null, said)}
+                  onUnknown={(field) =>
+                    setKnownUnknowns((current) =>
+                      current.includes(field) ? current : [...current, field],
+                    )
+                  }
                   onPlace={(utterance, placement, said) =>
                     send(utterance, {}, placement, said)
                   }
@@ -412,6 +508,21 @@ export default function App() {
       </div>
       )}
     </>
+  );
+}
+
+function mergeDeclaration(declarations, patch) {
+  const index = declarations.findIndex(
+    (item) => item.case_index === patch.case_index,
+  );
+  const previous =
+    index >= 0
+      ? declarations[index]
+      : { case_index: patch.case_index, confirmed: true };
+  const merged = { ...previous, ...patch, confirmed: true };
+  if (index < 0) return [...declarations, merged];
+  return declarations.map((item, itemIndex) =>
+    itemIndex === index ? merged : item,
   );
 }
 

@@ -12,7 +12,7 @@ from .harness import run_all
 #: away from the user, and should say so out loud rather than slipping through
 #: green. Raising one means updating the line here, which is the moment to ask
 #: whether it was raised by adding knowledge or by loosening a check.
-BASELINE = {"S1": 6, "S2": 4, "S3": 1, "S4": 4, "S5": 2}
+BASELINE = {"S1": 6, "S2": 4, "S3": 2, "S4": 4, "S5": 2}
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -59,7 +59,7 @@ class ScenarioTests(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         report = completed.stdout.decode("utf-8")
-        self.assertIn("시나리오 수용 현황 — 17/22", report)
+        self.assertIn("시나리오 수용 현황 — 18/22", report)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,378 @@
+{
+  "schema_version": "1.0",
+  "packet_type": "independent_domain_review_request",
+  "pack_id": "KSURE_MVP_CANDIDATES",
+  "as_of": "2026-07-27",
+  "rulepack_hash": "sha256:c20f9f2d8ef993c535983d6da63c3a4695959c2ff9f2680a82d904fe48e2653f",
+  "validation_suite_hash": "sha256:f4573f70437cbe495e00dc40cd730518ee88f23e70525bc7256e617d23e9c8cc",
+  "requested_decisions": [
+    "approved",
+    "rejected",
+    "changes_requested"
+  ],
+  "reviewer_requirements": {
+    "independent_from_rule_author": true,
+    "identity_and_organization_required": true,
+    "authority_basis_required": true,
+    "rule_by_rule_comments_required_for_non_approval": true
+  },
+  "rules": [
+    {
+      "rule_id": "KSURE_FX_GENERAL_EXPORT_CANDIDATE",
+      "title": "K-SURE 일반형 수출 환변동보험 후보",
+      "conditions": [
+        {
+          "field": "company.is_domestic",
+          "operator": "eq",
+          "value": true,
+          "description": "국내에 주소를 둔 기업"
+        },
+        {
+          "field": "company.size",
+          "operator": "in",
+          "value": [
+            "small",
+            "mid_sized"
+          ],
+          "description": "중소·중견기업"
+        },
+        {
+          "field": "company.credit_issue_free",
+          "operator": "eq",
+          "value": true,
+          "description": "공식 안내의 공통 이용제한 사유 없음"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "trade.currency",
+          "operator": "in",
+          "value": [
+            "USD",
+            "JPY",
+            "EUR",
+            "CNY"
+          ],
+          "description": "일반형 수출 대상통화"
+        }
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_fx_insurance_general_export",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_application"
+      },
+      "required_documents": [],
+      "document_set_ids": [
+        "KSURE_FX_GENERAL_EXPORT_APPLICATION_V1"
+      ],
+      "procedure_steps": [
+        "상품 유형과 통화 확인",
+        "공통 이용제한 사유 확인",
+        "K-SURE 인수한도 상담 및 신청"
+      ],
+      "source_ids": [
+        "KSURE_FX_INSURANCE_ELIGIBILITY"
+      ],
+      "source_claim_ids": [
+        "KSURE_FX_EXPORT_CURRENCIES",
+        "KSURE_FX_TARGET_COMPANIES",
+        "KSURE_FX_COMMON_RESTRICTIONS"
+      ],
+      "review_policy": "always_expert",
+      "golden_expectations": [
+        {
+          "case_id": "KSURE_MISSING_ALL",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": [
+            "company.is_domestic",
+            "company.size",
+            "company.credit_issue_free",
+            "trade.direction",
+            "trade.currency"
+          ]
+        },
+        {
+          "case_id": "KSURE_COMPLETE_EXPORT_AT_TERM_BOUNDARY",
+          "matched": true,
+          "status": "expert_confirmation_required",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_IMPORT_REJECTS_EXPORT_PRODUCTS",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_UNSUPPORTED_FX_CURRENCY_REJECTED",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        }
+      ],
+      "boundary_checks": [],
+      "review_questions": [
+        "조건과 예외가 현재 공식 기준을 빠짐없이 반영하는가?",
+        "기관·신고/신청 행위·시점·필요서류가 정확한가?",
+        "경계값과 golden case의 기대 결과가 정확한가?"
+      ]
+    },
+    {
+      "rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE",
+      "title": "K-SURE 단기수출보험(선적후·개별) 후보",
+      "conditions": [
+        {
+          "field": "company.is_domestic",
+          "operator": "eq",
+          "value": true,
+          "description": "국내에 주소를 둔 수출기업"
+        },
+        {
+          "field": "company.ksure_exporter_grade",
+          "operator": "in",
+          "value": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+          ],
+          "description": "K-SURE 수출자 신용등급 F급 이상"
+        },
+        {
+          "field": "counterparty.ksure_importer_grade",
+          "operator": "in",
+          "value": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+          ],
+          "description": "K-SURE 수입자 신용등급 F급 이상"
+        },
+        {
+          "field": "counterparty.country_restricted",
+          "operator": "eq",
+          "value": false,
+          "description": "국별인수방침 인수제한국 소재가 아님"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "trade.payment_term_days",
+          "operator": "lte",
+          "value": 730,
+          "description": "개별보험 결제기간 2년 이내"
+        }
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_short_term_export_postshipment_individual",
+        "authority": "ksure",
+        "action": "consult_and_apply_for_ksure_product",
+        "timing": "before_shipment_or_credit_limit_request"
+      },
+      "required_documents": [],
+      "document_set_ids": [
+        "KSURE_SHORT_TERM_POSTSHIP_INDIVIDUAL_APPLICATION_V1"
+      ],
+      "procedure_steps": [
+        "수출자·수입자 신용등급 확인",
+        "국별인수방침 확인",
+        "거래별 인수한도 및 보험료 확인"
+      ],
+      "source_ids": [
+        "KSURE_SHORT_TERM_EXPORT_POSTSHIP",
+        "KSURE_COUNTRY_POLICY_API"
+      ],
+      "source_claim_ids": [
+        "KSURE_SHORT_TERM_EXPORTER",
+        "KSURE_SHORT_TERM_IMPORTER",
+        "KSURE_SHORT_TERM_INDIVIDUAL_TERM",
+        "KSURE_COUNTRY_POLICY_RESTRICTION_MAPPING"
+      ],
+      "review_policy": "always_expert",
+      "golden_expectations": [
+        {
+          "case_id": "KSURE_MISSING_ALL",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": [
+            "company.is_domestic",
+            "company.ksure_exporter_grade",
+            "counterparty.ksure_importer_grade",
+            "counterparty.country_restricted",
+            "trade.direction",
+            "trade.payment_term_days"
+          ]
+        },
+        {
+          "case_id": "KSURE_COMPLETE_EXPORT_AT_TERM_BOUNDARY",
+          "matched": true,
+          "status": "expert_confirmation_required",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_IMPORT_REJECTS_EXPORT_PRODUCTS",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_TERM_DAY_731_REJECTED",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_RESTRICTED_COUNTRY_REJECTED",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        }
+      ],
+      "boundary_checks": [
+        {
+          "rule_id": "KSURE_SHORT_TERM_EXPORT_POSTSHIP_INDIVIDUAL_CANDIDATE",
+          "field": "trade.payment_term_days",
+          "operator": "lte",
+          "expected_threshold": "730",
+          "samples": [
+            {
+              "value": 729,
+              "passed": true
+            },
+            {
+              "value": 730,
+              "passed": true
+            },
+            {
+              "value": 731,
+              "passed": false
+            }
+          ]
+        }
+      ],
+      "review_questions": [
+        "조건과 예외가 현재 공식 기준을 빠짐없이 반영하는가?",
+        "기관·신고/신청 행위·시점·필요서류가 정확한가?",
+        "경계값과 golden case의 기대 결과가 정확한가?"
+      ]
+    },
+    {
+      "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+      "title": "K-SURE 수출신용보증(선적전) 후보",
+      "conditions": [
+        {
+          "field": "company.size",
+          "operator": "in",
+          "value": [
+            "small",
+            "mid_sized"
+          ],
+          "description": "중소·중견기업"
+        },
+        {
+          "field": "trade.direction",
+          "operator": "eq",
+          "value": "export",
+          "description": "수출 거래"
+        },
+        {
+          "field": "financing.purpose",
+          "operator": "in",
+          "value": [
+            "trade_finance",
+            "recognized_export_finance",
+            "trade_bill_acceptance",
+            "export_material_import_lc",
+            "recognized_export_promotion_fund"
+          ],
+          "description": "공식 안내의 보증대상 자금"
+        },
+        {
+          "field": "financing.has_bank_consultation",
+          "operator": "eq",
+          "value": true,
+          "description": "취급 금융기관 사전 상담",
+          "failure_effect": "conditional"
+        }
+      ],
+      "candidate_outcome": {
+        "kind": "support_candidate",
+        "product_id": "ksure_export_credit_guarantee_preshipment",
+        "authority": "ksure_and_financial_institution",
+        "action": "consult_and_apply_for_preshipment_guarantee",
+        "timing": "before_financing_application"
+      },
+      "required_documents": [],
+      "document_set_ids": [
+        "KSURE_PRESHIPMENT_GUARANTEE_NEW_OR_INCREASE_V1"
+      ],
+      "procedure_steps": [
+        "K-SURE 및 금융기관 사전 상담",
+        "보증신청서류 준비",
+        "K-SURE 신용평가 및 보증심사"
+      ],
+      "source_ids": [
+        "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT"
+      ],
+      "source_claim_ids": [
+        "KSURE_PRESHIPMENT_TARGET",
+        "KSURE_PRESHIPMENT_FINANCING_TYPES"
+      ],
+      "review_policy": "always_expert",
+      "golden_expectations": [
+        {
+          "case_id": "KSURE_MISSING_ALL",
+          "matched": null,
+          "status": "insufficient_information",
+          "missing_fields": [
+            "company.size",
+            "trade.direction",
+            "financing.purpose",
+            "financing.has_bank_consultation"
+          ]
+        },
+        {
+          "case_id": "KSURE_COMPLETE_EXPORT_AT_TERM_BOUNDARY",
+          "matched": true,
+          "status": "expert_confirmation_required",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_IMPORT_REJECTS_EXPORT_PRODUCTS",
+          "matched": false,
+          "status": "not_eligible",
+          "missing_fields": []
+        },
+        {
+          "case_id": "KSURE_BANK_CONSULTATION_IS_REMEDIABLE",
+          "matched": true,
+          "status": "conditionally_eligible",
+          "missing_fields": []
+        }
+      ],
+      "boundary_checks": [],
+      "review_questions": [
+        "조건과 예외가 현재 공식 기준을 빠짐없이 반영하는가?",
+        "기관·신고/신청 행위·시점·필요서류가 정확한가?",
+        "경계값과 golden case의 기대 결과가 정확한가?"
+      ]
+    }
+  ]
+}

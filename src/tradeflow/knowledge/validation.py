@@ -187,6 +187,9 @@ class PromotionApproval:
     commit_sha: str | None = None
     rulepack_hash: str | None = None
     validation_suite_hash: str | None = None
+    reviewer_organization: str | None = None
+    authority_basis: str | None = None
+    evidence_content_hash: str | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"pending", "approved", "rejected"}:
@@ -202,8 +205,24 @@ class PromotionApproval:
             raise ValueError(
                 f"{self.role}: reviewed decision needs reviewer, time, commit and hashes"
             )
-        if self.status == "pending" and any(item is not None for item in fields):
+        expert_fields = (
+            self.reviewer_organization,
+            self.authority_basis,
+            self.evidence_content_hash,
+        )
+        if self.status == "pending" and any(
+            item is not None for item in (*fields, *expert_fields)
+        ):
             raise ValueError(f"{self.role}: pending review must not claim review metadata")
+        if (
+            self.role == "domain_expert"
+            and self.status in {"approved", "rejected"}
+            and not all(expert_fields)
+        ):
+            raise ValueError(
+                "domain_expert: reviewed decision needs organization, "
+                "authority basis and evidence hash"
+            )
         if self.reviewed_at and self.reviewed_at.utcoffset() is None:
             raise ValueError(f"{self.role}: reviewed_at must include a UTC offset")
         if self.commit_sha and not re.fullmatch(r"[0-9a-f]{7,40}", self.commit_sha):
@@ -211,6 +230,7 @@ class PromotionApproval:
         for label, value in (
             ("rulepack_hash", self.rulepack_hash),
             ("validation_suite_hash", self.validation_suite_hash),
+            ("evidence_content_hash", self.evidence_content_hash),
         ):
             if value and not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
                 raise ValueError(f"{self.role}: {label} must be canonical SHA-256")
@@ -327,10 +347,22 @@ def audit_rulepack_readiness(
         if approval.status == "rejected":
             blockers.append(f"rejected approval: {role}")
             continue
-        if approval.rulepack_hash != content_hash(raw_pack):
+        if approval.rulepack_hash != rulepack_review_hash(raw_pack):
             issues.append(f"{spec.pack_id}: {role} approval rulepack hash is stale")
         if approval.validation_suite_hash != content_hash(raw_suite):
             issues.append(f"{spec.pack_id}: {role} approval validation hash is stale")
+    domain_approval = approval_by_role.get("domain_expert")
+    author_approval = approval_by_role.get("knowledge_domain")
+    if (
+        domain_approval
+        and domain_approval.status in {"approved", "rejected"}
+        and author_approval
+        and author_approval.reviewer
+        and domain_approval.reviewer == author_approval.reviewer
+    ):
+        issues.append(
+            f"{spec.pack_id}: domain expert must be independent from rule author"
+        )
 
     referenced_sources = {
         source_id
@@ -531,6 +563,9 @@ def _parse_promotion_spec(
             commit_sha=approval.get("commit_sha"),
             rulepack_hash=approval.get("rulepack_hash"),
             validation_suite_hash=approval.get("validation_suite_hash"),
+            reviewer_organization=approval.get("reviewer_organization"),
+            authority_basis=approval.get("authority_basis"),
+            evidence_content_hash=approval.get("evidence_content_hash"),
         )
         for approval in item.get("approvals", [])
     )
@@ -563,3 +598,28 @@ def _project_path(project_root: Path, value: str) -> Path:
     if not path.is_relative_to(root):
         raise ValueError(f"path escapes project root: {value}")
     return path
+
+
+def rulepack_review_hash(raw_pack: Mapping[str, Any]) -> str:
+    """Hash decision content while excluding promotion-state metadata.
+
+    Reviewers approve conditions, outcomes, sources and procedures. Switching
+    `draft` to `active` and every `production_ready` flag together is the
+    consequence of those approvals, so including those fields in the reviewed
+    hash would make the act of promotion invalidate the approvals that permit
+    it.
+    """
+    reviewable = {
+        key: value
+        for key, value in raw_pack.items()
+        if key != "status"
+    }
+    reviewable["rules"] = [
+        {
+            key: value
+            for key, value in rule.items()
+            if key != "production_ready"
+        }
+        for rule in raw_pack.get("rules", [])
+    ]
+    return content_hash(reviewable)

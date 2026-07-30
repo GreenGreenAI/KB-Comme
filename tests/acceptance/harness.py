@@ -25,6 +25,7 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import Account
+from tradeflow.runtime.documents import inspect_and_extract
 
 from .capabilities import BY_NAME
 
@@ -39,6 +40,8 @@ SCENARIOS = json.loads(
 #: the seed script.
 DEMO = Account(
     account_id="COMPANY-HANBIT",
+    organization_id="COMPANY-HANBIT",
+    role="company_admin",
     email="kim@hanbit.co.kr",
     company_name="한빛정밀",
     facts={
@@ -52,6 +55,16 @@ DEMO = Account(
 )
 
 AS_OF = date(2026, 7, 28)
+LC_DRAFT = b"""Letter of Credit
+L/C No: LC-2026-001
+Issue Date: 2026-07-20
+Applicant: German Buyer GmbH
+Beneficiary: Hanbit Precision
+Amount: USD 150,000
+Shipment Date: 2026-09-30
+Expiry Date: 2026-10-20
+Goods: Precision gears
+"""
 
 
 @dataclass(frozen=True)
@@ -125,6 +138,12 @@ def run(scenario: dict[str, Any]) -> Outcome:
                 utterance=scenario["utterance"],
             )
         )
+        if scenario["id"] == "S3":
+            result["_document_intake"] = inspect_and_extract(
+                filename="lc-draft.txt",
+                content_type="text/plain",
+                content=LC_DRAFT,
+            )
 
     skip = set(scenario.get("out_of_scope", [])[:1])
     met, missing = [], []

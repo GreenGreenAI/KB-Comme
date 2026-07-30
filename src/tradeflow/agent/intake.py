@@ -56,7 +56,7 @@ def _case(index: int, values: Mapping[str, Any]) -> TradeCase:
             for key in ("counterparty_id", "expected_shipment_date",
                         "advance_payment_ratio", "contract_date")
             if key in values
-        },
+        } | dict(values.get("case_facts", {})),
     )
 
 

@@ -20,6 +20,7 @@ from tradeflow.knowledge.validation import (
     RuleValidationSuite,
     audit_rulepack_readiness,
     load_promotion_manifest,
+    rulepack_review_hash,
     validate_rule_suite,
 )
 
@@ -92,10 +93,7 @@ class RulepackPromotionGateTests(unittest.TestCase):
                 self.assertTrue(report.validation.passed, report.validation.issues)
                 self.assertFalse(report.integrity_issues)
                 self.assertFalse(report.ready)
-                self.assertIn(
-                    "pending approval: platform_runtime",
-                    report.blockers,
-                )
+                self.assertNotIn("pending approval: platform_runtime", report.blockers)
                 self.assertIn(
                     "pending approval: domain_expert",
                     report.blockers,
@@ -275,8 +273,19 @@ class RulepackPromotionGateTests(unittest.TestCase):
                     "2026-07-27T20:00:00+09:00"
                 ),
                 commit_sha="37e8b45",
-                rulepack_hash=content_hash(raw_pack),
+                rulepack_hash=rulepack_review_hash(raw_pack),
                 validation_suite_hash=content_hash(raw_suite),
+                reviewer_organization=(
+                    "Independent Authority" if role == "domain_expert" else None
+                ),
+                authority_basis=(
+                    "official written interpretation"
+                    if role == "domain_expert"
+                    else None
+                ),
+                evidence_content_hash=(
+                    "sha256:" + "1" * 64 if role == "domain_expert" else None
+                ),
             )
             for role in base.required_roles
         )
@@ -304,6 +313,18 @@ class RulepackPromotionGateTests(unittest.TestCase):
         self.assertTrue(
             any("approval rulepack hash is stale" in issue for issue in invalid.integrity_issues)
         )
+
+    def test_domain_expert_requires_independent_evidence(self) -> None:
+        with self.assertRaisesRegex(ValueError, "organization"):
+            PromotionApproval(
+                "domain_expert",
+                "approved",
+                reviewer="rule-author",
+                reviewed_at=datetime.fromisoformat("2026-07-28T20:00:00+09:00"),
+                commit_sha="37e8b45",
+                rulepack_hash="sha256:" + "1" * 64,
+                validation_suite_hash="sha256:" + "2" * 64,
+            )
 
 
 if __name__ == "__main__":

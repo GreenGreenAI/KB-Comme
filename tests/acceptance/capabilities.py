@@ -134,8 +134,12 @@ CAPABILITIES = (
     Capability(
         "document_intake",
         "사용자가 올린 문서를 읽는다",
-        lambda r: False,
-        needs="파일 업로드 경로와 문서 파서. 지금 제품에 없는 계층",
+        lambda r: (
+            (r.get("_document_intake") or {}).get("document_type")
+            == "letter_of_credit"
+            and bool((r.get("_document_intake") or {}).get("fields"))
+        ),
+        needs="파일 업로드·추출 결과가 문서 검토 계약에 도달해야 함",
     ),
     Capability(
         "lc_review",

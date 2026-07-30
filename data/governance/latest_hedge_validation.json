@@ -1,0 +1,121 @@
+{
+  "snapshot": {
+    "path": "data\\snapshots\\ECOS_USD_KRW\\2026-07-27.json",
+    "source_id": "ECOS_USD_KRW",
+    "version": "2026-07-27",
+    "observation_count": 2600
+  },
+  "benchmark": {
+    "window": 250,
+    "horizon_business_days": 20,
+    "step": 20,
+    "quote_basis": "spot_proxy"
+  },
+  "models": {
+    "rolling_normal_profit_floor": {
+      "tested": 117,
+      "failed": 0,
+      "scenario_centering": "zero",
+      "adverse_breach_rate": 0.042735042735042736,
+      "adverse_calibration_error": 0.0072649572649573085,
+      "floor_breach_rate": 0.02564102564102564,
+      "expected_shortfall": "643713.4594252939288660350167",
+      "mean_quantile_loss": "2.656335335418240518254728615",
+      "mean_ratio": "0.02584345545415473267788271738",
+      "ratio_turnover": "0.007270256990807330034070061848",
+      "promotion": null
+    },
+    "historical_profit_floor": {
+      "tested": 117,
+      "failed": 0,
+      "scenario_centering": "empirical",
+      "adverse_breach_rate": 0.07692307692307693,
+      "adverse_calibration_error": 0.026923076923076883,
+      "floor_breach_rate": 0.017094017094017096,
+      "expected_shortfall": "526298.664208300658550796425",
+      "mean_quantile_loss": "3.162511924611640133549426355",
+      "mean_ratio": "0.04514308614331260811986839789",
+      "ratio_turnover": "0.01156736379145218711823692984",
+      "promotion": {
+        "eligible": false,
+        "blockers": [
+          "quantile-loss improvement is insufficient",
+          "observed historical forward quotes are required for promotion",
+          "scenario centering is incompatible with the non-directional product policy"
+        ],
+        "champion_id": "rolling_normal_profit_floor",
+        "challenger_id": "historical_profit_floor"
+      }
+    },
+    "ewma_profit_floor": {
+      "tested": 117,
+      "failed": 0,
+      "scenario_centering": "zero",
+      "adverse_breach_rate": 0.06837606837606838,
+      "adverse_calibration_error": 0.01837606837606834,
+      "floor_breach_rate": 0.02564102564102564,
+      "expected_shortfall": "354251.6537083148652070450867",
+      "mean_quantile_loss": "2.955389664325080027250757809",
+      "mean_ratio": "0.04593331453975643805581946215",
+      "ratio_turnover": "0.03856552493950745202285375193",
+      "promotion": {
+        "eligible": false,
+        "blockers": [
+          "quantile-loss improvement is insufficient",
+          "observed historical forward quotes are required for promotion"
+        ],
+        "champion_id": "rolling_normal_profit_floor",
+        "challenger_id": "ewma_profit_floor"
+      }
+    },
+    "garch_fhs_profit_floor": {
+      "tested": 117,
+      "failed": 0,
+      "scenario_centering": "empirical_standardized_residuals",
+      "adverse_breach_rate": 0.05982905982905983,
+      "adverse_calibration_error": 0.009829059829059787,
+      "floor_breach_rate": 0.02564102564102564,
+      "expected_shortfall": "590891.6634964140374285343633",
+      "mean_quantile_loss": "2.758260184644814559364119246",
+      "mean_ratio": "0.04990106839104385100776536759",
+      "ratio_turnover": "0.03001352846890077801362545654",
+      "promotion": {
+        "eligible": false,
+        "blockers": [
+          "quantile-loss improvement is insufficient",
+          "observed historical forward quotes are required for promotion",
+          "scenario centering is incompatible with the non-directional product policy"
+        ],
+        "champion_id": "rolling_normal_profit_floor",
+        "challenger_id": "garch_fhs_profit_floor"
+      }
+    },
+    "historical_cvar": {
+      "tested": 117,
+      "failed": 0,
+      "scenario_centering": "empirical",
+      "adverse_breach_rate": 0.07692307692307693,
+      "adverse_calibration_error": 0.026923076923076883,
+      "floor_breach_rate": 0.008547008547008548,
+      "expected_shortfall": "471666.6666666666666666666667",
+      "mean_quantile_loss": "3.162511924611640133549426355",
+      "mean_ratio": "0.1700854700854700854700854701",
+      "ratio_turnover": "0.02215517241379310344827586207",
+      "promotion": {
+        "eligible": false,
+        "blockers": [
+          "quantile-loss improvement is insufficient",
+          "observed historical forward quotes are required for promotion",
+          "scenario centering is incompatible with the non-directional product policy"
+        ],
+        "champion_id": "rolling_normal_profit_floor",
+        "challenger_id": "historical_cvar"
+      }
+    }
+  },
+  "data_blocked_models": {
+    "minimum_variance_forward": [
+      "paired historical company-applicable forward quotes are not collected"
+    ]
+  }
+}

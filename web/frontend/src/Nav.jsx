@@ -36,7 +36,15 @@ function described(facts) {
     .map(([name, value]) => FACT_LABEL[name](value));
 }
 
-export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut }) {
+export default function Nav({
+  onHome,
+  account,
+  onSignIn,
+  signingIn,
+  onSignOut,
+  analyses = [],
+  onOpenAnalysis,
+}) {
   const signedIn = Boolean(account);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -84,21 +92,11 @@ export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut })
           sign-in form would list rooms nobody can enter yet. Left out rather
           than hidden: the `hidden` attribute loses to this bar's own
           `display: flex`, so it would have shown anyway. */}
-      {signedIn && (
-      <nav aria-label="주요 영역">
-        <span className="nav-link on" aria-current="page">분석</span>
-        {["지원제도", "신고의무", "근거"].map((area) => (
-          <span
-            key={area}
-            className="nav-link soon"
-            aria-disabled="true"
-            title="준비 중"
-          >
-            {area}
-          </span>
-        ))}
-      </nav>
-      )}
+      {signedIn ? (
+        <nav aria-label="주요 영역">
+          <span className="nav-link on" aria-current="page">의사결정 워크스페이스</span>
+        </nav>
+      ) : null}
 
       <div className="account" ref={box}>
         {!signedIn ? (
@@ -163,6 +161,25 @@ export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut })
                   이 사실들은 분석 요청에 그대로 실립니다. 규칙이 묻지 않은 것은
                   계정에도 없습니다.
                 </p>
+                <div className="menu-history">
+                  <b>저장된 분석 {analyses.length}건</b>
+                  {analyses.slice(0, 3).map((analysis) => (
+                    <button
+                      type="button"
+                      key={analysis.run_id}
+                      onClick={() => {
+                        setOpen(false);
+                        onOpenAnalysis(analysis.run_id);
+                      }}
+                    >
+                      <span>{analysis.created_at.slice(0, 10)}</span>
+                      <small>
+                        거래 {analysis.trade_count}건 · {analysis.review_required ? "검토 필요" : "검토 완료"}
+                      </small>
+                    </button>
+                  ))}
+                  {analyses.length === 0 ? <span className="none">저장된 분석이 없습니다</span> : null}
+                </div>
                 <hr />
                 <a
                   href="#"

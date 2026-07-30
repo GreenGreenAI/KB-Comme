@@ -24,6 +24,10 @@ from tradeflow.domain.models import HedgeMeasure, TradeProgram
 from tradeflow.domain.snapshot import FreshnessPolicy, SnapshotRef
 from tradeflow.domain.snapshot_file import latest_snapshot_path, read_snapshot
 from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
+from tradeflow.knowledge.compliance_declarations import (
+    ComplianceDeclarationAssembler,
+    ComplianceGatewayDeclaration,
+)
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.agent.routing import (
     COMPLIANCE,
@@ -169,6 +173,11 @@ def _knowledge_pipeline(packs: tuple[Path, ...]) -> TradeFlowPipeline:
 def _default_knowledge_pipeline() -> TradeFlowPipeline:
     """Every rulepack — the shape callers outside routing still expect."""
     return _knowledge_pipeline(RULEPACKS)
+
+
+@lru_cache(maxsize=1)
+def _fact_catalog() -> FactCatalog:
+    return FactCatalog.from_json(FACT_CATALOG)
 
 
 @lru_cache(maxsize=1)
@@ -404,6 +413,7 @@ def analyze(
     profit_floor: Decimal | None = None,
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
+    compliance_declarations: tuple[ComplianceGatewayDeclaration, ...] = (),
     utterance: str | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
@@ -420,6 +430,16 @@ def analyze(
     # only the company can state (netting and friends) are not here; see
     # routing.DECLARED_STRUCTURE_FIELDS.
     structure = derive_structure(program)
+    declaration_input = ComplianceDeclarationAssembler(_fact_catalog()).assemble(
+        program=program,
+        declarations=tuple(compliance_declarations),
+        evaluated_at=evaluated_at,
+    )
+    declared_structure = {
+        assertion.field: assertion.value
+        for assertions in declaration_input.assertions_by_case.values()
+        for assertion in assertions
+    }
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has
     # already run because every other decision reads its result.
@@ -427,7 +447,7 @@ def analyze(
         program,
         exposures,
         company_facts=program.company.facts(),
-        trade_structure=structure,
+        trade_structure={**structure, **declared_structure},
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
         has_usable_measure=bool(usable_measures(hedge_measures)),
@@ -476,14 +496,22 @@ def analyze(
             case_id: (
                 *assertions.get(case_id, ()),
                 *declared.get(case_id, ()),
+                *declaration_input.assertions_by_case.get(case_id, ()),
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *financing, *country}
+            for case_id in {
+                *assertions,
+                *declared,
+                *declaration_input.assertions_by_case,
+                *financing,
+                *country,
+            }
         }
         structure_evidence = (
             *structure_evidence,
             *declared_evidence,
+            *declaration_input.evidence,
             *financing_evidence,
             *country_evidence,
         )

@@ -26,7 +26,15 @@ const DIRECTION_OPTIONS = [
   { value: "수입", label: "수입", hint: "대금을 지급합니다" },
 ];
 
-export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, onPlace }) {
+export default function AskBar({
+  pending,
+  requiredInputs,
+  missingInputs,
+  quoteInputs,
+  onSlot,
+  onPlace,
+  onUnknown,
+}) {
   if (pending?.status === "needs_placement") {
     return (
       <Ask key="placement" label="어느 거래인가요">
@@ -72,6 +80,20 @@ export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, o
     );
   }
 
+  const missing = missingInputs?.find((item) =>
+    ["profile", "compliance_declaration", "case"].includes(item.scope),
+  );
+  if (missing) {
+    return (
+      <MissingFactField
+        key={`${missing.subject_id ?? "program"}:${missing.field}`}
+        item={missing}
+        onSlot={onSlot}
+        onUnknown={onUnknown}
+      />
+    );
+  }
+
   if (requiredInputs?.length > 0) {
     return (
       <Ask key="profit" label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
@@ -89,6 +111,136 @@ export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, o
   }
 
   return null;
+}
+
+const FACT_LABEL = {
+  "company.size": "기업 규모를 알려주세요",
+  "company.credit_issue_free": "현재 신용 제한 사유가 없나요?",
+  "company.ksure_exporter_grade": "K-SURE 수출자 등급을 알려주세요",
+  "company.is_domestic": "대한민국에 소재한 기업인가요?",
+  "payment.is_netting": "이 거래는 상계 방식인가요?",
+  "payment.is_third_party": "계약 상대방이 아닌 제3자에게 지급하거나 받나요?",
+  "payment.uses_mutual_account": "상호계산계정을 사용하나요?",
+  "payment.uses_foreign_exchange_bank": "외국환은행을 통해 지급하나요?",
+  "trade.payment_term_days": "선적 또는 일람 후 결제일까지 며칠인가요?",
+  "financing.purpose": "검토 중인 금융 목적은 무엇인가요?",
+};
+
+const FACT_OPTIONS = {
+  "company.size": [
+    { value: "small", label: "중소기업" },
+    { value: "mid_sized", label: "중견기업" },
+    { value: "large", label: "대기업" },
+  ],
+  "company.ksure_exporter_grade": ["A", "B", "C", "D", "E", "F", "G", "R", "UNKNOWN"]
+    .map((value) => ({ value, label: value })),
+  "financing.purpose": [
+    { value: "trade_finance", label: "무역금융" },
+    { value: "recognized_export_finance", label: "인정 수출금융" },
+    { value: "trade_bill_acceptance", label: "무역어음 인수" },
+    { value: "export_material_import_lc", label: "수출용 원자재 수입신용장" },
+    { value: "recognized_export_promotion_fund", label: "인정 수출진흥자금" },
+    { value: "other", label: "기타" },
+  ],
+};
+
+const DECLARATION_KEY = {
+  "payment.is_netting": "is_netting",
+  "payment.is_third_party": "is_third_party",
+  "payment.uses_mutual_account": "uses_mutual_account",
+  "payment.uses_foreign_exchange_bank": "uses_foreign_exchange_bank",
+};
+
+function MissingFactField({ item, onSlot, onUnknown }) {
+  const question = FACT_LABEL[item.field] ?? `${item.field} 값을 알려주세요`;
+  const options = FACT_OPTIONS[item.field];
+  const boolean =
+    item.field === "company.credit_issue_free" ||
+    item.field === "company.is_domestic" ||
+    item.scope === "compliance_declaration";
+
+  function answer(value, spoken) {
+    if (item.scope === "profile") {
+      onSlot({ profile: { company_facts: { [item.field]: value } } }, spoken);
+      return;
+    }
+    if (item.scope === "compliance_declaration") {
+      onSlot(
+        {
+          declaration: {
+            case_index: caseIndex(item.subject_id),
+            [DECLARATION_KEY[item.field]]: value,
+          },
+        },
+        spoken,
+      );
+      return;
+    }
+    onSlot(
+      { case: { case_facts: { [item.field]: value } } },
+      spoken,
+    );
+  }
+
+  if (options) {
+    return (
+      <Ask label={question}>
+        <ChoiceList options={options} onPick={(value, spoken) => answer(value, spoken)} />
+        <UnknownButton field={item.field} onUnknown={onUnknown} />
+      </Ask>
+    );
+  }
+  if (boolean) {
+    return (
+      <Ask label={question}>
+        <ChoiceList
+          options={[
+            { value: true, label: "예" },
+            { value: false, label: "아니요" },
+          ]}
+          onPick={(value, spoken) => answer(value, spoken)}
+        />
+        <UnknownButton field={item.field} onUnknown={onUnknown} />
+      </Ask>
+    );
+  }
+  return (
+    <Ask label={question}>
+      <FactTextField item={item} onAnswer={answer} onUnknown={onUnknown} />
+    </Ask>
+  );
+}
+
+function UnknownButton({ field, onUnknown }) {
+  return (
+    <button
+      className="unknown-choice"
+      type="button"
+      onClick={() => onUnknown(field)}
+    >
+      모름 · 추정하지 않음
+    </button>
+  );
+}
+
+function FactTextField({ item, onAnswer, onUnknown }) {
+  const [value, setValue] = useState("");
+  const focus = useAutoFocus();
+  const submit = () => value && onAnswer(value, value);
+  return (
+    <div className="ask-row">
+      <input
+        ref={focus}
+        inputMode={item.field.endsWith("_days") ? "numeric" : "text"}
+        value={value}
+        aria-label={FACT_LABEL[item.field] ?? item.field}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => event.key === "Enter" && submit()}
+      />
+      <button type="button" onClick={submit} disabled={!value}>확인</button>
+      <UnknownButton field={item.field} onUnknown={onUnknown} />
+    </div>
+  );
 }
 
 /** The forward quote, which only the company has.
@@ -170,6 +322,11 @@ function QuoteFields({ onSlot }) {
       </button>
     </div>
   );
+}
+
+function caseIndex(subjectId) {
+  const match = /-(\d+)$/.exec(subjectId ?? "");
+  return match ? Math.max(0, Number(match[1]) - 1) : 0;
 }
 
 /** The request panel, and the way it comes in.

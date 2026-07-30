@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "providers": [
+    {
+      "provider_id": "LSEG_FXALL_CORPORATE",
+      "product": "FXall for Corporate Treasury",
+      "role": "primary_company_applicable_forward_quote_provider",
+      "connection_state": "onboarding_required",
+      "supports": ["spot", "forward", "swap", "ndf"],
+      "selected_scope": "company-side RFQ/TMS integration or entitled export",
+      "official_product_url": "https://www.lseg.com/en/fx/venues/fxall-electronic-trading-platform",
+      "official_api_url": null,
+      "official_fix_spec_url": null,
+      "normalizer": "tradeflow.integration.forward_quote_feed.JsonForwardQuoteHistoryAdapter",
+      "credential_storage": "tenant secret manager only",
+      "raw_data_storage": "tenant-private encrypted storage only",
+      "required_external_steps": [
+        "LSEG corporate customer onboarding or trial approval",
+        "FXall account and liquidity-provider entitlements",
+        "LSEG confirmation of the company-side integration interface",
+        "approved endpoint or export route and credentials",
+        "company consent and tenant-private retention configuration"
+      ],
+      "production_eligible": false
+    },
+    {
+      "provider_id": "LSEG_FXALL_CASH_RFQ_MAKER",
+      "product": "FXall Cash RFQ FIX API",
+      "role": "liquidity_provider_reference_only",
+      "connection_state": "not_applicable_to_corporate_client_until_confirmed",
+      "supports": ["spot", "forward", "swap"],
+      "selected_scope": "authenticated provider-side single-leg FXFWD Quote (S) capture",
+      "official_product_url": "https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker",
+      "official_api_url": "https://developers.lseg.com/en/api-catalog/fx-venues/fx-trading-rfq-maker",
+      "official_fix_spec_url": "https://developers.lseg.com/content/dam/devportal/api-families/fx-venues/cash-rfq-fix/refinitiv_fxall_fx_trading_fix_api.pdf",
+      "normalizer": "tradeflow.integration.fxall_forward_quotes",
+      "credential_storage": "tenant secret manager only",
+      "raw_data_storage": "tenant-private encrypted storage only",
+      "required_external_steps": [
+        "written confirmation that the tenant is an entitled liquidity provider",
+        "LSEG onboarding and certification",
+        "FIX session endpoint, CompIDs and credentials"
+      ],
+      "production_eligible": false
+    },
+    {
+      "provider_id": "CURRENCYCLOUD_DEMO",
+      "product": "Currencycloud Demo Rates API",
+      "role": "authenticated_api_integration_validation",
+      "connection_state": "demo_credentials_required",
+      "supports": ["future_date_conversion_quote"],
+      "selected_scope": "Get Detailed Rates with a future conversion date",
+      "official_product_url": "https://developer.currencycloud.com/guides/getting-started/getting-started-with-the-api/",
+      "official_api_url": "https://devapi.currencycloud.com/v2/rates/detailed",
+      "official_fix_spec_url": null,
+      "normalizer": "tradeflow.integration.currencycloud.CurrencycloudDemoForwardQuoteAdapter",
+      "credential_storage": "local environment or tenant secret manager only",
+      "raw_data_storage": "tenant-private encrypted storage only",
+      "required_external_steps": [
+        "register for a Currencycloud Demo API key",
+        "configure demo login ID and API key",
+        "verify requested currency pair and future conversion-date support"
+      ],
+      "production_eligible": false
+    },
+    {
+      "provider_id": "KRX_USD_FUTURES",
+      "product": "KRX Futures Daily Trading Open API",
+      "role": "listed_fx_futures_benchmark",
+      "connection_state": "sample_transport_verified_production_key_required",
+      "supports": ["daily_usd_futures_market_data"],
+      "selected_scope": "USD futures daily close, settlement, volume and open interest",
+      "official_product_url": "https://open.krx.co.kr/contents/OPN/01/01040601/OPN01040601.jsp",
+      "official_api_url": "https://data-dbg.krx.co.kr/svc/apis/drv/fut_bydd_trd",
+      "official_fix_spec_url": null,
+      "normalizer": "tradeflow.integration.krx_futures.KrxUsdFuturesAdapter",
+      "credential_storage": "local environment or secret manager only",
+      "raw_data_storage": "runtime snapshot storage",
+      "required_external_steps": [
+        "KRX Data Marketplace membership and API authentication key",
+        "Futures Daily Trading API usage approval",
+        "confirm data-use and redistribution terms"
+      ],
+      "production_eligible": false
+    }
+  ]
+}

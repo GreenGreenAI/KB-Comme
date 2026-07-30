@@ -150,7 +150,7 @@ class KsureOrchestrationTests(unittest.TestCase):
     def test_complete_case_reaches_three_products_and_action_plans(self) -> None:
         packet = self._packet()
 
-        self.assertEqual("1.5", packet.schema_version)
+        self.assertEqual("1.6", packet.schema_version)
         self.assertEqual(3, len(packet.decisions))
         for decision in packet.decisions:
             self.assertEqual(

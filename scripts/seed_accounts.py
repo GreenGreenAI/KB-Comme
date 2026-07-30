@@ -13,7 +13,9 @@ name; stating them here is what turns "기업규모와 신용 상태를 알려�
 
     python scripts/seed_accounts.py
 
-Writes to data/accounts.db, or to $TRADEFLOW_ACCOUNT_DB.
+Writes to data/accounts.db, `$TRADEFLOW_ACCOUNT_DB`, or a non-production
+`$TRADEFLOW_DATABASE_URL`. It refuses production because these credentials are
+public demo fixtures.
 """
 
 from __future__ import annotations
@@ -25,9 +27,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from tradeflow.runtime.accounts import AccountStore  # noqa: E402
+from tradeflow.runtime.postgres_accounts import PostgresAccountStore  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(os.environ.get("TRADEFLOW_ACCOUNT_DB", REPO_ROOT / "data" / "accounts.db"))
+DATABASE_URL = os.environ.get("TRADEFLOW_DATABASE_URL")
 
 #: One account that can be judged and one that cannot, on purpose. The second
 #: exists so the "부족하면 멈춘다" path stays visible in a demo — a screen where
@@ -62,7 +66,9 @@ SEEDS = [
 
 
 def main() -> int:
-    store = AccountStore(DB_PATH)
+    if os.environ.get("TRADEFLOW_ENV") == "production":
+        raise RuntimeError("demo accounts must not be seeded in production")
+    store = PostgresAccountStore(DATABASE_URL) if DATABASE_URL else AccountStore(DB_PATH)
     for seed in SEEDS:
         existing = store.find(seed["account_id"])
         if existing is not None:
@@ -81,10 +87,12 @@ def main() -> int:
             company_name=seed["company_name"],
             facts=seed["facts"],
             account_id=seed["account_id"],
+            organization_id=seed["account_id"],
+            role="company_admin",
         )
         stated = len(account.facts)
         print(f"{account.email:24} {account.company_name:8} 기업 사실 {stated}건")
-    print(f"\n{DB_PATH}")
+    print(f"\n{'PostgreSQL' if DATABASE_URL else DB_PATH}")
     print("비밀번호는 두 계정 모두 tradeflow-demo 입니다.")
     return 0
 

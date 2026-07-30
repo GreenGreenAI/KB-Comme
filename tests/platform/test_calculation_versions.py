@@ -32,7 +32,7 @@ from tradeflow.runtime.provenance import fingerprint_knowledge
 
 KST = timezone(timedelta(hours=9))
 AS_OF = date(2026, 7, 28)
-NOW = datetime(2026, 7, 28, 12, tzinfo=KST)
+NOW = datetime(2026, 7, 28, 16, tzinfo=KST)
 SNAPSHOTS = REPO_ROOT / "data" / "snapshots"
 
 CASES = [

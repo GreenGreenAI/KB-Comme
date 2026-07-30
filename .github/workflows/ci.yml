@@ -8,6 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: tradeflow
+          POSTGRES_USER: tradeflow
+          POSTGRES_DB: tradeflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tradeflow -d tradeflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,11 +37,13 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: src
+          TRADEFLOW_TEST_POSTGRES_URL: postgresql://tradeflow:tradeflow@127.0.0.1:5432/tradeflow_test
         run: python -W error::DeprecationWarning -m unittest discover -s tests -t . -v
       - name: Build frontend
         working-directory: web/frontend
         run: |
           npm ci
+          npm test
           npm run build
       - name: Compile
         run: python -m compileall -q src tests examples

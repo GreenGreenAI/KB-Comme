@@ -120,3 +120,76 @@ python scripts/check_hedge_models.py
 The check loads the committed ECOS USD/KRW snapshot, compares all operational
 models over no-lookahead origins, reports promotion blockers and fails if the
 executable and governed registries drift.
+
+## Persistent validation and promotion workflow
+
+The benchmark can be written and registered in the hash-bound governance ledger:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/check_hedge_models.py `
+  --output data/governance/latest_hedge_validation.json `
+  --store data/governance/hedge_models.db
+```
+
+`validation_runs.content_hash` is calculated over canonical JSON. Identical
+reports resolve to the same run. A promotion request is rejected before approval
+collection when any numerical gate fails or `quote_basis` is not
+`observed_forward_quote`.
+
+For an eligible observed-quote report, the controlled sequence is:
+
+```powershell
+python scripts/manage_hedge_model_promotion.py request `
+  --run-id MODEL-RUN-... --challenger ewma_profit_floor
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role knowledge_domain --reviewer REVIEWER
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role platform_runtime --reviewer REVIEWER
+python scripts/manage_hedge_model_promotion.py approve `
+  --request-id MODEL-PROMOTION-... --role domain_expert --reviewer REVIEWER `
+  --organization ORGANIZATION
+python scripts/manage_hedge_model_promotion.py promote `
+  --request-id MODEL-PROMOTION-...
+```
+
+Every approval stores the exact validation hash. Domain-expert approval also
+requires an organization. `promote` refuses incomplete approvals and only swaps
+an active challenger with the current champion; it never selects a model by
+score or falls back automatically.
+
+The committed latest spot-proxy report is intentionally ineligible. Persistence
+of a blocked result proves the workflow and preserves diagnostics; it does not
+weaken the observed-forward-quote gate.
+
+## Post-promotion degradation monitoring
+
+Promotion is not permanent evidence that a model remains fit. Each scheduled
+validation run is compared with the approved champion baseline using identical
+window, horizon, step and quote basis. A mismatch in benchmark settings is not
+treated as performance—it is rejected as an incomparable run.
+
+The default drift policy raises a blocker for:
+
+- fewer than 100 current origins or any model failure;
+- absolute adverse-quantile calibration error above 0.03, or an increase above
+  0.01 from baseline;
+- profit-floor breach-rate increase above 0.01;
+- expected-shortfall or mean-quantile-loss increase above 10%;
+- hedge-ratio turnover increase above 0.05.
+
+Run the guard after producing a new like-for-like report:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/check_hedge_model_drift.py `
+  --baseline data/governance/approved_hedge_baseline.json `
+  --current data/governance/current_hedge_validation.json `
+  --output data/governance/current_hedge_drift.json `
+  --store data/governance/hedge_models.db
+```
+
+The command exits non-zero on degradation and records a content-addressed
+assessment bound to both report hashes. It does not silently switch models.
+Operations must stop automated champion rollout, investigate data/model changes
+and complete the normal three-role promotion workflow for any replacement.

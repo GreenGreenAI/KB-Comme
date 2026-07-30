@@ -1,10 +1,21 @@
 import unittest
 from datetime import date, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
+from tradeflow.runtime.accounts import AccountStore
 from tradeflow.web import app
-from tradeflow.web.app import AnalyzeRequest, analyze_endpoint
+from tradeflow.web.app import (
+    AnalyzeRequest,
+    ProfileFactsRequest,
+    analysis_history,
+    analyze_endpoint,
+    saved_analysis,
+    update_profile,
+)
 
 
 class WebApiValidationTests(unittest.TestCase):
@@ -128,6 +139,152 @@ class AskedPairingTests(unittest.TestCase):
 
         for item in body["asked"]:
             self.assertIn(item["field"], body["missing"])
+
+
+class DecisionWorkspaceContractTests(unittest.TestCase):
+    def _case(self, **changes) -> dict:
+        return {
+            "direction": "export",
+            "currency": "USD",
+            "amount": "100000",
+            "expected_payment_date": (
+                date.today() + timedelta(days=60)
+            ).isoformat(),
+            **changes,
+        }
+
+    def test_anonymous_company_facts_reach_the_packet_and_profile_projection(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                company_name="한빛정밀",
+                is_sme=True,
+                company_facts={
+                    "company.is_domestic": True,
+                    "company.size": "small",
+                    "company.credit_issue_free": True,
+                    "company.ksure_exporter_grade": "A",
+                },
+                cases=[self._case()],
+            )
+        )
+
+        profile = body["result"]["company_profile"]
+        self.assertEqual("한빛정밀", profile["company_name"])
+        self.assertEqual("small", profile["facts"]["company.size"])
+        packet_inputs = dict(
+            (item["name"], item["value"])
+            for item in body["result"]["decision_packet"]["inputs"]
+        )
+        self.assertEqual(
+            "small", packet_inputs["cases"]["EXPORT-001"]["company.size"]
+        )
+
+    def test_confirmed_gateway_declaration_runs_compliance_with_evidence(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                is_sme=True,
+                cases=[self._case()],
+                compliance_declarations=[
+                    {
+                        "case_index": 0,
+                        "confirmed": True,
+                        "is_netting": False,
+                        "is_third_party": False,
+                        "uses_mutual_account": False,
+                        "uses_foreign_exchange_bank": True,
+                    }
+                ],
+            )
+        )
+
+        result = body["result"]
+        self.assertIn("compliance", result["workers"]["completed"])
+        evidence = result["decision_packet"]["evidence"]
+        declaration = next(
+            item for item in evidence
+            if item["evidence_id"] == "declaration:WEB-EXPORT-001"
+        )
+        self.assertEqual(
+            True,
+            declaration["payload"]["facts"][
+                "payment.uses_foreign_exchange_bank"
+            ],
+        )
+
+    def test_unknown_profile_and_case_facts_are_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as profile_error:
+            analyze_endpoint(
+                AnalyzeRequest(
+                    cases=[self._case()],
+                    company_facts={"company.untrusted_override": True},
+                )
+            )
+        with self.assertRaises(HTTPException) as case_error:
+            analyze_endpoint(
+                AnalyzeRequest(
+                    cases=[
+                        self._case(
+                            case_facts={"payment.filing_completed": True}
+                        )
+                    ],
+                )
+            )
+
+        self.assertEqual(422, profile_error.exception.status_code)
+        self.assertEqual(422, case_error.exception.status_code)
+
+    def test_response_exposes_prioritized_inputs_and_official_source_metadata(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                is_sme=True,
+                cases=[self._case()],
+            )
+        )
+        result = body["result"]
+
+        self.assertEqual(
+            "profile", result["missing_input_queue"][0]["scope"]
+        )
+        official = [
+            item for item in result["evidence"]
+            if item["role"] == "official_source"
+        ]
+        self.assertTrue(official)
+        self.assertTrue(any(item.get("url") for item in official))
+
+    def test_signed_in_analysis_is_saved_and_profile_updates_are_persistent(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = AccountStore(Path(directory) / "accounts.db")
+            account = store.create(
+                "owner@example.com",
+                "pw",
+                company_name="한빛정밀",
+                account_id="COMPANY-HANBIT",
+            )
+            token = store.open_session(account)
+            with patch("tradeflow.web.app.accounts", store):
+                updated = update_profile(
+                    ProfileFactsRequest(
+                        facts={"company.size": "small"}
+                    ),
+                    token,
+                )
+                body = analyze_endpoint(
+                    AnalyzeRequest(
+                        as_of=date.today().isoformat(),
+                        cases=[self._case()],
+                    ),
+                    token,
+                )
+                history = analysis_history(token)["analyses"]
+                stored = saved_analysis(body["analysis_run_id"], token)
+
+        self.assertEqual("small", updated["account"]["facts"]["company.size"])
+        self.assertEqual(1, len(history))
+        self.assertEqual(body["result"]["packet_id"], stored["packet_id"])
 
 
 class SecondTradeTests(unittest.TestCase):

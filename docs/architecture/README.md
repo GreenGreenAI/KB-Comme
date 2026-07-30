@@ -10,6 +10,7 @@ last-reviewed: 2026-07-26
 - [시스템 개요](overview.md)
 - [도메인 모델](domain-model.md)
 - [데이터와 AI](data-and-ai.md)
+- [이론적·개념적 기반](theoretical-foundations.md)
 - [보안](security.md)
 
 중요하고 장기간 영향을 주는 선택은 설명 문서만 수정하지 않고
