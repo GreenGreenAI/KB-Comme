@@ -927,11 +927,17 @@ function Answer({ result, order, shown, arrive }) {
   const rest = order.filter(
     (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
   );
+  const said = result.said ?? {};
+  // Whether this turn's answer is sentences. When it is, the card is dropped:
+  // the box exists to hold a figure grid, and the grid is folded away.
+  const told =
+    folded &&
+    ((said.support ?? []).length > 0 || (said.compliance ?? []).length > 0);
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
-    <div className={`answer${arrive}`}>
+    <div className={`answer${told ? " told-answer" : ""}${arrive}`}>
       <Calculation folded={folded} net={net}>
         <>
           <dl className="figrow">
@@ -979,19 +985,53 @@ function Answer({ result, order, shown, arrive }) {
           no longer takes the same room as the thing that was asked for. */}
       {shown > (market ? 2 : 1) && (
         <div className={`folds${arrive}`}>
-        {(asked ? [asked] : rest).map(renderSection)}
+        {/* The judgements, said. Assembled server-side from what the rules
+            decided and the words the rulepack wrote its conditions in — the
+            same information the folds held, in the shape a person reads.
 
-        {asked && rest.length > 0 && (
-          <details className="fold aside">
-            <summary>이 거래의 다른 것들 · {rest.map((s) => SECTION_LABEL[s] ?? s).join(" · ")}</summary>
-            {rest.map(renderSection)}
-          </details>
+            What stays visual is what a sentence is the wrong shape for: the
+            band above (a position on a scale) and the payoff table (three
+            choices at three rates). A picture of a number is worse than the
+            number. */}
+        {[...(said.support ?? []), ...(said.compliance ?? []), ...(said.actions ?? [])].map(
+          (line) => (
+            <p className="told" key={line}>
+              {line}
+            </p>
+          ),
         )}
 
-        <Actions actions={result.next_actions} />
+        {hedge && <Payoff hedge={hedge} />}
+
+        {/* Skipped workers still say why, in one line each. */}
+        {rest
+          .filter((section) => skipped[section])
+          .map((section) => (
+            <p className="told quiet" key={section}>
+              {skipped[section]}
+            </p>
+          ))}
+
+        {said.sources?.length > 0 && (
+          <p className="told quiet">
+            근거:{" "}
+            {said.sources.map((source, index) => (
+              <span key={source.source_id}>
+                {index > 0 && " · "}
+                {source.url ? (
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    {source.title}
+                  </a>
+                ) : (
+                  source.title
+                )}
+              </span>
+            ))}
+          </p>
+        )}
 
         <details className="fold aside">
-          <summary>근거 · 재현에 필요한 입력</summary>
+          <summary>재현에 필요한 입력</summary>
           <ul className="versions">
             {(result.calculation_versions?.snapshots ?? []).map((item) => (
               <li key={item.source_id}>

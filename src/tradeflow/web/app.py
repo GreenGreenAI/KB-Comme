@@ -44,7 +44,7 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.runtime import introduction
+from tradeflow.runtime import introduction, narration
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
@@ -498,6 +498,20 @@ def analyze_endpoint(
         blocked = (result.get("workers") or {}).get("skipped") or {}
         if "support" in blocked and result["pointer"] == blocked["support"]:
             result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
+    # The judgements as sentences. Written here rather than by §4.2[9], which
+    # may not utter a verdict, and rendered as prose rather than as folds —
+    # a record is something you audit, not something you read.
+    result["said"] = {
+        "support": narration.support(result),
+        "compliance": narration.compliance(result),
+        "actions": narration.actions(result),
+        "sources": narration.sources(result),
+    }
+    # The pointer exists because the synthesised sentence may not carry a
+    # verdict. When the narration carries one, the pointer is the same claim
+    # twice — and the reader met it twice, three lines apart.
+    if any(result["said"].get(section) for section in read_intent(subject)):
+        result["pointer"] = ""
     result["holds"] = _holds(subject)
     result["coverage"] = _coverage(subject)
     # Which of the two the reader meets first. §4.2[9]'s sentence may only

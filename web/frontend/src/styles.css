@@ -660,6 +660,12 @@
   .fold.aside[open] > summary { margin-bottom: .4rem; }
   .fold.aside > .fold { margin-left: .6rem; }
 
+  /* A judgement, said. Set as the message it is — the folds it replaced were
+     a record, and a record is something you audit, not something you read. */
+  .told { margin: 0 0 .6rem; line-height: 1.7; }
+  .told.quiet { color: var(--ink-45); font-size: .8125rem; line-height: 1.6; }
+  .told.quiet a { color: var(--ink-70); text-underline-offset: 2px; }
+
   .turn.agent p.prose { white-space: pre-line; }
 
   .pointer.lead {
@@ -731,6 +737,14 @@
     margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
     border-radius: 12px; background: var(--wash-2);
   }
+  /* When the answer is prose there is no card. The box was drawn around a
+     figure grid; wrapping sentences in it made the reply look like a record
+     the reader had been handed rather than an answer they had been given. */
+  .answer.told-answer {
+    padding: 0; border: none; background: none; margin-top: .2rem;
+  }
+  .answer.told-answer .folds { margin-top: 0; }
+  .answer.told-answer .folds .fold { border-top: none; padding-top: 0; }
   .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
   .figrow > div { min-width: 0; }
   .figrow dt { font-size: .6875rem; color: var(--ink-45); }
