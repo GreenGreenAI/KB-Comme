@@ -43,6 +43,7 @@ snapshotted and dated. This fetches no facts. It is handed them.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -67,9 +68,17 @@ from typing import Any
 DEFAULT_MODEL = "solar-pro2-251215"
 DEFAULT_BASE_URL = "https://api.upstage.ai/v1"
 
-#: Deterministic decoding. Prose that changes between two identical analyses
-#: would make the answer look recalculated when nothing moved.
-TEMPERATURE = 0.0
+#: Sampled, but seeded — see `write`. Deterministic decoding was chosen so that
+#: two identical analyses would not produce different prose, which would make
+#: the answer look recalculated when nothing moved. It bought that at a price
+#: nobody measured: with one worked example in the prompt and no sampling, the
+#: model returned that example's sentence with the numbers swapped, for every
+#: question. 지원제도를 물어도, 신고의무를 물어도, 같은 문장이었다.
+#:
+#: A seed keeps the property without the cost. The same analysis and the same
+#: question decode the same way; a different trade or a different question
+#: decode differently, because the seed is derived from both.
+TEMPERATURE = 0.6
 
 #: How long an answer may wait on prose. Synthesis decorates figures that are
 #: already decided, so a slow model must cost the sentence and not the answer —
@@ -116,6 +125,18 @@ SCHEMA = {
     },
 }
 
+def _seed(material: str | None) -> int:
+    """A stable integer for one analysis-and-question.
+
+    Hashed rather than hand-picked so it cannot accidentally be the same for
+    two different answers, and stable across processes — `hash()` is salted per
+    interpreter and would give a different sentence on every restart.
+    """
+    if not material:
+        return 0
+    return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:8], 16)
+
+
 INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석 결과를 설명합니다. 계산은 이미 끝났습니다.
 당신의 일은 아래 「확정된 수치」를 사람의 문장으로 옮기는 것뿐입니다.
@@ -137,16 +158,28 @@ INSTRUCTION = """\
 사용자가 걱정하는 것에 답하세요. 수치를 다시 읽어주는 것이 아니라,
 그 수치가 그 사람에게 무엇을 뜻하는지 말하는 것입니다.
 
+아래 예시의 숫자는 예시일 뿐입니다. 이번 분석의 수치가 아니므로 절대
+그대로 쓰지 마세요 — 문장의 모양만 보고, 값은 「확정된 수치」에서 가져오세요.
+
 수출 기업이 "환율이 떨어질까 걱정"이라고 물었을 때:
-- 나쁨: "순노출은 100,000 USD이고 그때 덜 받는 원화는 10,525,000 KRW입니다."
+- 나쁨: "순노출은 87,300 USD이고 그때 덜 받는 원화는 6,214,000 KRW입니다."
   → 카드에 있는 것을 다시 읽었습니다.
-- 좋음: "받을 100,000 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1361.05까지
-  가면 그때 손에 들어오는 원화가 10,525,000 KRW 적어집니다."
+- 좋음: "받을 87,300 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1288.42까지
+  가면 그때 손에 들어오는 원화가 6,214,000 KRW 적어집니다."
 
 수입 기업이 "환율이 오를까 걱정, 지금 환전할까요"라고 물었을 때:
-- 나쁨: "순노출은 -100,000 USD입니다."  → 부호를 읽어줬을 뿐입니다.
-- 좋음: "보내야 할 100,000 USD가 아직 환전되지 않았습니다. 불리한 쪽인
-  1560.48까지 가면 결제에 9,418,000 KRW가 더 듭니다."
+- 나쁨: "순노출은 -87,300 USD입니다."  → 부호를 읽어줬을 뿐입니다.
+- 좋음: "보내야 할 87,300 USD가 아직 환전되지 않았습니다. 불리한 쪽인
+  1611.75까지 가면 결제에 5,903,000 KRW가 더 듭니다."
+
+사용자가 물은 주제에 맞춰 말하되, 지원제도·신고의무를 물었다면 그 주제를
+문장에서 아예 언급하지 마세요. 그 판정은 규칙이 내리고 화면의 다른 곳에서
+이미 보여드립니다. 당신이 할 일은 그 거래가 지금 어떤 상태인지 한 문장으로
+말하는 것뿐입니다.
+
+- 나쁨: "지원제도 관련해서는 담당 부서로 연결해 드리겠습니다."
+  → 판정을 대신했고, 할 수 없는 약속을 했습니다.
+- 좋음: "받을 87,300 USD가 결제일까지 열려 있습니다." → 거래 상태만 말했습니다.
 
 그 밖에:
 - 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
@@ -301,36 +334,50 @@ def _number_clauses(text: str) -> list[str]:
 
 
 def check_bound(sentence: str, figures: list[str]) -> str:
-    """Verify that quoted numbers keep both their units and their labels.
+    """Verify that no number is attached to another figure's name.
 
-    A digit-and-unit check alone accepts a semantic swap such as calling a KRW
-    cashflow difference the net exposure. The deterministic label preceding
-    each figure is therefore part of the quotation contract as well.
+    The hazard this guards is a semantic swap: calling a KRW cashflow
+    difference the net exposure. A digits-and-units check alone accepts that,
+    because both are numbers wearing the right unit.
+
+    It used to guard it by requiring the label. Every number had to appear
+    beside the word we labelled it with, which is a different and much stronger
+    demand — it made 「받을 100,000 USD가 결제일까지 열려 있습니다」 a rejection,
+    a sentence that is correct, natural, and says nothing we did not compute.
+    Every synthesised sentence failed it, so the screen fell back to its own
+    fixed prose and every answer opened the same way. The check meant to keep
+    the model honest had quietly removed it from the product.
+
+    So the demand is inverted. The model may name a figure however Korean
+    names it; what it may not do is put our word for one figure beside another
+    figure's number. Whether it said our word is not the question — whether it
+    said the wrong one is.
     """
     broken = check(sentence, figures)
     if broken:
         return broken
 
-    bindings: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
+    #: Full labels only. The shortened forms overlap — 「현재 환율」 shortens to
+    #: 「환율」, which then appears inside any sentence mentioning the adverse
+    #: rate, and a shared word is not a claim about which figure is meant.
+    labelled: list[tuple[str, str, tuple[str, ...]]] = []
     for figure in figures:
         label, separator, _ = figure.partition(":")
-        if not separator:
-            continue
-        for run in digit_runs(figure):
-            bindings.setdefault(run, []).append((figure, _label_anchors(label)))
+        if separator and label.strip():
+            labelled.append((figure, label.strip(), digit_runs(figure)))
 
     referenced: set[str] = set()
     for clause in _number_clauses(sentence):
-        for run in digit_runs(clause):
-            candidates = bindings.get(run, [])
-            matched = [
-                figure
-                for figure, anchors in candidates
-                if any(anchor in clause for anchor in anchors)
-            ]
-            if not matched:
-                return f"의미가 바뀌거나 라벨이 누락된 수치: {run}"
-            referenced.update(matched)
+        runs = digit_runs(clause)
+        for figure, label, figure_runs in labelled:
+            if label not in clause:
+                continue
+            stolen = [run for run in runs if run not in figure_runs]
+            if stolen:
+                return f"「{label}」에 붙지 않는 수치: {', '.join(stolen)}"
+        for figure, _, figure_runs in labelled:
+            if any(run in figure_runs for run in runs):
+                referenced.add(figure)
 
     unused = [figure for figure in figures if figure not in referenced]
     if unused:
@@ -547,7 +594,19 @@ class Synthesizer:
             self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return self._client
 
-    def write(self, figures: list[str], *, question: str | None = None) -> Synthesis:
+    def write(
+        self,
+        figures: list[str],
+        *,
+        question: str | None = None,
+        subjects: list[str] | None = None,
+        #: What makes this answer this answer. Passed through to the sampler so
+        #: decoding is reproducible per analysis rather than globally frozen:
+        #: re-running the same analysis re-reads the same sentence, and the next
+        #: trade does not inherit it. §6.2 asks that an analysis reproduce, not
+        #: that every analysis read alike.
+        seed: str | None = None,
+    ) -> Synthesis:
         """One sentence about these figures, or a refusal with its reason."""
         if not self.available:
             return Synthesis("", False, "UPSTAGE_API_KEY가 없습니다")
@@ -564,9 +623,19 @@ class Synthesizer:
         # `ask_for` keeps the digits. Asking may repeat what the user said;
         # answering must report what the tools produced.
         asked = f"\n\n사용자가 물은 내용: {redact(question)}" if question else ""
+        # The subject §4.2[2] read, by name. Without it the model saw the same
+        # eight figures whatever had been asked and, at temperature 0, wrote
+        # the same sentence every time — three different questions, one answer.
+        topic = (
+            "\n\n사용자가 물은 주제: "
+            + " · ".join(SUBJECT_NAME.get(s, s) for s in subjects)
+            if subjects
+            else ""
+        )
         prompt = (
             f"{INSTRUCTION}\n확정된 수치:\n"
             + "\n".join(f"- {figure}" for figure in figures)
+            + topic
             + asked
         )
         schema = json.loads(json.dumps(SCHEMA))
@@ -577,6 +646,7 @@ class Synthesizer:
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
+                seed=_seed(seed),
                 max_tokens=400,
                 timeout=TIMEOUT_S,
             )

@@ -104,7 +104,7 @@ class StrictRuleTests(unittest.TestCase):
             "순노출은 10,525,000 KRW이고 "
             "원화 수취액은 100,000 USD입니다."
         )
-        self.assertIn("의미가 바뀌", check_bound(sentence, FIGURES[:3:2]))
+        self.assertIn("순노출", check_bound(sentence, FIGURES[:3:2]))
 
 
 class BoundRenderingTests(unittest.TestCase):
@@ -162,7 +162,7 @@ class BoundRenderingTests(unittest.TestCase):
         written = synthesizer.write(FIGURES)
 
         self.assertFalse(written.accepted)
-        self.assertIn("의미가 바뀌", written.reason)
+        self.assertIn("순노출", written.reason)
 
     def test_altered_label_unit_or_value_is_rejected(self) -> None:
         synthesizer, _ = synthesizer_returning(
@@ -436,6 +436,61 @@ class PointerLeadsWithTheReasonTests(unittest.TestCase):
 
         self.assertIn("지원제도 후보 1건", said)
         self.assertIn("정보 부족 1건", said)
+
+
+class NaturalProseTests(unittest.TestCase):
+    """The binding check used to demand the label, not merely forbid the wrong
+    one — every number had to appear beside the word we labelled it with.
+
+    That rejected 「받을 100,000 USD가 결제일까지 열려 있습니다」: correct,
+    natural, and saying nothing we did not compute. Every synthesised sentence
+    failed it, the screen fell back to its own fixed prose, and every answer
+    opened the same way. The check meant to keep the model honest had quietly
+    removed it from the product.
+    """
+
+    FIGURES = [
+        "순노출: 100,000 USD",
+        "불리한 쪽 환율: 1361.05 (KRW per USD, 신뢰수준 0.9)",
+        "그때 덜 받는 원화: 10,525,000 KRW",
+    ]
+
+    def test_a_figure_may_be_named_the_way_korean_names_it(self) -> None:
+        self.assertEqual(
+            "",
+            check_bound(
+                "받을 100,000 USD가 결제일까지 열려 있습니다. 불리한 쪽인 "
+                "1361.05까지 가면 그때 손에 들어오는 원화가 10,525,000 KRW "
+                "적어집니다.",
+                self.FIGURES,
+            ),
+        )
+
+    def test_quoting_our_own_labels_still_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_bound(
+                "순노출 100,000 USD, 불리한 쪽 환율 1361.05, "
+                "그때 덜 받는 원화 10,525,000 KRW.",
+                self.FIGURES,
+            ),
+        )
+
+    def test_a_shared_word_is_not_a_claim_about_which_figure_is_meant(self) -> None:
+        """「현재 환율」 shortens to 「환율」, which appears in any sentence about
+        the adverse rate. Matching on the shortened form made every such
+        sentence look like a misattribution."""
+        figures = [
+            "현재 환율: 1466.3 (KRW per USD, 한국은행 매매기준율 2026-07-27 기준)",
+            "불리한 쪽 환율: 1361.05 (KRW per USD, 신뢰수준 0.9)",
+        ]
+
+        self.assertEqual(
+            "",
+            check_bound(
+                "지금 환율은 1466.3이고, 불리한 쪽 환율은 1361.05입니다.", figures
+            ),
+        )
 
 
 if __name__ == "__main__":

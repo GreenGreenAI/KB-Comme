@@ -466,7 +466,16 @@ def analyze_endpoint(
     # network, or a sentence that invented a number — leaves `summary` empty
     # and the screen assembles its own sentence, so prose is the only thing
     # that can be lost here.
-    written = synthesizer.write(figures(result), question=request.utterance)
+    written = synthesizer.write(
+        figures(result),
+        question=request.utterance,
+        subjects=list(read_intent(_subject_text(request))),
+        # The packet identifies the analysis (§6.2) and the sentence identifies
+        # the question. Together they decide the decoding, so the same answer
+        # to the same question reads the same and the next one does not
+        # inherit its wording.
+        seed=f"{result.get('packet_id')}|{_subject_text(request)}",
+    )
     if written.accepted:
         result["summary"] = written.sentence
     elif written.reason:
