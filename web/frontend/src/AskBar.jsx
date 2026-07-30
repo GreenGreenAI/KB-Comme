@@ -26,7 +26,14 @@ const DIRECTION_OPTIONS = [
   { value: "수입", label: "수입", hint: "대금을 지급합니다" },
 ];
 
-export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, onPlace }) {
+export default function AskBar({
+  pending,
+  requiredInputs,
+  quoteInputs,
+  profileInputs,
+  onSlot,
+  onPlace,
+}) {
   if (pending?.status === "needs_placement") {
     return (
       <Ask key="placement" label="어느 거래인가요">
@@ -70,6 +77,13 @@ export default function AskBar({ pending, requiredInputs, quoteInputs, onSlot, o
         <SlotField slot={slot} onSlot={onSlot} />
       </Ask>
     );
+  }
+
+  // §5.4's two most-asked company facts. An account states them once and is
+  // never asked again — this is the same two by hand, so a company that has
+  // not signed up gets a judgement instead of a list of what it would need.
+  if (profileInputs?.length > 0) {
+    return <ProfileAsk key="profile" onSlot={onSlot} />;
   }
 
   if (requiredInputs?.length > 0) {
@@ -360,6 +374,51 @@ function readable(raw) {
 }
 
 const trim = (n) => Number(n.toFixed(2)).toLocaleString("ko-KR");
+
+const SIZE_OPTIONS = [
+  { value: "small", label: "중소기업" },
+  { value: "mid_sized", label: "중견기업" },
+  { value: "large", label: "대기업" },
+];
+
+const CREDIT_OPTIONS = [
+  { value: true, label: "없습니다", hint: "연체·부도·대위변제 등" },
+  { value: false, label: "있습니다" },
+];
+
+/** The two facts §5.4 names first.
+ *
+ *  Asked as choices rather than free text: 기업규모 is an enum in the rulepack
+ *  and 신용 상태 is a boolean, and a typed answer would have to be guessed back
+ *  into one — which is the guess §1.1 refuses. Both are sent together so the
+ *  rules see one company rather than two halves of one. */
+function ProfileAsk({ onSlot }) {
+  const [size, setSize] = useState(null);
+
+  if (size === null) {
+    return (
+      <Ask label="기업규모가 어떻게 되나요?">
+        <ChoiceList options={SIZE_OPTIONS} onPick={(value) => setSize(value)} />
+      </Ask>
+    );
+  }
+  // Sent together, not one at a time: the rules read one company, and a size
+  // that arrived without its credit standing would be judged on half a profile and
+  // then judged again on the other half.
+  return (
+    <Ask label="연체·부도 등 신용 이슈가 있으신가요?">
+      <ChoiceList
+        options={CREDIT_OPTIONS}
+        onPick={(value, label) =>
+          onSlot(
+            { profile: { company_size: size, credit_issue_free: value } },
+            `${SIZE_OPTIONS.find((o) => o.value === size).label} · 신용 이슈 ${label}`,
+          )
+        }
+      />
+    </Ask>
+  );
+}
 
 function ProfitFields({ onSlot }) {
   const [baseline, setBaseline] = useState("");

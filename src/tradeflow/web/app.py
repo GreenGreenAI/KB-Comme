@@ -43,6 +43,7 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.domain.models import CompanyProfile
 from tradeflow.runtime import introduction
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
@@ -206,6 +207,12 @@ class AnalyzeRequest(BaseModel):
     utterance: str | None = None
     company_name: str = "미입력 기업"
     is_sme: bool | None = None
+    #: §5.4's two most-asked company facts, for callers with no account. An
+    #: account carries six; these are the two the eligibility rules name first,
+    #: and without them a signed-out company asking about 지원제도 was told
+    #: which facts were missing and given no way to state them.
+    company_size: Literal["small", "mid_sized", "large"] | None = None
+    credit_issue_free: bool | None = None
     opening_balance_usd: str | None = None
     baseline_profit: str | None = None
     profit_floor: str | None = None
@@ -213,6 +220,12 @@ class AnalyzeRequest(BaseModel):
     #: Set only when the user has already answered "새 거래인가, 수정인가".
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
+    #: The sentence this turn is still answering, when the turn itself has
+    #: none. A request panel sends values and no words, and without this the
+    #: answer forgot what the conversation was about between one turn and the
+    #: next. Read for intent only — never for facts, which would let an
+    #: already-answered sentence describe its trade twice.
+    asked_about: str | None = None
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
 
@@ -372,7 +385,7 @@ def analyze_endpoint(
 
     reading = intake(
         supplied,
-        company=account.profile() if account else None,
+        company=account.profile() if account else _stated_profile(request),
         company_name=request.company_name,
         is_sme=request.is_sme,
         opening_balances=balances,
@@ -443,6 +456,7 @@ def analyze_endpoint(
         profit_floor=profit_floor,
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
+        intent=read_intent(_subject_text(request)),
     )
     result = build_response(analysis)
 
@@ -458,9 +472,13 @@ def analyze_endpoint(
     elif written.reason:
         logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
 
+    # What the conversation is about, for everything below. This turn's own
+    # words when it has any; otherwise the question still on the table.
+    subject = _subject_text(request)
+
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
-    result["pointer"] = pointer(result, intent=read_intent(request.utterance or ""))
+    result["pointer"] = pointer(result, intent=read_intent(subject))
     if account is None:
         # §5.4's rules read company facts, and an anonymous caller has none —
         # so a question about 지원제도 is answered by naming two facts rather
@@ -471,8 +489,8 @@ def analyze_endpoint(
         blocked = (result.get("workers") or {}).get("skipped") or {}
         if "support" in blocked and result["pointer"] == blocked["support"]:
             result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
-    result["holds"] = _holds(request.utterance)
-    result["coverage"] = _coverage(request.utterance)
+    result["holds"] = _holds(subject)
+    result["coverage"] = _coverage(subject)
     # Which of the two the reader meets first. §4.2[9]'s sentence may only
     # quote `figures()`, and every figure in it is an exposure, a rate or a
     # hedge ratio — that is the whole safety division and it stays. But a
@@ -482,13 +500,24 @@ def analyze_endpoint(
     # was two lines further down, in the code-owned pointer.
     #
     # Ordering only. Nothing is added, removed or re-worded.
-    result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
+    result["lead"] = "pointer" if _pointer_leads(subject) else "summary"
     # What to ask for next, chosen by what was asked about. Every blocked
     # worker still reports its reason in its own fold — nothing is hidden —
     # but only one of them gets the top of the screen and an input panel.
     # A company that asked whether its netting is reportable was being asked
     # for its operating profit, which is §5.3's input and nobody's answer.
-    result["asking_for"] = _asking_for(request.utterance, result)
+    result["asking_for"] = _asking_for(subject, result)
+    # The facts §5.4 is waiting for, when the caller is the one who can state
+    # them. A signed-in company already stated them once and is never asked.
+    result["required_inputs"]["profile"] = (
+        [
+            attribute
+            for attribute in STATED_COMPANY_FACTS
+            if getattr(request, attribute) is None
+        ]
+        if account is None and "support" in ((result.get("workers") or {}).get("skipped") or {})
+        else []
+    )
     return {
         "status": "ready",
         "understood": heard,
@@ -501,12 +530,60 @@ def analyze_endpoint(
 _SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
 
 
+def _subject_text(request: AnalyzeRequest) -> str:
+    """The sentence whose subject this turn is answering.
+
+    This turn's own words when it has any; otherwise the question still on the
+    table. Only the subject is taken from the older sentence — the slot reader
+    never sees it, so a trade described once is not described again.
+    """
+    return request.utterance or request.asked_about or ""
+
+
 def _pointer_leads(utterance: str | None) -> bool:
     """True when the first thing the sentence asked about is not what the
     summary can say. Silence — a trade description with no question — keeps
     the default order."""
     lead = next(iter(read_intent(utterance or "")), None)
     return lead is not None and lead not in _SENTENCE_SUBJECTS
+
+
+#: The company facts a request body may state, and where §5.4 reads them.
+STATED_COMPANY_FACTS = {
+    "company_size": "company.size",
+    "credit_issue_free": "company.credit_issue_free",
+}
+
+
+def _stated_profile(request: AnalyzeRequest) -> CompanyProfile | None:
+    """A profile from what the caller typed, for callers with no account.
+
+    An account is the better place for these — it holds six facts, states them
+    once, and does not ask again next session. This is the same facts by hand,
+    so a company that has not signed up still gets a judgement rather than a
+    list of what it would need.
+
+    Nothing stated produces no profile at all: §5.4 must go on reporting the
+    facts as missing rather than being handed an invented `False`. `is_sme`
+    follows from the size when the size is given — they are the same claim, and
+    letting them disagree would be a contradiction the rules cannot see.
+    """
+    stated = {
+        fact: getattr(request, attribute)
+        for attribute, fact in STATED_COMPANY_FACTS.items()
+        if getattr(request, attribute) is not None
+    }
+    is_sme = request.is_sme
+    if request.company_size is not None:
+        is_sme = request.company_size in ("small", "mid_sized")
+    if not stated and is_sme is None:
+        return None
+    return CompanyProfile(
+        company_id="COMPANY-001",
+        name=request.company_name,
+        is_sme=is_sme,
+        attributes=stated,
+    )
 
 
 def supplied_trade(cases: list[dict[str, Any]]) -> bool:
@@ -610,7 +687,7 @@ def _standing_answer(utterance: str | None, as_of: date) -> tuple[str, list[str]
 
 #: Which blocked worker each subject would want unblocked. A subject not
 #: listed has nothing to collect beyond the trade itself.
-_UNBLOCKS = {"hedge": "hedge", "exposure": "hedge"}
+_UNBLOCKS = {"hedge": "hedge", "exposure": "hedge", "support": "support"}
 
 
 def _asking_for(utterance: str | None, result: dict[str, Any]) -> str | None:

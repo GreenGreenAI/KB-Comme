@@ -517,6 +517,15 @@ def analyze(
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
     utterance: str | None = None,
+    #: What the conversation is still about, when this turn carries no
+    #: sentence of its own. Answering a request panel sends values and no
+    #: words, and reading intent from that blank reordered the answer back to
+    #: the default the moment the user supplied what was asked for — the
+    #: judgement they came for closed itself as it arrived.
+    #:
+    #: Ordering only. Facts are read from `utterance`, never from this: a
+    #: sentence already answered must not declare its trade a second time.
+    intent: tuple[str, ...] | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -550,7 +559,7 @@ def analyze(
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
         has_usable_measure=bool(usable_measures(hedge_measures)),
-        intent=read_intent(utterance),
+        intent=intent if intent is not None else read_intent(utterance),
     )
     report.skipped.update(plan.skipped())
 

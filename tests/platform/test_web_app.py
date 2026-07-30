@@ -346,5 +346,95 @@ class AnonymousSupportTests(unittest.TestCase):
         self.assertIn("로그인", pointer)
 
 
+class StatedProfileTests(unittest.TestCase):
+    """The same two facts by hand, for a company that has not signed up."""
+
+    def _support(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                utterance="받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+                **body,
+            )
+        )["result"]
+
+    def test_stating_them_produces_a_judgement(self) -> None:
+        result = self._support(company_size="small", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+        self.assertTrue(result["support_candidates"])
+
+    def test_stating_nothing_still_asks(self) -> None:
+        """§5.4 must go on reporting the facts as missing rather than being
+        handed an invented `False`."""
+        result = self._support()
+
+        self.assertIn("support", result["workers"]["skipped"])
+        self.assertEqual(
+            ["company_size", "credit_issue_free"], result["required_inputs"]["profile"]
+        )
+
+    def test_the_size_settles_whether_it_is_an_sme(self) -> None:
+        """They are the same claim, and letting them disagree would be a
+        contradiction the rules cannot see."""
+        result = self._support(company_size="large", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+
+
+class StandingSubjectTests(unittest.TestCase):
+    """A request panel sends values and no words.
+
+    Reading intent from that blank reordered the answer back to the default
+    the moment the user supplied what was asked for — the judgement they came
+    for closed itself as it arrived, and the funnel started asking again.
+    """
+
+    def _answer(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                as_of="2026-07-28",
+                company_size="small",
+                credit_issue_free=True,
+                **body,
+            )
+        )["result"]
+
+    def test_the_question_still_on_the_table_orders_the_answer(self) -> None:
+        result = self._answer(asked_about="받을 수 있는 지원제도가 있나요")
+
+        self.assertEqual("pointer", result["lead"])
+        self.assertEqual("support", result["execution_plan"]["section_order"][0])
+
+    def test_a_turn_with_no_subject_at_all_keeps_the_default(self) -> None:
+        result = self._answer()
+
+        self.assertEqual("summary", result["lead"])
+
+    def test_the_older_sentence_never_reaches_the_slot_reader(self) -> None:
+        """Ordering only. A trade described once must not describe itself a
+        second time — two turns would produce two trades."""
+        result = self._answer(
+            asked_about="12월 3일에 수입대금 5만 달러 지급합니다"
+        )
+
+        self.assertEqual(1, len(result["trade_timeline"]))
+        self.assertEqual("100000", result["trade_timeline"][0]["amount"])
+
+
 if __name__ == "__main__":
     unittest.main()
