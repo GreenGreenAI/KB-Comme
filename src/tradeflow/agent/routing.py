@@ -303,6 +303,12 @@ def _hedge(
     The remaining conditions are §4.2[5]'s stop conditions rather than routing,
     but they belong in the same list: the reader wants one place that says why
     a section is empty.
+
+    §1.1's promise is carried in the words, not left to the screen. The screen
+    had its own sentence saying the same thing, which asked for both values
+    whichever one was missing and would have gone on asking after a condition
+    here changed — a claim that lives in two places goes stale in the one
+    further from the rule.
     """
     if _net_exposure(exposures) == 0:
         return WorkerDecision(
@@ -315,14 +321,16 @@ def _hedge(
         return WorkerDecision(
             HEDGE,
             False,
-            "기준 영업이익을 입력하면 헤지비율을 계산할 수 있습니다",
+            "기준 영업이익을 알려주시면 헤지비율을 계산합니다. "
+            "입력하지 않은 값을 임의로 만들지 않습니다",
             ("baseline_profit",),
         )
     if profit_floor is None:
         return WorkerDecision(
             HEDGE,
             False,
-            "목표 손익 하한을 입력하면 헤지비율을 계산할 수 있습니다",
+            "회사가 지키려는 목표 손익 하한을 알려주시면 헤지비율을 "
+            "계산합니다. 입력하지 않은 하한을 임의로 만들지 않습니다",
             ("profit_floor",),
         )
     if not has_usable_measure:

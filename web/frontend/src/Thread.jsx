@@ -274,6 +274,9 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // no question in it — keeps the sentence first.
   const leads = result.lead === "pointer";
   const asksProfit = !hedge && hedgeInputs.length > 0;
+  // §4.2[2]'s own reason. The fold below shows it too, collapsed; this is the
+  // same sentence where a reader with the input bar open will actually see it.
+  const skippedHedge = result.workers?.skipped?.hedge;
 
   // The order the turn arrives in, as a gap before each unit: the sentence a
   // word at a time, then the blocks below it.
@@ -358,12 +361,14 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       )}
 
       {/* Asked once, and only in words. The fields live in the bar above the
-          composer so they stay reachable after the thread scrolls on. */}
-      {asksProfit && shown >= timeline.length && (
-        <p className={arrive.trim()}>
-          기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
-          입력하지 않은 하한을 임의로 만들지 않습니다.
-        </p>
+          composer so they stay reachable after the thread scrolls on.
+
+          The words come from §4.2[2], which already decided why the worker did
+          not run. This paragraph used to carry its own, which asked for both
+          values whichever one was missing — and would have kept asking after
+          the routing condition changed, because nothing here is tied to it. */}
+      {asksProfit && shown >= timeline.length && skippedHedge && (
+        <p className={arrive.trim()}>{skippedHedge}</p>
       )}
     </div>
   );
