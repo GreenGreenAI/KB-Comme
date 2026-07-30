@@ -48,7 +48,7 @@ from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance import financing_purpose
+from tradeflow.tools.utterance import financing_purpose, payment_structure
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -121,6 +121,11 @@ class Analysis:
     review_reasons: tuple[str, ...]
     versions: CalculationVersions
     plan: ExecutionPlan
+    #: The §5.5 facts the company stated in words. Carried so the answer can
+    #: tell a rule that is waiting on a detail apart from one that does not
+    #: know whether it applies at all — nineteen rules run either way, and
+    #: without this they arrive as one undifferentiated list.
+    declared_structure: Mapping[str, bool] = field(default_factory=dict)
 
     @property
     def review_required(self) -> bool:
@@ -198,6 +203,11 @@ DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 #: What the company said the money is for. Separate from the company
 #: declaration above because it comes from the sentence, not the account.
 DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
+
+#: The §5.5 declarations the company made in the sentence. Separate from the
+#: structure this module computes: those came from a subtraction over dates,
+#: these came from the company saying so.
+DECLARED_STRUCTURE_EVIDENCE_ID = "TRADEFLOW_STRUCTURE_DECLARED"
 
 #: K-SURE's country acceptance policy, as a snapshot. The source is registered
 #: and the binder is written and tested; what is absent is the snapshot itself,
@@ -405,6 +415,51 @@ def market_now(
     )
 
 
+def _declared_structure_assertions(
+    program: TradeProgram,
+    stated: Mapping[str, bool],
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the trade structure the company described in words.
+
+    §5.5's compliance worker has been skipped on every request this product has
+    served, because the four declarations it routes on were filled by nothing.
+    Its skip reason asks for 상계·제3자 지급·상호계산 — and the sentence it was
+    answering said 「상계로 처리하는데 신고 대상인가요」. Nineteen rules were
+    loaded and ready the whole time.
+
+    The catalog fixes the evidence role at `compliance`, so that is what this
+    carries. It is the company's own word, which is why the judgement resting
+    on it stays reviewable — but §5.5 was never asking for proof, it was asking
+    to be told.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    if not stated:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        DECLARED_STRUCTURE_EVIDENCE_ID,
+        EvidenceRole.COMPLIANCE,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(stated),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 문장으로 말한 거래 구조",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (DECLARED_STRUCTURE_EVIDENCE_ID,))
+            for field, value in stated.items()
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def _declared_financing_assertions(
     program: TradeProgram,
     utterance: str | None,
@@ -476,7 +531,14 @@ def analyze(
     # What the trades themselves say about their structure. The four facts
     # only the company can state (netting and friends) are not here; see
     # routing.DECLARED_STRUCTURE_FIELDS.
-    structure = derive_structure(program)
+    # Two sources, kept apart. `derive_structure` subtracts dates the user
+    # gave, so its evidence says `calculation`; the declarations came from the
+    # company saying so, and the catalog fixes their role at `compliance`. The
+    # merged mapping is for routing only — asserting a field from both would be
+    # the same fact arriving twice, which the fact assembler refuses.
+    derived_structure = derive_structure(program)
+    declared_structure = payment_structure(utterance)
+    structure = {**derived_structure, **declared_structure}
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has
     # already run because every other decision reads its result.
@@ -520,10 +582,13 @@ def analyze(
         )
         evaluated_at_utc = as_of or datetime.now(UTC)
         assertions, structure_evidence = _structure_assertions(
-            program, structure, as_of=evaluated_at_utc
+            program, derived_structure, as_of=evaluated_at_utc
         )
         declared, declared_evidence = _declared_company_assertions(
             program, as_of=evaluated_at_utc
+        )
+        stated, stated_evidence = _declared_structure_assertions(
+            program, declared_structure, as_of=evaluated_at_utc
         )
         financing, financing_evidence = _declared_financing_assertions(
             program, utterance, as_of=evaluated_at_utc
@@ -533,14 +598,16 @@ def analyze(
             case_id: (
                 *assertions.get(case_id, ()),
                 *declared.get(case_id, ()),
+                *stated.get(case_id, ()),
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *financing, *country}
+            for case_id in {*assertions, *declared, *stated, *financing, *country}
         }
         structure_evidence = (
             *structure_evidence,
             *declared_evidence,
+            *stated_evidence,
             *financing_evidence,
             *country_evidence,
         )
@@ -665,6 +732,7 @@ def analyze(
         required_inputs=tuple(required_inputs),
         review_reasons=tuple(dict.fromkeys(review)),
         plan=plan,
+        declared_structure=declared_structure,
         versions=CalculationVersions(
             formula_version=FORMULA_VERSION,
             packet_schema_version=(

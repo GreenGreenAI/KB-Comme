@@ -147,6 +147,84 @@ _FINANCING_PURPOSE = (
 )
 
 
+#: §5.5's declarations, in the words a company uses for them.
+#:
+#: The compliance worker has been skipped on every request this product has
+#: ever served, and its skip reason asks for exactly these — while the sentence
+#: it is answering says 「상계로 처리하는데 신고 대상인가요」. Nineteen rules
+#: are loaded and ready; the input was never reaching them.
+#:
+#: `payment.uses_foreign_exchange_bank` is not read. The words that would carry
+#: it — 은행, 송금 — appear in sentences about forward quotes and ordinary
+#: payments alike, and reading it wrong changes which authority a filing goes
+#: to. The rule reports it missing, which is a question the user can answer.
+_STRUCTURE = (
+    ("payment.is_netting", ("상계", "네팅", "netting", "차액만", "차액 결제")),
+    (
+        "payment.is_third_party",
+        ("제3자", "제삼자", "3자 지급", "대신 지급", "대신 받", "대신 결제"),
+    ),
+    ("payment.uses_mutual_account", ("상호계산", "상호 계산")),
+)
+
+#: Korean negates after the noun — 「상계가 아닙니다」, 「상계는 하지 않습니다」
+#: — so a marker in the text that follows cancels the reading.
+#:
+#: 아니 and 아닙 are both here because a Korean syllable is one character: the
+#: 니 in 아닙니다 sits inside 닙, so a search for 아니 walks straight past the
+#: most common way to say no. Testing the list against real sentences is not
+#: optional — the failure is silent and reads as a declaration.
+_NEGATED = (
+    "아니",
+    "아닙",
+    "아녜",
+    "아냐",
+    "아님",
+    "않",
+    "없",
+    "말고",
+    "제외",
+    "빼고",
+    "안 하",
+    "안하",
+)
+
+#: How far past the word to look. Long enough for 「상계로 처리하지 않습니다」,
+#: short enough that the next clause's 없습니다 does not reach back.
+_NEGATION_WINDOW = 14
+
+
+def payment_structure(text: str | None) -> dict[str, bool]:
+    """The §5.5 declarations the sentence states, positively.
+
+    Only `True`, and only when nothing nearby negates it. The asymmetry is
+    deliberate and it is the whole safety of this function: reading a stated
+    netting as absent leaves the rule asking a question the company can answer,
+    while reading an absent netting as stated would tell a company with a
+    filing duty that it has none. §5.5 refuses to conclude 신고 불필요 from
+    silence, and a misread would slip past that refusal by pretending the
+    silence was speech.
+
+    So a negation says nothing rather than saying `False`. "상계는 아닙니다" is
+    a real declaration and would be useful, but distinguishing it reliably from
+    "상계가 아니라 상호계산입니다" is not something a keyword window can do.
+    """
+    if not text:
+        return {}
+    stated: dict[str, bool] = {}
+    for field, words in _STRUCTURE:
+        for word in words:
+            at = text.find(word)
+            if at < 0:
+                continue
+            tail = text[at + len(word) : at + len(word) + _NEGATION_WINDOW]
+            if any(marker in tail for marker in _NEGATED):
+                continue
+            stated[field] = True
+            break
+    return stated
+
+
 def financing_purpose(text: str | None) -> str | None:
     """What the money is for, when the sentence says so.
 

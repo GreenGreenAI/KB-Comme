@@ -265,8 +265,8 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   const line = result.summary
     ? [{ text: result.summary }]
     : sentence({
-        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
-        opened, unread,
+        first, market, swing, net: result.cashflow_analysis?.net_exposure?.[0]?.amount,
+        hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread,
       });
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
   // Which of the two opens the answer, decided by the server from the intent
@@ -458,6 +458,18 @@ const FACT_LABEL = {
   "trade.payment_term_days": "결제기간",
   "financing.purpose": "자금 용도",
   "financing.has_bank_consultation": "은행 상담 여부",
+  "payment.is_netting": "상계 여부",
+  "payment.netting.party_count": "상계 당사자 수",
+  "payment.netting.uses_center": "상계센터 경유 여부",
+  "payment.netting.smaller_claim_usd": "상계하는 채권·채무 중 작은 금액",
+  "payment.netting.exception_category": "상계 신고예외 유형",
+  "payment.is_third_party": "제3자 지급 여부",
+  "payment.third_party.amount_usd": "제3자 지급 금액",
+  "payment.third_party.exception_category": "제3자 지급 신고예외 유형",
+  "payment.uses_mutual_account": "상호계산 사용 여부",
+  "payment.uses_foreign_exchange_bank": "외국환은행 경유 여부",
+  "payment.direction": "지급·수령 방향",
+  "payment.nonbank.exception_category": "비은행 지급 신고예외 유형",
 };
 
 /** The object particle, chosen the way Korean chooses it.
@@ -564,7 +576,21 @@ function Candidate({ candidate, excluded }) {
  */
 function Compliance({ result }) {
   const obligations = result.filing_obligations ?? [];
-  if (obligations.length === 0) {
+  // Every §5.5 rule that ran and was not ruled out. `filing_obligations` is
+  // the subset that produced an action, so a rule saying "정보가 부족합니다"
+  // appeared nowhere — and the fold went on announcing 확인된 신고 사유 없음
+  // while seventeen rules were waiting to be told something. One is a
+  // question, the other is a clearance.
+  const findings = (result.risk_findings ?? []).filter(
+    (f) => f.outcome?.kind !== "support_candidate",
+  );
+  // The company said 상계, so the netting rules know they apply and are
+  // waiting on which authority. The rest do not know whether they apply at
+  // all. Showing both as one list buries the three that answer the question.
+  const engaged = findings.filter((f) => f.engaged);
+  const rest = findings.filter((f) => !f.engaged);
+
+  if (obligations.length === 0 && findings.length === 0) {
     return (
       <details className="fold">
         <summary>신고의무 · 확인된 신고 사유 없음</summary>
@@ -576,11 +602,24 @@ function Compliance({ result }) {
     );
   }
   return (
-    <details className="fold">
-      <summary>신고의무 · 검토 {obligations.length}건</summary>
+    <details className="fold" open={engaged.length > 0}>
+      <summary>
+        신고의무 · {engaged.length > 0 ? `해당 ${engaged.length}건` : `검토 ${findings.length}건`}
+      </summary>
       {obligations.map((item) => (
         <Candidate key={item.rule_id} candidate={item} />
       ))}
+      {engaged.map((item) => (
+        <Candidate key={item.rule_id} candidate={item} />
+      ))}
+      {rest.length > 0 && (
+        <details className="why">
+          <summary>말씀해 주신 것으로는 해당 여부를 알 수 없는 규칙 {rest.length}건</summary>
+          {rest.map((item) => (
+            <Candidate key={item.rule_id} candidate={item} />
+          ))}
+        </details>
+      )}
     </details>
   );
 }
@@ -652,14 +691,26 @@ const SECTION_LABEL = {
  *  Only the headline figures are open. Everything else is a fold — this is a
  *  chat message, and a message that takes four screens is not one. */
 /** The agent's line for this turn, as segments. */
-function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
+function sentence({ first, market, swing, net, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
   if (first && market && swing !== null) {
-    const direction =
-      market.adverse_cashflow_direction === "decrease" ? "적어집니다" : "많아집니다";
+    // Which way the money moves is the trade's, not the sentence's. This said
+    // 받는 금액 whatever the direction was, so an import — where a rising rate
+    // means paying more — was told its receipts had fallen. §4.2[9]'s own
+    // sentence has derived this from the sign since it was written; only this
+    // fallback, the one shown when the model is unavailable, did not.
+    // The direction the server sends is the *cashflow's*, and for a payer the
+    // amount paid moves against it: a net KRW cashflow that falls by 3,573,600
+    // is an importer paying that much more. Naming the noun without turning
+    // the verb produced 「내는 금액이 적어집니다」 on a rising rate — fluent,
+    // and the opposite of what happened to the company.
+    const receiving = Number(net) > 0;
+    const worse = market.adverse_cashflow_direction === "decrease";
+    const noun = receiving ? "받는 금액" : "내는 금액";
+    const direction = receiving === worse ? "적어집니다" : "많아집니다";
     return [
       { text: "계산했습니다." },
       { text: `결제일까지 불리한 환율이 ${won(market.adverse_rate)}원일 수 있고,`, strong: true },
-      { text: "그러면 받는 금액이 지금보다" },
+      { text: `그러면 ${noun}이 지금보다` },
       { text: `${won(swing)}원 ${direction}.`, strong: true },
     ];
   }

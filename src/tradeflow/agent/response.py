@@ -13,7 +13,7 @@ change them.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Mapping
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.runtime.analysis_service import decision_packet_document
@@ -54,8 +54,23 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
     }
 
 
+def _engaged(decision: dict[str, Any], declared: Mapping[str, bool]) -> bool:
+    """Whether the company's own words put this rule in play.
+
+    A declared fact is established, so it never appears in `missing_fields`;
+    what it does appear in is the satisfied condition the rule reports. That
+    is the signal, and it needs no list of which rule belongs to which family —
+    the rulepack already says so by naming the field.
+    """
+    if not declared:
+        return False
+    reasons = " ".join(decision.get("reasons") or ())
+    return any(f"{field}=" in reasons for field in declared)
+
+
 def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
     packet = analysis.decision_packet
+    declared = analysis.declared_structure
     if packet is None:
         return {
             "decision_packet": None,
@@ -91,6 +106,14 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
                 else support_candidates
             ).append(projected)
         elif decision["matched"] is not False:
+            # Two rules can both say 정보부족 and mean different things. One
+            # knows it applies — the company said 상계 — and is waiting on the
+            # detail that decides which authority. The other does not know
+            # whether it applies at all, because nobody said whether there is
+            # a 상호계산 account. Nineteen rules run on every compliance
+            # request, so arriving as one list buries the three that were
+            # answering the question.
+            projected["engaged"] = _engaged(decision, declared)
             risk_findings.append(projected)
 
     actions = document["actions"]
