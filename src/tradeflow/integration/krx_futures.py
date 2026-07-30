@@ -37,6 +37,12 @@ def _nullable_decimal(value: Any) -> str | None:
     return text if text and text != "-" else None
 
 
+def _is_usd_futures_outright(row: dict[str, Any]) -> bool:
+    product_name = str(row.get("PROD_NM", "")).replace(" ", "")
+    instrument_name = f" {str(row.get('ISU_NM', '')).upper().strip()} "
+    return "미국달러선물" in product_name and " F " in instrument_name
+
+
 class KrxUsdFuturesAdapter:
     adapter_key: ClassVar[str] = "krx_usd_futures"
 
@@ -99,8 +105,7 @@ class KrxUsdFuturesAdapter:
             row
             for row in raw["OutBlock_1"]
             if isinstance(row, dict)
-            and "미국달러선물"
-            in str(row.get("PROD_NM", "")).replace(" ", "")
+            and _is_usd_futures_outright(row)
         ]
         if not usd_rows:
             raise KrxFuturesError(

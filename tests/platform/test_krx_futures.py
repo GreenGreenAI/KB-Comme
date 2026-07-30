@@ -60,6 +60,32 @@ class KrxUsdFuturesAdapterTests(unittest.TestCase):
         self.assertIn("basDd=20260727", captured["url"])
         self.assertNotIn("observed_forward_quote", json.dumps(payload))
 
+    def test_calendar_spreads_are_not_treated_as_outright_benchmarks(self) -> None:
+        payload = raw_payload()
+        payload["OutBlock_1"].append(
+            {
+                "BAS_DD": "20260727",
+                "PROD_NM": "미국달러 선물",
+                "MKT_NM": "정규",
+                "ISU_CD": "D756869S",
+                "ISU_NM": "미국달러 SP 2608-2609 (주간)",
+                "TDD_CLSPRC": "-0.80",
+                "SETL_PRC": "",
+                "SPOT_PRC": "1,388.20",
+                "ACC_TRDVOL": "6,843",
+                "ACC_OPNINT_QTY": "",
+            }
+        )
+        adapter = KrxUsdFuturesAdapter(
+            api_key="key",
+            opener=lambda request, timeout: Response(payload),
+        )
+
+        result = adapter.fetch(date(2026, 7, 27))
+
+        self.assertEqual(1, len(result["records"]))
+        self.assertEqual("175Q8000", result["records"][0]["instrument_code"])
+
     def test_no_usd_future_and_wrong_host_fail_closed(self) -> None:
         adapter = KrxUsdFuturesAdapter(
             api_key="key",
