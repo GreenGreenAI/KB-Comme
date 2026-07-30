@@ -502,12 +502,12 @@ const AUTHORITY_LABEL = {
  *  the analysis did, the less the screen said. Three candidates were being
  *  decided on every signed-in request and none of them reached the user.
  */
-function Support({ result }) {
+function Support({ result, open }) {
   const candidates = result.support_candidates ?? [];
   const excluded = result.excluded_candidates ?? [];
   if (candidates.length === 0 && excluded.length === 0) {
     return (
-      <details className="fold">
+      <details className="fold" open={open}>
         <summary>지원제도 · 해당하는 제도 없음</summary>
         <p className="fold-note">
           규칙을 모두 확인했고 이 거래에 해당하는 제도가 없었습니다. 판정하지
@@ -518,7 +518,7 @@ function Support({ result }) {
   }
   const settled = candidates.filter((c) => c.status !== "insufficient_information");
   return (
-    <details className="fold">
+    <details className="fold" open={open}>
       <summary>
         지원제도 · 후보 {settled.length}건
         {candidates.length - settled.length > 0 &&
@@ -579,7 +579,7 @@ function Candidate({ candidate, excluded }) {
  *  trade structure the company states, so silence means the structures we
  *  asked about were not present — not that nothing else could apply.
  */
-function Compliance({ result }) {
+function Compliance({ result, open }) {
   const obligations = result.filing_obligations ?? [];
   // Every §5.5 rule that ran and was not ruled out. `filing_obligations` is
   // the subset that produced an action, so a rule saying "정보가 부족합니다"
@@ -607,7 +607,7 @@ function Compliance({ result }) {
     );
   }
   return (
-    <details className="fold" open={engaged.length > 0}>
+    <details className="fold" open={open || engaged.length > 0}>
       <summary>
         신고의무 · {engaged.length > 0 ? `해당 ${engaged.length}건` : `검토 ${findings.length}건`}
       </summary>
@@ -867,6 +867,13 @@ function Answer({ result, order, shown, arrive }) {
   // The same signal that puts the judgement above the sentence: the question
   // was about something the exposure card does not answer.
   const folded = result.lead === "pointer";
+  // The section the question was about, if it was about one of these. It
+  // opens; a judgement that was asked for and arrives collapsed is the same
+  // failure as one rendered below the exchange rate — the reader has to go
+  // looking for the answer to their own question.
+  const asked = folded
+    ? order.find((s) => s !== "exposure" && s !== "market_scenario")
+    : null;
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
@@ -943,10 +950,12 @@ function Answer({ result, order, shown, arrive }) {
               );
             }
             if (section === "support") {
-              return <Support key={section} result={result} />;
+              return <Support key={section} result={result} open={section === asked} />;
             }
             if (section === "compliance") {
-              return <Compliance key={section} result={result} />;
+              return (
+                <Compliance key={section} result={result} open={section === asked} />
+              );
             }
             return null;
           })}

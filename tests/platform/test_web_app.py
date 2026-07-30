@@ -327,5 +327,24 @@ class AskingForTests(unittest.TestCase):
         self.assertIsNone(app._asking_for("헤지를 얼마나 해야 하나요?", {}))
 
 
+class AnonymousSupportTests(unittest.TestCase):
+    """§5.4's rules read company facts and an anonymous caller has none, so a
+    question about 지원제도 is answered by naming two facts rather than a
+    product. Signing in is where those facts already live."""
+
+    def test_it_says_where_the_facts_already_live(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                cases=[],
+                utterance="10월 24일 수출 10만 달러인데 받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+            )
+        )
+        pointer = body["result"]["pointer"]
+
+        self.assertIn("기업규모와 신용 상태", pointer)
+        self.assertIn("로그인", pointer)
+
+
 if __name__ == "__main__":
     unittest.main()

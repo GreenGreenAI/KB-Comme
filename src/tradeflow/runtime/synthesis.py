@@ -405,7 +405,12 @@ def figures(result: dict[str, Any]) -> list[str]:
     return written
 
 
-def pointer(result: dict[str, Any]) -> str:
+#: Which worker answers which subject. Only the ones that can be skipped are
+#: here — exposure and the band run whenever a trade exists.
+WORKER_FOR_SUBJECT = {"support": "support", "compliance": "compliance", "hedge": "hedge"}
+
+
+def pointer(result: dict[str, Any], *, intent: tuple[str, ...] = ()) -> str:
     """What else this answer holds, counted rather than judged.
 
     §4.2[9]'s sentence is given `figures()` and nothing else, so it cannot
@@ -421,6 +426,17 @@ def pointer(result: dict[str, Any]) -> str:
     about exchange rates and left the judgement folded away underneath.
     """
     skipped = (result.get("workers") or {}).get("skipped") or {}
+
+    # A worker that did not run has no counts, so the pointer had nothing to
+    # say and the answer opened on the exchange rate instead — to a company
+    # that had asked about 지원제도 and whose reason for not getting one was
+    # sitting in a fold two blocks down. The reason is the answer here: it is
+    # the shortest true statement about the thing they asked about.
+    for subject in intent:
+        reason = skipped.get(WORKER_FOR_SUBJECT.get(subject, ""))
+        if reason:
+            return reason
+
     parts: list[str] = []
 
     candidates = result.get("support_candidates") or []

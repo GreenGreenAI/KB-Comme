@@ -460,7 +460,17 @@ def analyze_endpoint(
 
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
-    result["pointer"] = pointer(result)
+    result["pointer"] = pointer(result, intent=read_intent(request.utterance or ""))
+    if account is None:
+        # §5.4's rules read company facts, and an anonymous caller has none —
+        # so a question about 지원제도 is answered by naming two facts rather
+        # than a product. Signing in is where those facts already live, and
+        # not saying so leaves the reader to supply by hand what the account
+        # would have carried. Only the web layer knows there is no session;
+        # routing must not learn about sessions to say this.
+        blocked = (result.get("workers") or {}).get("skipped") or {}
+        if "support" in blocked and result["pointer"] == blocked["support"]:
+            result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
     result["holds"] = _holds(request.utterance)
     result["coverage"] = _coverage(request.utterance)
     # Which of the two the reader meets first. §4.2[9]'s sentence may only

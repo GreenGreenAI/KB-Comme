@@ -393,5 +393,50 @@ class WithoutAKeyTests(unittest.TestCase):
         self.assertIn("수치가 없습니다", written.reason)
 
 
+class PointerLeadsWithTheReasonTests(unittest.TestCase):
+    """A worker that did not run has no counts, so the pointer had nothing to
+    say — and the answer opened on the exchange rate, to a company that had
+    asked about 지원제도 and whose reason for not getting one was sitting in a
+    fold two blocks down."""
+
+    RESULT = {
+        "workers": {"skipped": {"support": "기업규모와 신용 상태를 알려주시면 판정합니다"}},
+        "support_candidates": [],
+        "filing_obligations": [],
+        "next_actions": [],
+    }
+
+    def test_the_reason_is_the_answer_when_that_worker_was_asked_about(self) -> None:
+        self.assertEqual(
+            "기업규모와 신용 상태를 알려주시면 판정합니다",
+            pointer(self.RESULT, intent=("support",)),
+        )
+
+    def test_a_question_about_something_else_still_gets_the_counts(self) -> None:
+        """The skipped worker keeps reporting itself in its own fold. Leading
+        with it whatever was asked would make every answer about the thing the
+        product could not do."""
+        self.assertIn("신고 검토", pointer(self.RESULT, intent=("compliance",)))
+
+    def test_no_intent_keeps_the_counts(self) -> None:
+        self.assertIn("신고 검토", pointer(self.RESULT))
+
+    def test_a_worker_that_ran_is_not_treated_as_skipped(self) -> None:
+        ran = {
+            "workers": {"skipped": {}},
+            "support_candidates": [
+                {"status": "expert_confirmation_required"},
+                {"status": "insufficient_information"},
+            ],
+            "filing_obligations": [],
+            "next_actions": [],
+        }
+
+        said = pointer(ran, intent=("support",))
+
+        self.assertIn("지원제도 후보 1건", said)
+        self.assertIn("정보 부족 1건", said)
+
+
 if __name__ == "__main__":
     unittest.main()
