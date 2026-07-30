@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import urllib.error
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -29,6 +30,11 @@ class Response:
         return self.raw[:size]
 
 
+class EmptyResponse(Response):
+    def __init__(self):
+        self.raw = b""
+
+
 class CurrencycloudDemoAdapterTests(unittest.TestCase):
     def test_authenticated_future_quote_is_typed_but_not_executable(self) -> None:
         calls = []
@@ -37,6 +43,8 @@ class CurrencycloudDemoAdapterTests(unittest.TestCase):
             calls.append(request)
             if request.full_url.endswith("/v2/authenticate/api"):
                 return Response({"auth_token": "session-secret"})
+            if request.full_url.endswith("/v2/authenticate/close_session"):
+                return EmptyResponse()
             return Response(
                 {
                     "currency_pair": "USDKRW",
@@ -79,6 +87,10 @@ class CurrencycloudDemoAdapterTests(unittest.TestCase):
             "session-secret",
             calls[1].get_header("X-auth-token"),
         )
+        self.assertTrue(
+            calls[2].full_url.endswith("/v2/authenticate/close_session")
+        )
+        self.assertEqual("session-secret", calls[2].get_header("X-auth-token"))
         self.assertNotIn("secret", repr(adapter))
 
     def test_collect_never_persists_credentials(self) -> None:
@@ -96,6 +108,7 @@ class CurrencycloudDemoAdapterTests(unittest.TestCase):
                     "mid_market_rate": None,
                     "conversion_date": "2026-08-28",
                 },
+                {},
             ]
         )
         adapter = CurrencycloudDemoForwardQuoteAdapter(
@@ -122,6 +135,38 @@ class CurrencycloudDemoAdapterTests(unittest.TestCase):
         self.assertNotIn("login-secret", serialized)
         self.assertNotIn("api-secret", serialized)
         self.assertNotIn("session-secret", serialized)
+
+    def test_quote_failure_still_closes_session(self) -> None:
+        calls = []
+
+        def opener(request, *, timeout):
+            calls.append(request)
+            if request.full_url.endswith("/v2/authenticate/api"):
+                return Response({"auth_token": "session-secret"})
+            if request.full_url.endswith("/v2/authenticate/close_session"):
+                return Response({})
+            raise urllib.error.URLError("offline")
+
+        adapter = CurrencycloudDemoForwardQuoteAdapter(
+            tenant_id="TENANT-1",
+            company_id="COMPANY-1",
+            login_id="login-secret",
+            api_key="api-secret",
+            opener=opener,
+        )
+        with self.assertRaisesRegex(CurrencycloudError, "unreachable"):
+            adapter.fetch(
+                buy_currency="USD",
+                sell_currency="EUR",
+                amount="1000",
+                fixed_side="buy",
+                conversion_date=date(2026, 8, 28),
+                case_ids=("EXP-1",),
+                observed_at=datetime(2026, 7, 28, tzinfo=timezone.utc),
+            )
+        self.assertTrue(
+            calls[-1].full_url.endswith("/v2/authenticate/close_session")
+        )
 
     def test_missing_credentials_and_non_demo_host_fail_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "official"):

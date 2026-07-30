@@ -10,7 +10,6 @@ export default defineConfig({
     include: ["src/**/*.test.{js,jsx}"],
   },
   server: {
-    // The dev server talks to uvicorn so the browser sees one origin.
     proxy: { "/api": "http://127.0.0.1:8000" },
   },
 });

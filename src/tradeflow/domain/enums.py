@@ -42,6 +42,7 @@ class RuleType(StrEnum):
 
 class EvidenceRole(StrEnum):
     USER_TRADE = "user_trade"
+    USER_DECLARATION = "user_declaration"
     CALCULATION = "calculation"
     SUPPORT_ELIGIBILITY = "support_eligibility"
     COMPLIANCE = "compliance"

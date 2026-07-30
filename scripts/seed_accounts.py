@@ -70,6 +70,17 @@ def main() -> int:
         raise RuntimeError("demo accounts must not be seeded in production")
     store = PostgresAccountStore(DATABASE_URL) if DATABASE_URL else AccountStore(DB_PATH)
     for seed in SEEDS:
+        existing = store.find(seed["account_id"])
+        if existing is not None:
+            if existing.email != seed["email"].strip().lower():
+                raise RuntimeError(
+                    f"{seed['account_id']}: existing account email does not match seed"
+                )
+            print(
+                f"{existing.email:24} {existing.company_name:8} "
+                "이미 존재함 — 변경하지 않음"
+            )
+            continue
         account = store.create(
             seed["email"],
             seed["password"],

@@ -41,11 +41,48 @@ TOPIC_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "exposure",
-        ("노출", "자금", "현금", "얼마나 받", "얼마나 내", "손해", "손실", "이익"),
+        # No bare 자금. "제작에 들어갈 자금이 부족합니다" is a question about
+        # raising money, and reading it as exposure made 자금 the first topic
+        # in the sentence — so a company asking about 무역금융 was answered
+        # about its exchange-rate exposure, in that order, and told which
+        # inputs the exposure calculation wanted. 자금 alone does not say
+        # which of the two it is; the verb beside it does.
+        (
+            "노출",
+            "현금",
+            "자금이 얼마",
+            "자금은 얼마",
+            "필요 자금",
+            "필요한 자금",
+            "얼마나 받",
+            "얼마나 내",
+            "손해",
+            "손실",
+            "이익",
+        ),
     ),
     (
         "support",
-        ("지원", "보조금", "정책자금", "보증", "보험", "제도", "혜택", "무역금융"),
+        (
+            "지원",
+            "보조금",
+            "정책자금",
+            "보증",
+            "보험",
+            "제도",
+            "혜택",
+            "무역금융",
+            # Raising money, not measuring exposure.
+            "제작 자금",
+            "제작에 들어갈 자금",
+            "생산 자금",
+            "운전자금",
+            "자금이 부족",
+            "자금 조달",
+            "자금을 조달",
+            "대출",
+            "융자",
+        ),
     ),
     (
         "compliance",

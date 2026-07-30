@@ -11,6 +11,7 @@
 
     --ink-70: color-mix(in srgb, var(--ink) 70%, #fff);
     --ink-45: color-mix(in srgb, var(--ink) 45%, #fff);
+    --ink-30: color-mix(in srgb, var(--ink) 30%, #fff);
     --rule: color-mix(in srgb, var(--soft) 42%, #fff);
     --rule-faint: color-mix(in srgb, var(--soft) 22%, #fff);
     --tint: color-mix(in srgb, var(--soft) 14%, #fff);
@@ -471,9 +472,6 @@
     display: flex; flex-direction: column; gap: 1.4rem;
     scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
   }
-  /* Cancels the column gap it would otherwise inherit, so an empty spacer
-     really is worth nothing. */
-  .tail { flex: none; margin-top: -1.4rem; }
   .thread::-webkit-scrollbar { width: 9px; }
   .thread::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 99px; border: 3px solid var(--paper); }
   .composer { flex: none; }
@@ -621,6 +619,16 @@
     width: 8.5rem; font-family: var(--mono); font-size: 1rem;
     font-variant-numeric: tabular-nums; color: var(--ink); text-align: right;
   }
+  /* The one field where a placeholder must not read as a value. It is right
+     aligned, tabular and monospaced exactly like a typed amount, so at full
+     strength "100,000" looked entered — and 확인 on a number nobody typed is
+     the same failure as mishearing one. */
+  .pointer.lead {
+    /* Answering first, not annotating. The same line reads as a footnote at
+       the size it has under the sentence. */
+    color: var(--ink); font-size: .9375rem; margin-bottom: .35rem;
+  }
+  .money input::placeholder { color: var(--ink-30); }
   .money-read { font-size: .75rem; color: var(--ink-45); }
 
   /* Stacked, keyboard-first. Each option is a different thing to do, so they
@@ -888,6 +896,86 @@
   .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
   .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
   .fold > summary::-webkit-details-marker { display: none; }
+
+  /* Each decision at three rates. Figures right-aligned and tabular so the
+     columns compare by eye — that is the whole point of the table. */
+  .payoff {
+    width: 100%; border-collapse: collapse; margin: .5rem 0 .3rem;
+    font-size: .75rem; font-variant-numeric: tabular-nums;
+  }
+  .payoff th, .payoff td { padding: .3rem .5rem; text-align: right; }
+  .payoff thead th { font-weight: 500; color: var(--ink-45); }
+  .payoff thead th small {
+    display: block; font-family: var(--mono); font-size: .625rem; font-weight: 400;
+  }
+  .payoff tbody th {
+    text-align: left; font-weight: 600; color: var(--ink-70); white-space: nowrap;
+  }
+  .payoff tbody tr { border-top: 1px dashed var(--rule-faint); }
+  .payoff tbody td { font-family: var(--mono); color: var(--ink); }
+
+  /* The quote fields need their own line: five controls do not sit beside a
+     button the way one field does. */
+  .ask-row.quote { align-items: center; }
+  .ask-row.quote > input { flex: 1 1 8rem; min-width: 6rem; }
+  .ask-row.quote > .check { flex: 1 1 100%; margin: .1rem 0 0; }
+
+  /* A line about the answer, not part of it. Quieter than the sentence and
+     louder than the folds it points at. */
+  .pointer { margin: -.4rem 0 0; font-size: .8125rem; color: var(--ink-45); }
+  /* An admission reads differently from a summary. Marked by an edge rather
+     than by colour — the palette has one accent and it belongs to the figures. */
+  .pointer.limit {
+    border-left: 2px solid var(--rule); padding-left: .7rem; margin-top: .1rem;
+  }
+
+  /* ---------- verdicts ---------- */
+  /* One judgement per row. The palette has no green/amber/red to lean on, so
+     state is carried by form: a filled chip for a judgement that stands, an
+     outlined one for a judgement still waiting on something, a dashed one for
+     a rule that ran and did not apply. */
+  .verdict {
+    padding: .6rem 0 .65rem; border-top: 1px dashed var(--rule-faint);
+    display: flex; flex-direction: column; gap: .35rem;
+  }
+  .verdict:first-of-type { border-top: 0; padding-top: .35rem; }
+  .verdict-head {
+    display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap;
+  }
+  .verdict-head b { font-size: .875rem; font-weight: 600; }
+
+  .chip {
+    flex: none; font-size: .6875rem; line-height: 1.5; padding: .1rem .5rem;
+    border-radius: 999px; border: 1px solid var(--rule);
+    color: var(--ink-70); background: var(--paper);
+  }
+  /* A judgement that stands, pending only an official check. */
+  .chip.expert_confirmation_required {
+    background: var(--accent-tint); border-color: var(--accent); color: var(--accent-deep);
+  }
+  .chip.matched { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+  /* Still a question. Outlined, because nothing has been decided. */
+  .chip.insufficient_information { border-style: dashed; color: var(--ink-45); }
+  /* Ran and did not apply — decided, but not in this company's favour. */
+  .chip.out, .chip.not_matched { color: var(--ink-45); background: var(--tint); border-color: transparent; }
+  .chip.who { background: var(--tint); border-color: transparent; }
+
+  /* The rule's own text, one fold deeper. Nobody should have to read
+     `company.size=small in [...]` to learn a judgement was made, and nobody
+     checking one should be unable to. */
+  .why > summary {
+    cursor: pointer; list-style: none; font-size: .6875rem; color: var(--ink-45);
+    padding: .15rem 0;
+  }
+  .why > summary::-webkit-details-marker { display: none; }
+  .why > summary:hover { color: var(--accent); }
+  .reasons {
+    margin: .2rem 0 .3rem; padding-left: .9rem;
+    font-family: var(--mono); font-size: .6875rem; line-height: 1.7; color: var(--ink-70);
+  }
+  .sources {
+    margin: 0; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
+  }
   .fold > summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform .15s ease; }
   .fold[open] > summary::before { transform: rotate(90deg); }
   .fold > summary:hover { color: var(--accent); }

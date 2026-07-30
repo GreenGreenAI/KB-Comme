@@ -311,7 +311,7 @@ class AccountStore:
         )
         with self._connect() as db:
             db.execute(
-                "INSERT OR REPLACE INTO accounts"
+                "INSERT INTO accounts"
                 " (account_id, organization_id, role, email, password,"
                 " company_name, facts) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -369,13 +369,7 @@ class AccountStore:
                 )
             return _account(row)
         if not locked:
-            self._record_login_failure(
-                identity_hash,
-                attempt,
-                now=moment,
-            )
-        if not password_valid:
-            return None
+            self._record_login_failure(identity_hash, attempt, now=moment)
         return None
 
     def _record_login_failure(

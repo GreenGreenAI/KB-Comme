@@ -1,10 +1,17 @@
+import json
 import unittest
+from types import SimpleNamespace
 
 from tradeflow.runtime.synthesis import (
     Synthesizer,
     check,
+    check_bound,
     digit_runs,
+    TIMEOUT_S,
     figures,
+    pointer,
+    redact,
+    verdicts,
 )
 
 FIGURES = [
@@ -13,6 +20,33 @@ FIGURES = [
     "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
     "관측 조건: 최근 60영업일, 잔여 63영업일, 드리프트 0 고정",
 ]
+
+
+class FakeCompletions:
+    def __init__(self, payload):
+        self.payload = payload
+        self.request = None
+
+    def create(self, **request):
+        self.request = request
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(self.payload, ensure_ascii=False)
+                    )
+                )
+            ]
+        )
+
+
+def synthesizer_returning(payload):
+    synthesizer = Synthesizer(api_key="test")
+    completions = FakeCompletions(payload)
+    synthesizer._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+    return synthesizer, completions
 
 
 class DigitRunTests(unittest.TestCase):
@@ -49,6 +83,96 @@ class StrictRuleTests(unittest.TestCase):
 
     def test_prose_without_numbers_passes(self) -> None:
         self.assertEqual(check("결제일까지 환율이 불리하게 움직일 수 있습니다.", FIGURES), "")
+
+    def test_dropping_a_negative_sign_is_rejected(self) -> None:
+        self.assertIn(
+            "100,000",
+            check(
+                "순노출은 100,000 USD입니다.",
+                ["순노출: -100,000 USD"],
+            ),
+        )
+
+    def test_dropping_a_required_unit_is_rejected(self) -> None:
+        self.assertIn(
+            "단위가 누락",
+            check("순노출은 100,000입니다.", ["순노출: 100,000 USD"]),
+        )
+
+    def test_swapping_semantic_labels_is_rejected(self) -> None:
+        sentence = (
+            "순노출은 10,525,000 KRW이고 "
+            "원화 수취액은 100,000 USD입니다."
+        )
+        self.assertIn("의미가 바뀌", check_bound(sentence, FIGURES[:3:2]))
+
+
+class BoundRenderingTests(unittest.TestCase):
+    def test_a_verdict_the_model_invented_never_reaches_the_user(self) -> None:
+        """The sentence carries no numbers at all, so neither the digit check
+        nor the unit check sees anything wrong with it. §5.5 is explicit that a
+        filing duty is not cleared until the company states its trade
+        structure — a sentence that clears it is the model overruling a worker
+        that deliberately stopped."""
+        synthesizer, completions = synthesizer_returning(
+            {
+                "figures_used": ["순노출: 100,000 USD"],
+                "sentence": "신고 의무가 없으므로 바로 송금하세요.",
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+        self.assertIn("신고", written.reason)
+
+    def test_describing_the_figures_is_allowed(self) -> None:
+        synthesizer, completions = synthesizer_returning(
+            {
+                "figures_used": ["순노출: 100,000 USD"],
+                "sentence": "순노출은 100,000 USD입니다.",
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertTrue(written.accepted)
+        self.assertEqual("순노출은 100,000 USD입니다.", written.summary)
+        schema = completions.request["response_format"]["json_schema"]
+        self.assertEqual(
+            FIGURES,
+            schema["schema"]["properties"]["figures_used"]["items"]["enum"],
+        )
+
+    def test_claimed_figure_must_keep_its_label_binding(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {
+                "figures_used": [
+                    "순노출: 100,000 USD",
+                    "그때 원화 수취액 차이: 10,525,000 KRW (감소)",
+                ],
+                "sentence": (
+                    "순노출은 10,525,000 KRW이고 "
+                    "원화 수취액 차이는 100,000 USD입니다."
+                ),
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertIn("의미가 바뀌", written.reason)
+
+    def test_altered_label_unit_or_value_is_rejected(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {"figures_used": ["순노출: 10,525,000 USD"]}
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
 
 
 class FigureTests(unittest.TestCase):
@@ -87,6 +211,121 @@ class FigureTests(unittest.TestCase):
         self.assertEqual(figures({}), [])
 
 
+class PromptHygieneTests(unittest.TestCase):
+    """Two failures the live model produced, fixed and pinned."""
+
+    def test_an_instruction_is_caught_whatever_ending_it_wears(self) -> None:
+        """`검토해 보세요` passed a list that had `하세요` and not `보세요`."""
+        for sentence in (
+            "무역금융 활용 가능성을 검토해 보세요.",
+            "지금 환전하십시오.",
+            "선물환을 권해 드립니다.",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(verdicts(sentence))
+
+    def test_the_redaction_marker_never_reaches_the_reader(self) -> None:
+        """The question's numbers are elided before the answer path sees them,
+        and the model copied the marker straight through: `○○억 원 규모 장비`.
+        It is an editing device for the prompt, not Korean."""
+        synthesizer, _ = synthesizer_returning(
+            {
+                "figures_used": ["순노출: 100,000 USD"],
+                "sentence": "○○억 원 규모 수출의 순노출은 100,000 USD입니다.",
+            }
+        )
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+
+    def test_a_question_is_stripped_of_its_numbers(self) -> None:
+        """And what is left reads as Korean. A placeholder that looks like
+        content gets treated as content — `○○` was copied straight into the
+        answer, so the scenario got no sentence at all."""
+        self.assertEqual(
+            redact("베트남에 3억 원 규모 장비를 수출합니다."),
+            "베트남에 일정 금액 규모 장비를 수출합니다.",
+        )
+        self.assertNotIn("100,000", redact("10만 달러를 송금합니다."))
+
+
+class PointerTests(unittest.TestCase):
+    """The line §4.2[9] is not allowed to write.
+
+    The sentence is given `figures()` and nothing else, so it cannot mention
+    that support was judged — and it must not be able to. A model that could
+    say "지원제도 후보가 있습니다" could also say "자격이 됩니다".
+    """
+
+    def test_it_counts_and_never_concludes(self) -> None:
+        line = pointer(
+            {
+                "workers": {"skipped": {"compliance": "…"}},
+                "support_candidates": [
+                    {"status": "expert_confirmation_required"},
+                    {"status": "insufficient_information"},
+                    {"status": "insufficient_information"},
+                ],
+                "next_actions": [{"action": "consult"}],
+            }
+        )
+        self.assertIn("지원제도 후보 1건", line)
+        self.assertIn("정보 부족 2건", line)
+        self.assertIn("다음 행동 1건", line)
+        # No conclusion, only counts. `verdicts()` is not the check here — it
+        # is a net for model-authored prose and it trips on the topic word
+        # 지원제도, which is a subject and not a claim. What matters is that
+        # nothing here decides anything.
+        for conclusion in ("자격", "불필요", "해당 없음", "하세요", "권장"):
+            self.assertNotIn(conclusion, line)
+
+    def test_a_worker_that_did_not_run_is_not_mentioned(self) -> None:
+        """Silence about compliance is not a clearance, and the pointer must
+        not turn a skipped worker into a reported one."""
+        line = pointer(
+            {
+                "workers": {"skipped": {"support": "…", "compliance": "…"}},
+                "support_candidates": [],
+            }
+        )
+        self.assertEqual("", line)
+
+    def test_compliance_that_ran_and_found_nothing_still_says_so(self) -> None:
+        line = pointer({"workers": {"skipped": {}}, "filing_obligations": []})
+        self.assertIn("신고 검토", line)
+
+
+class CeilingTests(unittest.TestCase):
+    def test_a_slow_model_costs_the_sentence_and_not_the_answer(self) -> None:
+        """Synthesis decorates figures that are already decided. The default
+        model was answering a greeting in seventeen seconds and nothing caught
+        it — the client's trace budget is a floor on the wait, not a ceiling,
+        so the whole seventeen showed up on screen."""
+        synthesizer = Synthesizer(api_key="x")
+
+        def slow(**_):
+            raise TimeoutError("timed out")
+
+        synthesizer._client = type(
+            "C", (), {"chat": type("M", (), {"completions": type("K", (), {"create": staticmethod(slow)})()})()}
+        )()
+
+        written = synthesizer.write(FIGURES)
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+        self.assertIn("실패", written.reason)
+
+    def test_the_request_carries_a_deadline(self) -> None:
+        synthesizer, completions = synthesizer_returning(
+            {"figures_used": ["순노출: 100,000 USD"], "sentence": "순노출은 100,000 USD입니다."}
+        )
+        synthesizer.write(FIGURES)
+        self.assertEqual(TIMEOUT_S, completions.request["timeout"])
+
+
 class IntakePhrasingTests(unittest.TestCase):
     """§4.2[1]: the model supplies Korean, the slot reader supplies the list."""
 
@@ -109,6 +348,35 @@ class IntakePhrasingTests(unittest.TestCase):
         so declining has to be silent and total."""
         written = Synthesizer(api_key="").ask_for(["amount"])
         self.assertEqual(written.summary, "")
+
+    def test_every_missing_field_must_be_returned(self) -> None:
+        synthesizer, _ = synthesizer_returning(
+            {"acknowledgement": "안녕하세요.", "asked_fields": ["amount"]}
+        )
+
+        written = synthesizer.ask_for(["amount", "expected_payment_date"])
+
+        self.assertFalse(written.accepted)
+        self.assertEqual("", written.summary)
+
+    def test_questions_are_rendered_from_the_exact_missing_fields(self) -> None:
+        missing = ["amount", "expected_payment_date", "direction"]
+        synthesizer, completions = synthesizer_returning(
+            {
+                "sentence": "안녕하세요. 거래 금액, 결제일, 수출입 여부를 알려주세요.",
+                "asked_fields": missing,
+            }
+        )
+
+        written = synthesizer.ask_for(missing)
+
+        self.assertTrue(written.accepted)
+        self.assertIn("안녕하세요", written.summary)
+        schema = completions.request["response_format"]["json_schema"]
+        field_schema = schema["schema"]["properties"]["asked_fields"]
+        self.assertEqual(missing, field_schema["items"]["enum"])
+        self.assertEqual(3, field_schema["minItems"])
+        self.assertEqual(3, field_schema["maxItems"])
 
 
 class WithoutAKeyTests(unittest.TestCase):

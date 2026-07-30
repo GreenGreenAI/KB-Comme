@@ -360,6 +360,11 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
         "missing_input_queue": _missing_input_queue(analysis, knowledge),
         "required_inputs": {
             "hedge": list(analysis.required_inputs),
+            "quote": (
+                []
+                if analysis.hedge is not None
+                else ["provider", "contract_rate", "cost_rate", "valid_until"]
+            ),
             "all": [
                 item["field"]
                 for item in _missing_input_queue(analysis, knowledge)

@@ -411,6 +411,18 @@ class TradeFlowPipeline:
             requirements.append(EvidenceRequirement(EvidenceRole.COMPLIANCE))
         coverage = validate_evidence_contract(requirements, complete_evidence)
         review_reasons = self._review_reasons(tuple(decisions), coverage)
+        if any(
+            item.role is EvidenceRole.USER_DECLARATION
+            for item in all_evidence
+        ):
+            review_reasons = tuple(
+                dict.fromkeys(
+                    (
+                        *review_reasons,
+                        "기업 자기선언 사실은 공식 자격 증거로 확인해야 합니다",
+                    )
+                )
+            )
         deadlines_by_case = {
             case_id: item.deadlines
             for case_id, item in derived_by_case.items()

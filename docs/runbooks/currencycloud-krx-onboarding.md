@@ -1,8 +1,8 @@
 ---
-status: proposed
+status: accepted
 owner: knowledge-domain
 reviewers: platform-runtime
-last-reviewed: 2026-07-28
+last-reviewed: 2026-07-30
 ---
 
 # Currencycloud Demo 및 KRX benchmark 연결
@@ -36,14 +36,16 @@ KRX는 Data Marketplace 가입·인증키 발급·`선물 일별매매정보(주
 
 ## 현재 검증 상태
 
-2026-07-28 KRX 공식 sample endpoint에 공개 sample credential로 실제 HTTPS 요청을
-보내 `OutBlock_1` 10건을 수신했다. 다만 sample은 2020-04-14 KOSPI200 선물만
-반환하므로 USD 선물 parser의 운영 응답 검증은 아니다. 운영 key가 생기기 전까지
-상태는 `sample_transport_verified_production_key_required`다.
+2026-07-30 승인된 KRX 인증키로 공식 endpoint에 실제 HTTPS 요청을 보내
+2026-07-29 미국달러선물 outright 40건을 수신·정규화했다. 같은 응답의 음수 가격
+calendar spread는 outright와 다른 상품이므로 명시적으로 제외한다. 현재 상태는
+`production_transport_and_contract_verified`다.
 
 Currencycloud adapter는 인증 → 미래일자 detailed rate → tenant-private snapshot
-흐름과 credential 비저장 테스트를 통과했다. 실제 Demo 호출은 credential이
-들어오기 전까지 `demo_credentials_required`다.
+흐름, credential 비저장, 호출 후 session 종료 테스트를 통과했다. 2026-07-30
+Demo 자격으로 USD/EUR 미래일자 quote를 실제 호출해 계약을 검증했다. Currencycloud
+지원 통화에 KRW가 없으므로 이 연결은 API transport와 provider quote 계약 검증에
+사용하고, USD/KRW 시장 benchmark는 KRX·ECOS가 담당한다.
 
 credential 설정 후 실제 smoke test는 다음 명령으로 실행한다.
 
@@ -52,7 +54,7 @@ $env:PYTHONPATH = "src"
 python scripts/smoke_quote_apis.py krx --date 2026-07-27
 python scripts/smoke_quote_apis.py currencycloud `
   --tenant-id TENANT-1 --company-id COMPANY-1 --case-id EXP-1 `
-  --buy USD --sell KRW --amount 100000 --fixed-side buy `
+  --buy USD --sell EUR --amount 100000 --fixed-side buy `
   --conversion-date 2026-08-28
 ```
 

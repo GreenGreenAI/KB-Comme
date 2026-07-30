@@ -77,6 +77,7 @@ class CurrencycloudDemoForwardQuoteAdapter:
         method: str,
         form: dict[str, str] | None = None,
         token: str | None = None,
+        allow_empty: bool = False,
     ) -> dict[str, Any]:
         body = urllib.parse.urlencode(form or {}).encode("ascii") if form else None
         headers = {"Accept": "application/json"}
@@ -101,6 +102,8 @@ class CurrencycloudDemoForwardQuoteAdapter:
             raise CurrencycloudError("Currencycloud Demo is unreachable") from None
         if len(raw) > self._max_bytes:
             raise CurrencycloudError("Currencycloud Demo response is too large")
+        if allow_empty and not raw:
+            return {}
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -127,6 +130,15 @@ class CurrencycloudDemoForwardQuoteAdapter:
         if not isinstance(token, str) or not token:
             raise CurrencycloudError("Currencycloud Demo omitted auth_token")
         return token
+
+    def close_session(self, token: str) -> None:
+        """Close a short-lived demo API session without exposing its token."""
+        self._request(
+            "/v2/authenticate/close_session",
+            method="POST",
+            token=token,
+            allow_empty=True,
+        )
 
     def fetch(
         self,
@@ -158,20 +170,23 @@ class CurrencycloudDemoForwardQuoteAdapter:
             raise ValueError("amount must be positive")
 
         token = self.authenticate()
-        params = urllib.parse.urlencode(
-            {
-                "buy_currency": buy,
-                "sell_currency": sell,
-                "amount": str(quantity),
-                "fixed_side": fixed_side,
-                "conversion_date": conversion_date.isoformat(),
-            }
-        )
-        raw = self._request(
-            f"/v2/rates/detailed?{params}",
-            method="GET",
-            token=token,
-        )
+        try:
+            params = urllib.parse.urlencode(
+                {
+                    "buy_currency": buy,
+                    "sell_currency": sell,
+                    "amount": str(quantity),
+                    "fixed_side": fixed_side,
+                    "conversion_date": conversion_date.isoformat(),
+                }
+            )
+            raw = self._request(
+                f"/v2/rates/detailed?{params}",
+                method="GET",
+                token=token,
+            )
+        finally:
+            self.close_session(token)
         economic = {
             key: raw.get(key)
             for key in (

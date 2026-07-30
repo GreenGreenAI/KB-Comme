@@ -62,9 +62,9 @@ missing fact: company.credit_issue_free
 
 ### 자기 선언은 자기 선언이라고 말한다
 
-계정이 진술한 기업 사실은 `SUPPORT_ELIGIBILITY` 역할의 증거로 규칙에 전달되지만,
-증거 payload는 그 근거를 `기업이 계정에 직접 입력한 사실`로 명시한다. 공식 출처
-스냅샷과 같은 무게가 아니다. 실제로 이 경로로 열린 판정은
+계정이 진술한 기업 사실은 `USER_DECLARATION` 역할의 증거로 규칙에 전달된다.
+공식 출처 스냅샷의 `SUPPORT_ELIGIBILITY`와 역할 단계에서 분리되며, 증거 payload도
+그 근거를 `기업이 계정에 직접 입력한 사실`로 명시한다. 실제로 이 경로로 열린 판정은
 `expert_confirmation_required`로 나오며, 자동 확정되지 않는다.
 
 「우리는 중소기업입니다」라는 자기 진술로 보험 자격을 확정할 수는 없다. 계정은
