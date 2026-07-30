@@ -1,4 +1,5 @@
 import json
+import io
 import tempfile
 import unittest
 import urllib.error
@@ -167,6 +168,65 @@ class CurrencycloudDemoAdapterTests(unittest.TestCase):
         self.assertTrue(
             calls[-1].full_url.endswith("/v2/authenticate/close_session")
         )
+
+    def test_provider_error_preserves_safe_codes_without_request_secrets(self) -> None:
+        responses = 0
+
+        def opener(request, *, timeout):
+            nonlocal responses
+            responses += 1
+            if responses == 1:
+                return Response({"auth_token": "session-secret"})
+            if request.full_url.endswith("/v2/authenticate/close_session"):
+                return EmptyResponse()
+            body = json.dumps(
+                {
+                    "error_code": "invalid_currency_pair",
+                    "error_messages": {
+                        "currency_pair": [
+                            {
+                                "code": "unsupported",
+                                "message": "Pair is unavailable",
+                                "params": {
+                                    "api_key": "api-secret",
+                                    "token": "session-secret",
+                                },
+                            }
+                        ]
+                    },
+                }
+            ).encode("utf-8")
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                {},
+                io.BytesIO(body),
+            )
+
+        adapter = CurrencycloudDemoForwardQuoteAdapter(
+            tenant_id="TENANT-1",
+            company_id="COMPANY-1",
+            login_id="login-secret",
+            api_key="api-secret",
+            opener=opener,
+        )
+        with self.assertRaises(CurrencycloudError) as caught:
+            adapter.fetch(
+                buy_currency="USD",
+                sell_currency="KRW",
+                amount="1000",
+                fixed_side="buy",
+                conversion_date=date(2026, 8, 28),
+                case_ids=("EXP-1",),
+                observed_at=datetime(2026, 7, 28, tzinfo=timezone.utc),
+            )
+        message = str(caught.exception)
+        self.assertIn("HTTP 400", message)
+        self.assertIn("invalid_currency_pair", message)
+        self.assertIn("currency_pair:unsupported", message)
+        self.assertNotIn("api-secret", message)
+        self.assertNotIn("session-secret", message)
 
     def test_missing_credentials_and_non_demo_host_fail_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "official"):

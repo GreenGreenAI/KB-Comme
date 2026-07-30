@@ -26,10 +26,46 @@ SOURCE_ID = "CURRENCYCLOUD_DEMO_FORWARD_QUOTES"
 LOGIN_ID_ENV = "CURRENCYCLOUD_DEMO_LOGIN_ID"
 API_KEY_ENV = "CURRENCYCLOUD_DEMO_API_KEY"
 DEFAULT_MAX_BYTES = 2 * 1024 * 1024
+_SAFE_PROVIDER_DETAIL_LIMIT = 160
 
 
 class CurrencycloudError(RuntimeError):
     """Safe-to-report demo authentication, transport or contract failure."""
+
+
+def _safe_http_error_detail(exc: urllib.error.HTTPError, max_bytes: int) -> str:
+    """Return provider error identifiers without echoing request credentials."""
+    try:
+        raw = exc.read(max_bytes + 1)
+        payload = json.loads(raw.decode("utf-8"))
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    details: list[str] = []
+    error_code = payload.get("error_code")
+    if isinstance(error_code, str):
+        details.append(error_code[:_SAFE_PROVIDER_DETAIL_LIMIT])
+    error_messages = payload.get("error_messages")
+    if isinstance(error_messages, dict):
+        for field, entries in error_messages.items():
+            if not isinstance(field, str) or not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                code = entry.get("code")
+                message = entry.get("message")
+                if isinstance(code, str):
+                    details.append(
+                        f"{field}:{code}"[:_SAFE_PROVIDER_DETAIL_LIMIT]
+                    )
+                elif isinstance(message, str):
+                    details.append(
+                        f"{field}:{message}"[:_SAFE_PROVIDER_DETAIL_LIMIT]
+                    )
+    return "; ".join(details[:4])
 
 
 class CurrencycloudDemoForwardQuoteAdapter:
@@ -95,8 +131,10 @@ class CurrencycloudDemoForwardQuoteAdapter:
             with self._opener(request, timeout=self._timeout) as response:
                 raw = response.read(self._max_bytes + 1)
         except urllib.error.HTTPError as exc:
+            detail = _safe_http_error_detail(exc, self._max_bytes)
+            suffix = f" ({detail})" if detail else ""
             raise CurrencycloudError(
-                f"Currencycloud Demo returned HTTP {exc.code}"
+                f"Currencycloud Demo returned HTTP {exc.code}{suffix}"
             ) from None
         except urllib.error.URLError:
             raise CurrencycloudError("Currencycloud Demo is unreachable") from None
