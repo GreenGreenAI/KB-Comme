@@ -44,7 +44,7 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.runtime import introduction, narration, observing
+from tradeflow.runtime import introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
@@ -467,7 +467,7 @@ def analyze_endpoint(
         profit_floor=profit_floor,
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
-        intent=read_intent(_subject_text(request)),
+        intent=_subjects(request),
     )
     result = build_response(analysis)
 
@@ -498,7 +498,8 @@ def analyze_endpoint(
 
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
-    result["pointer"] = pointer(result, intent=read_intent(subject))
+    subjects = tuple(result["execution_plan"]["topics"])
+    result["pointer"] = pointer(result, intent=subjects)
     if account is None:
         # §5.4's rules read company facts, and an anonymous caller has none —
         # so a question about 지원제도 is answered by naming two facts rather
@@ -562,7 +563,7 @@ def analyze_endpoint(
     # The pointer exists because the synthesised sentence may not carry a
     # verdict. When the narration carries one, the pointer is the same claim
     # twice — and the reader met it twice, three lines apart.
-    if any(result["said"].get(section) for section in read_intent(subject)):
+    if any(result["said"].get(section) for section in subjects):
         result["pointer"] = ""
     if request.trace:
         result["trace"] = _trace(request, reading, analysis, subject)
@@ -577,13 +578,13 @@ def analyze_endpoint(
     # was two lines further down, in the code-owned pointer.
     #
     # Ordering only. Nothing is added, removed or re-worded.
-    result["lead"] = "pointer" if _pointer_leads(subject) else "summary"
+    result["lead"] = "pointer" if _leads(subjects) else "summary"
     # What to ask for next, chosen by what was asked about. Every blocked
     # worker still reports its reason in its own fold — nothing is hidden —
     # but only one of them gets the top of the screen and an input panel.
     # A company that asked whether its netting is reportable was being asked
     # for its operating profit, which is §5.3's input and nobody's answer.
-    result["asking_for"] = _asking_for(subject, result)
+    result["asking_for"] = _asking_for(subjects, result)
     # The facts §5.4 is waiting for, when the caller is the one who can state
     # them. A signed-in company already stated them once and is never asked.
     result["required_inputs"]["profile"] = (
@@ -674,6 +675,20 @@ def _trace(
     }
 
 
+def _subjects(request: AnalyzeRequest) -> tuple[str, ...]:
+    """What this turn is about — keywords first, the model appending.
+
+    The keyword reading keeps its lead, so every routing case pinned in
+    `tests/acceptance/routing.json` still holds whatever the model says. What
+    the model can do is notice a subject the word lists have no entry for:
+    「지금 환전해 두는 게 나을까요」 names no hedge word and is a hedge
+    question, and 「거래처가 망하면 대금을 못 받을 텐데」 names no support word
+    and is asking which insurance covers it.
+    """
+    said = _subject_text(request)
+    return planner.widen(said, read_intent(said), synthesizer=synthesizer, seed=said)
+
+
 def _subject_text(request: AnalyzeRequest) -> str:
     """The sentence whose subject this turn is answering.
 
@@ -684,11 +699,12 @@ def _subject_text(request: AnalyzeRequest) -> str:
     return request.utterance or request.asked_about or ""
 
 
-def _pointer_leads(utterance: str | None) -> bool:
-    """True when the first thing the sentence asked about is not what the
-    summary can say. Silence — a trade description with no question — keeps
-    the default order."""
-    lead = next(iter(read_intent(utterance or "")), None)
+def _leads(subjects: tuple[str, ...]) -> bool:
+    """True when the first thing asked about is not what the summary can say.
+
+    Silence — a trade description with no question — keeps the default order.
+    """
+    lead = next(iter(subjects), None)
     return lead is not None and lead not in _SENTENCE_SUBJECTS
 
 
@@ -834,7 +850,7 @@ def _standing_answer(utterance: str | None, as_of: date) -> tuple[str, list[str]
 _UNBLOCKS = {"hedge": "hedge", "exposure": "hedge", "support": "support"}
 
 
-def _asking_for(utterance: str | None, result: dict[str, Any]) -> str | None:
+def _asking_for(topics: tuple[str, ...], result: dict[str, Any]) -> str | None:
     """The one worker whose missing input is worth the top of the screen.
 
     §4.2[2] already decides why each worker was skipped and every reason is
@@ -848,7 +864,6 @@ def _asking_for(utterance: str | None, result: dict[str, Any]) -> str | None:
     not know their exposure well enough to ask about it by name.
     """
     skipped = (result.get("workers") or {}).get("skipped") or {}
-    topics = read_intent(utterance or "")
     if not topics:
         return "hedge" if "hedge" in skipped else None
     for topic in topics:

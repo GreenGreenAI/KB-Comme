@@ -266,27 +266,25 @@ class AnswerOrderTests(unittest.TestCase):
     design and it stays — but it meant a company asking about 제작 자금 always
     opened the answer on its exchange-rate exposure, with the judgement it had
     asked for two lines below in the code-owned pointer.
+
+    Written against the subjects rather than the sentence: the reading is now
+    the keywords plus whatever the model adds, and this holds for both.
     """
 
-    def test_a_financing_question_is_answered_first(self) -> None:
-        self.assertTrue(
-            app._pointer_leads(
-                "제품 제작에 들어갈 자금이 부족합니다. 무역금융이 있을까요?"
-            )
-        )
-
     def test_a_filing_question_is_answered_first(self) -> None:
-        self.assertTrue(app._pointer_leads("신고해야 할 게 있나요?"))
+        self.assertTrue(app._leads(("compliance",)))
+
+    def test_a_financing_question_is_answered_first(self) -> None:
+        self.assertTrue(app._leads(("support",)))
 
     def test_an_exposure_question_keeps_the_sentence_first(self) -> None:
-        self.assertFalse(app._pointer_leads("환율이 얼마나 오를까요?"))
+        self.assertFalse(app._leads(("market_scenario",)))
+        self.assertFalse(app._leads(("exposure",)))
+        self.assertFalse(app._leads(("hedge",)))
 
     def test_a_trade_description_keeps_the_sentence_first(self) -> None:
         """No question in it, so nothing was asked out of order."""
-        self.assertFalse(
-            app._pointer_leads("10월 24일에 수출대금 10만 달러 받기로 했어요")
-        )
-        self.assertFalse(app._pointer_leads(None))
+        self.assertFalse(app._leads(()))
 
 
 class AskingForTests(unittest.TestCase):
@@ -303,28 +301,21 @@ class AskingForTests(unittest.TestCase):
         return {"workers": {"skipped": {name: "…" for name in names}}}
 
     def test_a_filing_question_is_not_asked_for_the_operating_profit(self) -> None:
-        self.assertIsNone(
-            app._asking_for("상계로 처리하는데 신고 대상인가요", self._skipped("hedge"))
-        )
+        self.assertIsNone(app._asking_for(("compliance",), self._skipped("hedge")))
 
     def test_a_hedge_question_is(self) -> None:
         self.assertEqual(
-            "hedge",
-            app._asking_for("헤지를 얼마나 해야 하나요?", self._skipped("hedge")),
+            "hedge", app._asking_for(("hedge",), self._skipped("hedge"))
         )
 
     def test_a_trade_description_keeps_the_funnel(self) -> None:
         """§2's reader does not know their exposure well enough to ask about it
-        by name, so a sentence that asked about nothing keeps the old behaviour."""
-        self.assertEqual(
-            "hedge",
-            app._asking_for(
-                "10월 24일에 수출대금 10만 달러 받기로 했어요", self._skipped("hedge")
-            ),
-        )
+        by name, so a sentence that asked about nothing keeps the old
+        behaviour."""
+        self.assertEqual("hedge", app._asking_for((), self._skipped("hedge")))
 
     def test_nothing_is_asked_for_when_nothing_is_blocked(self) -> None:
-        self.assertIsNone(app._asking_for("헤지를 얼마나 해야 하나요?", {}))
+        self.assertIsNone(app._asking_for(("hedge",), {}))
 
 
 class AnonymousSupportTests(unittest.TestCase):
