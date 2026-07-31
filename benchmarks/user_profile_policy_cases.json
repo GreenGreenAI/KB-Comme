@@ -1,0 +1,284 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "TRADEFLOW_USER_PROFILE_POLICY_V1",
+  "status": "executable",
+  "as_of": "2026-07-31",
+  "note": "결정론적 profile-policy runtime과 전용 benchmark harness로 실행한다.",
+  "provenance_values": [
+    "verified",
+    "user_declared",
+    "estimated",
+    "stale",
+    "unavailable",
+    "conflicting"
+  ],
+  "scenarios": [
+    {
+      "id": "PP01",
+      "track": "classification_semantics",
+      "critical": true,
+      "title": "기존 수출 중소기업의 환민감 보조 유형을 보존한다",
+      "input": {
+        "company_size": "small",
+        "trade_roles": ["exporter"],
+        "trade_maturity_months": 36,
+        "export_volume_trailing_12m_usd": "1000000",
+        "currency_cashflows": [{"currency": "USD", "net_amount": "500000"}],
+        "existing_hedge_ratio": "0"
+      },
+      "expect": {
+        "primary_type": "existing_exporter_sme",
+        "secondary_types_include": ["fx_sensitive"],
+        "unsupported_types_absent": ["potential_exporter"]
+      }
+    },
+    {
+      "id": "PP02",
+      "track": "classification_semantics",
+      "critical": true,
+      "title": "수출실적이 없다는 사실만으로 스타트업을 추정하지 않는다",
+      "input": {
+        "company_size": "small",
+        "established_year": 2008,
+        "trade_roles": ["potential_exporter"],
+        "trade_maturity_months": 0,
+        "export_volume_trailing_12m_usd": "0",
+        "has_export_contract": true
+      },
+      "expect": {
+        "primary_type": "potential_exporter",
+        "unsupported_types_absent": ["startup_early_exporter"]
+      }
+    },
+    {
+      "id": "PP03",
+      "track": "classification_semantics",
+      "critical": true,
+      "title": "장기결제 수요만으로 소부장·방산 업종을 추정하지 않는다",
+      "input": {
+        "company_size": "medium",
+        "trade_roles": ["importer"],
+        "financing_needs": ["import_usance"],
+        "industry_tags": []
+      },
+      "expect": {
+        "axes_include": {"trade_role": ["importer"]},
+        "unsupported_types_absent": ["materials_defense_importer"],
+        "missing_fields_include": ["company.industry_tags"]
+      }
+    },
+    {
+      "id": "PP04",
+      "track": "classification_semantics",
+      "critical": true,
+      "title": "검증된 협력사 관계를 근거와 함께 분류한다",
+      "input": {
+        "supplier_relationships": [{
+          "tier": 1,
+          "anchor_company_id": "ANCHOR-1",
+          "provenance": "verified",
+          "evidence_id": "agreement:supplier-1"
+        }]
+      },
+      "expect": {
+        "secondary_types_include": ["supply_chain_supplier"],
+        "classification_evidence_ids_include": ["agreement:supplier-1"]
+      }
+    },
+    {
+      "id": "PP05",
+      "track": "classification_semantics",
+      "critical": true,
+      "title": "fresh 공식 국가정책으로 고위험 거래 태그를 만든다",
+      "input": {
+        "countries": ["XZ"],
+        "country_policy": {
+          "country": "XZ",
+          "status": "restricted",
+          "provenance": "verified",
+          "evidence_id": "country-policy:20260731:XZ",
+          "valid_until": "2026-08-02T00:00:00+09:00"
+        }
+      },
+      "expect": {
+        "secondary_types_include": ["high_risk_country_trade"],
+        "classification_evidence_ids_include": ["country-policy:20260731:XZ"]
+      }
+    },
+    {
+      "id": "PP06",
+      "track": "metamorphic_invariance",
+      "critical": true,
+      "title": "사용자 역할 변경은 기업·위험 분류를 바꾸지 않는다",
+      "pair": {
+        "base": {"user_role": "owner", "existing_hedge_ratio": "0.5"},
+        "variant": {"user_role": "finance_manager", "existing_hedge_ratio": "0.5"}
+      },
+      "expect": {
+        "invariant_fields": ["axes", "primary_type", "secondary_types"],
+        "allowed_deltas": ["presentation_detail", "terminology_level"]
+      }
+    },
+    {
+      "id": "PP07",
+      "track": "schema_consistency",
+      "critical": true,
+      "title": "무역 경력 11개월과 12개월을 숫자로 구분한다",
+      "pair": {
+        "base": {"trade_maturity_months": 11},
+        "variant": {"trade_maturity_months": 12}
+      },
+      "expect": {
+        "allowed_deltas": ["axes.company_stage", "primary_type"],
+        "string_comparison_forbidden": true
+      }
+    },
+    {
+      "id": "PP08",
+      "track": "schema_consistency",
+      "critical": true,
+      "title": "수출액 구간의 0 포함 여부가 없으면 확인을 요청한다",
+      "input": {
+        "export_volume": {"kind": "range", "upper_usd": "100000"}
+      },
+      "expect": {
+        "missing_fields_include": ["trade.export_volume.lower_usd"],
+        "forbidden_claims": ["has_positive_export_volume"]
+      }
+    },
+    {
+      "id": "PP09",
+      "track": "provenance",
+      "critical": true,
+      "title": "사용자 진술과 공식 실적의 충돌을 숨기지 않는다",
+      "input": {
+        "facts": [
+          {"field": "trade.export_volume.trailing_12m_usd", "value": "1000000", "provenance": "user_declared", "evidence_id": "user:statement-1"},
+          {"field": "trade.export_volume.trailing_12m_usd", "value": "0", "provenance": "verified", "evidence_id": "trade-history:snapshot-1"}
+        ]
+      },
+      "expect": {
+        "fact_status": "conflicting",
+        "review_required": true,
+        "forbidden_claims": ["existing_exporter_confirmed"]
+      }
+    },
+    {
+      "id": "PP10",
+      "track": "provenance",
+      "critical": true,
+      "title": "조회 불가를 사용자 입력으로 조용히 대체하지 않는다",
+      "input": {
+        "trade_history_status": "unavailable",
+        "user_declared_export_volume_usd": "1000000"
+      },
+      "expect": {
+        "used_provenance": "user_declared",
+        "missing_fields_include": ["verified.trade.export_volume.trailing_12m_usd"],
+        "forbidden_claims": ["verified_export_history"]
+      }
+    },
+    {
+      "id": "PP11",
+      "track": "provenance",
+      "critical": true,
+      "title": "만료된 국가정책으로 고위험 여부를 확정하지 않는다",
+      "input": {
+        "as_of": "2026-07-31T12:00:00+09:00",
+        "country_policy": {
+          "country": "XZ",
+          "status": "restricted",
+          "provenance": "stale",
+          "valid_until": "2026-07-30T00:00:00+09:00"
+        }
+      },
+      "expect": {
+        "route_capabilities_include": ["country_policy.refresh.v1"],
+        "review_required": true,
+        "forbidden_claims": ["current_country_risk_confirmed"]
+      }
+    },
+    {
+      "id": "PP12",
+      "track": "provenance",
+      "critical": true,
+      "title": "검증된 수출실적을 근거로 기존 수출기업을 분류한다",
+      "input": {
+        "facts": [{
+          "field": "trade.export_volume.trailing_12m_usd",
+          "value": "1000000",
+          "provenance": "verified",
+          "evidence_id": "trade-history:snapshot-2",
+          "valid_until": "2026-08-01T00:00:00+09:00"
+        }],
+        "company_size": "small",
+        "trade_maturity_months": 24
+      },
+      "expect": {
+        "primary_type": "existing_exporter_sme",
+        "classification_evidence_ids_include": ["trade-history:snapshot-2"]
+      }
+    },
+    {
+      "id": "PP13",
+      "track": "routing",
+      "critical": true,
+      "title": "조회 요구를 capability와 동의 조건으로 반환한다",
+      "input": {
+        "primary_type": "existing_exporter_sme",
+        "consents": ["company_trade_data.read"]
+      },
+      "expect": {
+        "route_capabilities_include": ["trade_history.lookup.v1"],
+        "required_consent": "company_trade_data.read",
+        "fabricated_endpoint_absent": true
+      }
+    },
+    {
+      "id": "PP14",
+      "track": "routing",
+      "critical": true,
+      "title": "동의가 없으면 회사 실적 조회를 실행하지 않는다",
+      "input": {
+        "primary_type": "existing_exporter_sme",
+        "consents": []
+      },
+      "expect": {
+        "executed_capabilities_absent": ["trade_history.lookup.v1"],
+        "fallback": "manual_evidence_request",
+        "missing_consents_include": ["company_trade_data.read"]
+      }
+    },
+    {
+      "id": "PP15",
+      "track": "decision_boundary",
+      "critical": true,
+      "title": "유형 일치만으로 금융상품 적격을 확정하지 않는다",
+      "input": {
+        "primary_type": "potential_exporter",
+        "financing_needs": ["pre_shipment_working_capital"],
+        "eligibility_evidence": []
+      },
+      "expect": {
+        "decision_status": "missing_information",
+        "allowed_outputs": ["product_discovery_candidate", "required_information"],
+        "forbidden_claims": ["eligible", "approved", "confirmed_limit", "confirmed_rate"]
+      }
+    },
+    {
+      "id": "PP16",
+      "track": "decision_boundary",
+      "critical": true,
+      "title": "KB 내부 연계가 없으면 수동 상담 패킷만 준비한다",
+      "input": {
+        "bank_provider_status": "unavailable",
+        "consultation_consent": true
+      },
+      "expect": {
+        "handoff_mode": "manual_packet",
+        "transmission_performed": false,
+        "forbidden_claims": ["submitted", "preapproved", "approved", "confirmed_limit", "confirmed_rate"]
+      }
+    }
+  ]
+}
