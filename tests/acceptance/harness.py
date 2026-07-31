@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -56,8 +56,8 @@ DEMO = Account(
     },
 )
 
-def _market_day() -> date:
-    """The day the market data is from.
+def _market_instant() -> datetime:
+    """The first instant at which the selected market data was knowable.
 
     The suite has to be pinned to a date — the scenarios carry absolute payment
     dates — but pinning it to a *constant* made the score depend on when the
@@ -72,11 +72,12 @@ def _market_day() -> date:
     try:
         ref, _ = read_snapshot(latest_snapshot_path(SNAPSHOT_ROOT, "ECOS_USD_KRW"))
     except (SnapshotNotFoundError, OSError, ValueError):
-        return date(2026, 7, 28)
-    return ref.observed_at.date()
+        return datetime(2026, 7, 28, 12, tzinfo=UTC)
+    return max(ref.observed_at, ref.retrieved_at).astimezone(UTC)
 
 
-AS_OF = _market_day()
+MARKET_AS_OF = _market_instant()
+AS_OF = MARKET_AS_OF.date()
 
 
 @dataclass(frozen=True)
@@ -102,7 +103,7 @@ def _measures(scenario: dict[str, Any], program: Any) -> tuple[Any, ...]:
     quote = scenario.get("forward_quote")
     if not quote:
         return ()
-    evaluated_at = datetime.combine(AS_OF, time(0, 0), tzinfo=UTC)
+    evaluated_at = MARKET_AS_OF
     net = sum(
         case.amount if case.direction is TradeDirection.EXPORT else -case.amount
         for case in program.cases
@@ -156,7 +157,7 @@ def run(scenario: dict[str, Any]) -> Outcome:
                 # freshness policy eventually calls the fixture snapshot stale
                 # and the market worker stops — so the score fell from 17 to 14
                 # because a day passed, not because anything changed.
-                as_of=datetime.combine(AS_OF, time(0, 0), tzinfo=UTC),
+                as_of=MARKET_AS_OF,
             )
         )
 

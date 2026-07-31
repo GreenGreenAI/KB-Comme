@@ -416,7 +416,11 @@ def market_now(
     condition, and a rate quoted without one is worse than no rate.
     """
     evaluated_at = as_of or datetime.now(UTC)
-    path = latest_snapshot_path(snapshot_root, FX_SOURCE)
+    path = latest_snapshot_path(
+        snapshot_root,
+        FX_SOURCE,
+        as_of=evaluated_at,
+    )
     ref, payload = read_snapshot(path)
     require_fresh(ref, FX_FRESHNESS, evaluated_at)
     observations = usd_krw_series(payload)
@@ -676,7 +680,11 @@ def analyze(
 
     def _market() -> ScenarioBand:
         nonlocal snapshot
-        path = latest_snapshot_path(snapshot_root, FX_SOURCE)
+        path = latest_snapshot_path(
+            snapshot_root,
+            FX_SOURCE,
+            as_of=evaluated_at,
+        )
         ref, payload = read_snapshot(path)
         snapshot = ref
         require_fresh(ref, FX_FRESHNESS, evaluated_at)
