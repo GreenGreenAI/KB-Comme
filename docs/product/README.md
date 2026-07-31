@@ -17,6 +17,8 @@ last-reviewed: 2026-07-26
 - [API 제외 구현 완료 감사](implementation-completion-audit.md)
 - [고객층 조사 기반 서비스 및 KB 연계 준비도 리뷰](customer-and-kb-service-review.md)
 - [실제 사용자 시나리오 기반 서비스 효용 검증](user-scenario-utility-validation.md)
+- [고객 과업 벤치마크 설계와 운영 가이드](user-task-benchmark.md)
+- [답을 바꾸는 조건을 보여주는 TradeFlow 차별화 전략](decision-delta-differentiation.md)
 - [통합 제품·아키텍처 기획서](product-architecture-plan.md)
 
 통합 기획서는 초기 설계의 원문 기준 문서다. 새 결정은 각 주제 문서와 ADR에 먼저

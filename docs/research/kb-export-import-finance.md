@@ -1,5 +1,5 @@
 ---
-status: complete-public-scope
+status: proposed
 owner: shared
 reviewers: knowledge-domain, platform-runtime
 last-reviewed: 2026-07-31

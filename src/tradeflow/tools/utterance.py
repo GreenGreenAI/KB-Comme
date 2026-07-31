@@ -47,7 +47,10 @@ _SCALES = "억|조|천만|백만|십만|만|천"
 _PARTS = rf"(?:\d[\d,]*(?:\.\d+)?\s*(?:{_SCALES})?\s*)+"
 _PART = re.compile(rf"(\d[\d,]*(?:\.\d+)?)\s*({_SCALES})?")
 
-_AMOUNT_PREFIXED = re.compile(rf"\$\s*({_PARTS})")
+_AMOUNT_PREFIXED = re.compile(
+    rf"(?:\$|USD)\s*({_PARTS})",
+    re.IGNORECASE,
+)
 _AMOUNT_SUFFIXED = re.compile(rf"({_PARTS})\s*(?:달러|불|usd|USD)")
 
 #: A sum in won. Not an exposure amount — §5.1 measures foreign currency, and
@@ -182,7 +185,9 @@ _ADDITIONAL_TRADE = re.compile(
 # counting every receipt/payment verb would create false duplicates. The
 # negative lookarounds keep the generic word "수출입" from becoming two trades.
 _TRADE_ANCHOR = re.compile(r"수출(?!입)|(?<!수출)수입")
-_CLAUSE_SEPARATOR = re.compile(r"[,;]\s*|(?:하고|하며|그리고)\s*")
+_CLAUSE_SEPARATOR = re.compile(
+    r",(?!\d)\s*|;\s*|[.!?。]\s+|(?:하고|하며|그리고)\s*"
+)
 
 
 def _direction(text: str) -> str | None:

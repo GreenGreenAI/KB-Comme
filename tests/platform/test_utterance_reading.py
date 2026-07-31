@@ -216,6 +216,43 @@ class MultipleTradeTests(unittest.TestCase):
             ),
         )
 
+    def test_sentence_boundary_keeps_leading_date_and_amount_with_trade(self) -> None:
+        candidates = split_trade_candidates(
+            "8월 25일 베트남 공급자에게 USD 60,000 수입대금을 지급합니다. "
+            "10월 24일 미국 바이어에게서 USD 100,000 수출대금을 받습니다.",
+            as_of=AS_OF,
+        )
+
+        self.assertEqual(
+            (
+                {
+                    "direction": "수입",
+                    "amount": "60000",
+                    "expected_payment_date": "2026-08-25",
+                    "country": "VN",
+                    "currency": "USD",
+                },
+                {
+                    "direction": "수출",
+                    "amount": "100000",
+                    "expected_payment_date": "2026-10-24",
+                    "country": "US",
+                    "currency": "USD",
+                },
+            ),
+            candidates,
+        )
+
+    def test_sentence_boundary_keeps_trailing_date_with_trade(self) -> None:
+        candidates = split_trade_candidates(
+            "베트남 원자재 수입: 6만 달러, 8월 25일 결제. "
+            "미국 완제품 수출: 10만 달러, 10월 24일 수취.",
+            as_of=AS_OF,
+        )
+
+        self.assertEqual("2026-08-25", candidates[0]["expected_payment_date"])
+        self.assertEqual("2026-10-24", candidates[1]["expected_payment_date"])
+
     def test_one_export_with_receipt_words_is_not_duplicated(self) -> None:
         self.assertEqual(
             (),

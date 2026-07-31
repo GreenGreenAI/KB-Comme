@@ -1,0 +1,465 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "TRADEFLOW_USER_TASKS_V1",
+  "as_of": "2026-07-28",
+  "persona": {
+    "company": "원자재를 수입하고 완제품을 수출하는 국내 중소 제조기업",
+    "user": "전담 외환·무역금융 인력이 없는 재무·영업 담당자"
+  },
+  "scenarios": [
+    {
+      "id": "UT01",
+      "metric": "intake_safety",
+      "critical": true,
+      "title": "복합 수출입 문장을 부분 분석하지 않고 확인받는다",
+      "job": "한 문장으로 설명한 수입과 수출 두 건을 모두 확인한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "utterance": "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, 완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다."
+      },
+      "expect": {
+        "status": "needs_trade_split",
+        "candidate_summaries": [
+          {
+            "direction": "수입",
+            "amount": "60000",
+            "expected_payment_date": "2026-08-25"
+          },
+          {
+            "direction": "수출",
+            "amount": "100000",
+            "expected_payment_date": "2026-10-24"
+          }
+        ],
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT02",
+      "metric": "calculation_accuracy",
+      "critical": true,
+      "title": "연결 거래의 만기 불일치와 자금 공백을 계산한다",
+      "job": "수출 총액이 더 커도 수입대금 지급일에 필요한 자금을 찾는다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "opening_balance_usd": "0",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          },
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "status": "ready",
+        "trade_count": 2,
+        "cashflow": {
+          "funding_gap": "60000",
+          "net_exposure": "40000",
+          "natural_hedge": "60000",
+          "maturity_matched": "0"
+        },
+        "review_required": true
+      }
+    },
+    {
+      "id": "UT03",
+      "metric": "decision_closure",
+      "critical": true,
+      "title": "선적전 생산자금 정보를 보완해 K-SURE 후보를 다시 판정한다",
+      "job": "누락 정보를 답한 뒤 같은 질문을 반복하지 않고 상담 후보와 준비사항을 얻는다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "company_name": "한빛정밀",
+        "is_sme": true,
+        "company_facts": {
+          "company.is_domestic": true,
+          "company.size": "small",
+          "company.credit_issue_free": true,
+          "company.ksure_exporter_grade": "A"
+        },
+        "utterance": "선적 전 생산자금과 수출신용보증을 검토하고 싶습니다.",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US",
+            "case_facts": {
+              "trade.payment_term_days": 90,
+              "financing.purpose": "trade_finance",
+              "financing.has_bank_consultation": true
+            }
+          }
+        ]
+      },
+      "expect": {
+        "status": "ready",
+        "missing_fields_absent": [
+          "trade.payment_term_days",
+          "financing.purpose",
+          "financing.has_bank_consultation"
+        ],
+        "decision": {
+          "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+          "matched": true,
+          "status": "expert_confirmation_required"
+        },
+        "action_authority": "ksure_and_financial_institution",
+        "evidence_sources_nonempty": true
+      }
+    },
+    {
+      "id": "UT04",
+      "metric": "scope_safety",
+      "critical": true,
+      "title": "지원하지 않는 L/C 거래를 T/T로 바꾸어 계산하지 않는다",
+      "job": "수입신용장 거래가 현재 범위 밖임을 정확히 안다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "LC",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          }
+        ]
+      },
+      "expect": {
+        "status": "needs_input",
+        "issue_field": "payment_method",
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT05",
+      "metric": "actionability",
+      "critical": true,
+      "title": "분석을 KB 상담용 수동 인계 패킷으로 준비한다",
+      "job": "자동 전송이나 승인으로 오인하지 않고 은행 상담 자료를 내려받을 준비를 한다",
+      "kind": "consultation_handoff",
+      "account": {
+        "email": "benchmark@example.com",
+        "password": "benchmark-password",
+        "company_name": "한빛정밀",
+        "account_id": "BENCHMARK-HANBIT",
+        "facts": {
+          "company.size": "small",
+          "company.is_domestic": true,
+          "company.credit_issue_free": true
+        }
+      },
+      "request": {
+        "as_of": "2026-07-28",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "analysis_status": "ready",
+        "handoff": {
+          "state": "ready_for_manual_handoff",
+          "mode": "manual_packet",
+          "target_bank": "KB_KOOKMIN_BANK",
+          "transmission_performed": false,
+          "raw_document_content_included": false
+        },
+        "audit_action": "consultation_handoff.prepare"
+      }
+    },
+    {
+      "id": "UT06",
+      "metric": "calculation_boundary",
+      "critical": true,
+      "title": "보유 외화가 일부 있으면 부족액에서 정확히 차감한다",
+      "job": "현재 USD 잔액까지 반영해 실제 추가 조달액을 계산한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "opening_balance_usd": "20000",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          },
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "status": "ready",
+        "cashflow": {
+          "funding_gap": "40000",
+          "net_exposure": "40000",
+          "natural_hedge": "60000",
+          "maturity_matched": "0"
+        }
+      }
+    },
+    {
+      "id": "UT07",
+      "metric": "calculation_boundary",
+      "critical": true,
+      "title": "보유 외화가 수입대금을 충당하면 부족액을 0으로 표시한다",
+      "job": "불필요한 금융 조달을 권하지 않도록 보유 잔액의 효과를 확인한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "opening_balance_usd": "60000",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          },
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "status": "ready",
+        "cashflow": {
+          "funding_gap": "0",
+          "net_exposure": "40000",
+          "natural_hedge": "60000",
+          "maturity_matched": "0"
+        }
+      }
+    },
+    {
+      "id": "UT08",
+      "metric": "decision_boundary",
+      "critical": true,
+      "title": "은행 사전상담 전에는 보증 후보를 조건부로만 제시한다",
+      "job": "아직 하지 않은 은행 상담을 완료한 것으로 간주하지 않는다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "company_name": "한빛정밀",
+        "is_sme": true,
+        "company_facts": {
+          "company.is_domestic": true,
+          "company.size": "small",
+          "company.credit_issue_free": true,
+          "company.ksure_exporter_grade": "A"
+        },
+        "utterance": "선적 전 생산자금과 수출신용보증을 검토하고 싶습니다.",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US",
+            "case_facts": {
+              "trade.payment_term_days": 90,
+              "financing.purpose": "trade_finance",
+              "financing.has_bank_consultation": false
+            }
+          }
+        ]
+      },
+      "expect": {
+        "status": "ready",
+        "decision": {
+          "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+          "matched": true,
+          "status": "conditionally_eligible"
+        }
+      }
+    },
+    {
+      "id": "UT09",
+      "metric": "scope_safety",
+      "critical": true,
+      "title": "지원하지 않는 EUR 거래를 USD로 간주하지 않는다",
+      "job": "통화가 현재 계산 범위 밖이면 잘못된 환노출 계산 대신 명확히 중단한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "EUR",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "DE"
+          }
+        ]
+      },
+      "expect": {
+        "status": "needs_input",
+        "issue_field": "currency",
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT10",
+      "metric": "scope_safety",
+      "critical": true,
+      "title": "지원하지 않는 D/A 결제조건을 T/T로 바꾸지 않는다",
+      "job": "추심 거래가 현재 범위 밖이면 임의 계산 없이 경계를 알린다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "DA",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "status": "needs_input",
+        "issue_field": "payment_method",
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT11",
+      "metric": "intake_robustness",
+      "critical": true,
+      "title": "날짜와 USD 금액이 거래명 앞에 와도 두 거래를 정확히 분리한다",
+      "job": "고객의 자연스러운 문장 순서가 달라도 거래 사실을 잃지 않는다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "utterance": "8월 25일 베트남 공급자에게 USD 60,000 수입대금을 지급합니다. 10월 24일 미국 바이어에게서 USD 100,000 수출대금을 받습니다."
+      },
+      "expect": {
+        "status": "needs_trade_split",
+        "candidate_summaries": [
+          {
+            "direction": "수입",
+            "amount": "60000",
+            "expected_payment_date": "2026-08-25"
+          },
+          {
+            "direction": "수출",
+            "amount": "100000",
+            "expected_payment_date": "2026-10-24"
+          }
+        ],
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT12",
+      "metric": "intake_robustness",
+      "critical": true,
+      "title": "콜론과 문장 구분을 사용한 거래 설명도 날짜를 올바르게 귀속한다",
+      "job": "메모식 입력에서도 수입일과 수출일이 서로 뒤바뀌지 않게 한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "utterance": "베트남 원자재 수입: 6만 달러, 8월 25일 결제. 미국 완제품 수출: 10만 달러, 10월 24일 수취."
+      },
+      "expect": {
+        "status": "needs_trade_split",
+        "candidate_summaries": [
+          {
+            "direction": "수입",
+            "amount": "60000",
+            "expected_payment_date": "2026-08-25"
+          },
+          {
+            "direction": "수출",
+            "amount": "100000",
+            "expected_payment_date": "2026-10-24"
+          }
+        ],
+        "result_absent": true
+      }
+    },
+    {
+      "id": "UT13",
+      "metric": "handoff_safety",
+      "critical": true,
+      "title": "같은 상담 패킷은 안정적으로 재생성되고 다른 고객에게 노출되지 않는다",
+      "job": "KB 수동 상담 패킷을 재다운로드하되 타 계정 접근과 자동 전송은 차단한다",
+      "kind": "consultation_handoff_safety",
+      "account": {
+        "email": "owner@example.com",
+        "password": "owner-password",
+        "company_name": "한빛정밀",
+        "account_id": "BENCHMARK-OWNER"
+      },
+      "intruder": {
+        "email": "intruder@example.com",
+        "password": "intruder-password",
+        "company_name": "다른기업",
+        "account_id": "BENCHMARK-INTRUDER"
+      },
+      "request": {
+        "as_of": "2026-07-28",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "transmission_performed": false,
+        "cross_tenant_status": 404
+      }
+    }
+  ]
+}
