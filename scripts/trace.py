@@ -28,6 +28,11 @@ from tradeflow.agent.intake import intake  # noqa: E402
 from tradeflow.agent.orchestrator import analyze  # noqa: E402
 from tradeflow.agent.response import build_response  # noqa: E402
 from tradeflow.domain.models import CompanyProfile  # noqa: E402
+from tradeflow.domain.snapshot_file import (  # noqa: E402
+    SnapshotNotFoundError,
+    latest_snapshot_path,
+    read_snapshot,
+)
 from tradeflow.runtime import narration  # noqa: E402
 from tradeflow.tools.intent import read_intent  # noqa: E402
 from tradeflow.tools.utterance import (  # noqa: E402
@@ -50,6 +55,15 @@ COMPANY = CompanyProfile(
 )
 
 
+def _observed() -> date | None:
+    """The day the newest rate snapshot was observed, if there is one."""
+    try:
+        ref, _ = read_snapshot(latest_snapshot_path(SNAPSHOTS, "ECOS_USD_KRW"))
+    except (SnapshotNotFoundError, OSError, ValueError):
+        return None
+    return ref.observed_at.date()
+
+
 def show(title: str, rows: list[tuple[str, object]]) -> None:
     print(f"\n\033[1m{title}\033[0m")
     for label, value in rows:
@@ -64,6 +78,18 @@ def main(argv: list[str]) -> int:
     moment = datetime.combine(as_of, time(0, 0), tzinfo=UTC)
 
     print(f"\n\033[2m말한 것\033[0m  {said}\n\033[2m기준일\033[0m   {as_of}")
+
+    # A reference day before the data is as unusable as one long after it, and
+    # the error says only "stale" for both. Someone reading a market worker
+    # fail on freshness will look for old data; when the cause is a date they
+    # typed, nothing on screen says so.
+    observed = _observed()
+    if observed and as_of < observed:
+        print(
+            f"\033[33m  주의\033[0m    스냅샷은 {observed}자입니다. 기준일이 그보다 "
+            "이르면 §4.2[4]가 미래 데이터로 보고 시장 워커를 멈춥니다.\n"
+            "          날짜 인자를 빼면 오늘로 봅니다."
+        )
 
     heard = read_utterance(said, as_of=as_of)
     topics = read_intent(said)
