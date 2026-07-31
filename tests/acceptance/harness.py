@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,11 @@ from tradeflow.knowledge.hedge_quotes import (
     HedgeQuoteSide,
     UserForwardQuote,
     UserQuoteHedgeAvailabilityService,
+)
+from tradeflow.domain.snapshot_file import (
+    SnapshotNotFoundError,
+    latest_snapshot_path,
+    read_snapshot,
 )
 from tradeflow.runtime.accounts import Account
 
@@ -51,7 +56,27 @@ DEMO = Account(
     },
 )
 
-AS_OF = date(2026, 7, 28)
+def _market_day() -> date:
+    """The day the market data is from.
+
+    The suite has to be pinned to a date — the scenarios carry absolute payment
+    dates — but pinning it to a *constant* made the score depend on when the
+    suite was run. Left behind the snapshot the freshness policy called the
+    data stale and S1 fell from 6/6 to 3/6 because a day had passed; moved
+    ahead of it, the same policy called the data future-dated and S1 fell
+    again. Neither had anything to do with what the pipeline can do.
+
+    So it follows the snapshot. Refreshing the data no longer changes the
+    score, which is what an acceptance suite is for.
+    """
+    try:
+        ref, _ = read_snapshot(latest_snapshot_path(SNAPSHOT_ROOT, "ECOS_USD_KRW"))
+    except (SnapshotNotFoundError, OSError, ValueError):
+        return date(2026, 7, 28)
+    return ref.observed_at.date()
+
+
+AS_OF = _market_day()
 
 
 @dataclass(frozen=True)
@@ -95,7 +120,11 @@ def _measures(scenario: dict[str, Any], program: Any) -> tuple[Any, ...]:
         cost_rate=Decimal(quote["cost_rate"]),
         settlement_date=max(case.expected_payment_date for case in program.cases),
         quoted_at=evaluated_at,
-        valid_until=datetime.fromisoformat(quote["valid_until"] + "T23:59:00+00:00"),
+        # Relative to the run, not a calendar day. The scenario means "the
+        # bank's quote is still good", and pinning it to a date made §5.3
+        # reject the quote as expired the moment the suite's own reference day
+        # moved — a fixture failing for a reason the scenario never described.
+        valid_until=evaluated_at + timedelta(days=int(quote["valid_days"])),
         confirmed=bool(quote["confirmed"]),
     )
     return UserQuoteHedgeAvailabilityService(
