@@ -615,3 +615,64 @@ class RetoldContractTests(unittest.TestCase):
                 self.SUBJECTS,
             ),
         )
+
+
+class RequiredPhraseTests(unittest.TestCase):
+    """Some sentences may not be paraphrased at all.
+
+    §5.5 rests on 「신고가 불필요하다는 판정은 아닙니다」, and the first rewrite
+    allowed near it shortened it away — shorter, better read, and leaving the
+    company believing it has no filing duty. A subject can be renamed; this
+    cannot be reworded.
+    """
+
+    SOURCE = (
+        "양자간 상계면 외국환은행에 보고합니다. "
+        "말씀해 주신 것으로는 해당 여부를 알 수 없는 규칙이 14건 더 있습니다. "
+        "신고가 불필요하다는 판정은 아닙니다."
+    )
+    KEEP = ("신고가 불필요하다는 판정은 아닙니다",)
+
+    def test_carrying_it_word_for_word_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 아직 "
+                "알 수 없습니다. 신고가 불필요하다는 판정은 아닙니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )
+
+    def test_shortening_it_away_is_refused(self) -> None:
+        self.assertIn(
+            "그대로 옮겨야 하는 문장",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 아직 "
+                "알 수 없습니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )
+
+    def test_rewording_it_is_refused(self) -> None:
+        """「신고 의무가 없다는 뜻은 아닙니다」 means the same thing and is not
+        the sentence. The rule is verbatim because judging the paraphrase is
+        the thing this check exists to avoid.
+
+        Which guard refuses it is not the point — this one is caught by the
+        verdict check first, because 의무 is a word the source never used. The
+        property under test is that it does not get through.
+        """
+        self.assertNotEqual(
+            "",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 신고 "
+                "의무가 없다는 뜻은 아닙니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )

@@ -529,13 +529,29 @@ def analyze_endpoint(
     # 실려 있다. 재작성은 그 문장을 지웠다 — 짧아졌고, 잘 읽히고, 회사는
     # 신고 의무가 없다고 믿게 된다. 모델은 찾은 것을 다시 말할 수 있고,
     # 보류한 것을 다시 말할 수는 없다.
-    told = [*result["said"]["support"], *result["said"]["actions"]]
+    # One answer, not four strands stitched together. Everything the workers
+    # produced goes in at once — the figures sentence, the eligibility
+    # judgements, the filing branches, the next action — and comes back as one
+    # piece of prose. What keeps that safe is not the instruction but
+    # `check_retold`: nothing new, nothing dropped, and the sentences §5.5
+    # rests on carried word for word.
+    told = [
+        *([result["summary"]] if result.get("summary") else []),
+        *result["said"]["support"],
+        *result["said"]["compliance"],
+        *result["said"]["actions"],
+    ]
     retold = synthesizer.retell(
         told,
         # Every subject the rules judged. A rewrite may shorten a name; it may
         # not leave a judgement out.
         subjects=tuple(
             row["title"] for row in result["said"]["detail"] if row["title"] != "필요서류"
+        ),
+        # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one sentence.
+        # A rewrite dropped it the first time it was allowed near it.
+        required=tuple(
+            line for line in result["said"]["compliance"] if "판정은 아닙니다" in line
         ),
         seed=f"retell|{result.get('packet_id')}",
     )

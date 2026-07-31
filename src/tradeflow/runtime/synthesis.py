@@ -148,6 +148,9 @@ SUMMARY_INSTRUCTION = """\
   「신고 대상이 아닙니다」처럼 판정을 새로 내릴 수 없습니다.
 - 연결해 드리겠다거나 알아봐 드리겠다고 하지 마세요. 그럴 수 없습니다.
 
+그리고 아래에 「그대로 옮길 것」으로 표시된 문장이 있으면, 한 글자도 바꾸지 말고
+그대로 포함하세요. 줄이거나 다른 말로 바꾸면 쓰지 않습니다.
+
 당신이 할 수 있는 것:
 - 같은 말을 두 번 하는 문장을 합치기
 - 순서를 읽기 좋게 바꾸기
@@ -206,7 +209,12 @@ def _bare(title: str) -> str:
     return re.sub(r"[\s()·]|K-SURE|선적전|선적후|개별|일반형|수출|일반", "", title)
 
 
-def check_retold(sentence: str, source: str, subjects: tuple[str, ...] = ()) -> str:
+def check_retold(
+    sentence: str,
+    source: str,
+    subjects: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+) -> str:
     """Verify a rewrite added nothing to what it was given.
 
     The user's constraint — combine the results, invent nothing — is a request
@@ -242,6 +250,14 @@ def check_retold(sentence: str, source: str, subjects: tuple[str, ...] = ()) -> 
     dropped = [title for title in subjects if _bare(title) and _bare(title) not in said]
     if dropped:
         return "재작성에서 빠진 판정: " + ", ".join(dropped)
+
+    # Some sentences may not be paraphrased at all. §5.5 rests on 「신고가
+    # 불필요하다는 판정은 아닙니다」, and a rewrite that shortens it away is
+    # shorter, reads better, and leaves the company believing it has no filing
+    # duty. A subject can be renamed; this cannot be reworded.
+    missing = [phrase for phrase in required if phrase not in sentence]
+    if missing:
+        return "그대로 옮겨야 하는 문장이 빠졌습니다: " + " / ".join(missing)
     return ""
 
 
@@ -842,6 +858,7 @@ class Synthesizer:
         lines: list[str],
         *,
         subjects: tuple[str, ...] = (),
+        required: tuple[str, ...] = (),
         seed: str | None = None,
     ) -> Synthesis:
         """The judgements, rewritten shorter — or the judgements, unchanged.
@@ -862,7 +879,13 @@ class Synthesizer:
                     {
                         "role": "user",
                         "content": f"{SUMMARY_INSTRUCTION}\n판정:\n"
-                        + "\n".join(f"- {line}" for line in lines),
+                        + "\n".join(f"- {line}" for line in lines)
+                        + (
+                            "\n\n그대로 옮길 것:\n"
+                            + "\n".join(f"- {phrase}" for phrase in required)
+                            if required
+                            else ""
+                        ),
                     }
                 ],
                 response_format={"type": "json_schema", "json_schema": SUMMARY_SCHEMA},
@@ -878,7 +901,7 @@ class Synthesizer:
         sentence = str(written.get("sentence", "")).strip()
         if not sentence:
             return Synthesis("", False, "빈 문장")
-        broken = check_retold(sentence, source, subjects)
+        broken = check_retold(sentence, source, subjects, required)
         if broken:
             return Synthesis(sentence, False, broken)
         return Synthesis(sentence, True)

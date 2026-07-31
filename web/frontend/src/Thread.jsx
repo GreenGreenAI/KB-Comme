@@ -994,11 +994,12 @@ function Answer({ result, order, shown, arrive }) {
             choices at three rates). A picture of a number is worse than the
             number. */}
         {/* §4.2[9] retold these when it could do so without adding or dropping
-            anything; otherwise they arrive as assembled. Compliance is never
-            retold — §5.5's 「신고가 불필요하다는 판정은 아닙니다」 is the one
-            sentence a paraphrase must not be allowed to shorten away. */}
+            anything; otherwise they arrive as assembled. §5.5's 「신고가
+            불필요하다는 판정은 아닙니다」 goes in as a phrase the rewrite must
+            carry word for word — it is not that compliance cannot be retold,
+            it is that one sentence in it cannot be reworded. */}
         {(said.retold
-          ? [said.retold, ...(said.compliance ?? [])]
+          ? [said.retold]
           : [
               ...(said.support ?? []),
               ...(said.compliance ?? []),
