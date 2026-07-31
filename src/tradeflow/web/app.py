@@ -44,7 +44,7 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.runtime import introduction, narration
+from tradeflow.runtime import introduction, narration, observing
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
@@ -57,6 +57,7 @@ from tradeflow.tools.utterance import (
     APPEND,
     financing_purpose,
     krw_amount,
+    payment_structure,
     place_utterance,
     read_utterance,
 )
@@ -80,6 +81,11 @@ accounts = AccountStore(ACCOUNT_DB)
 #: §4.2[9]. Constructed whether or not a key is present — without one it simply
 #: declines, and the screen writes its own sentence.
 synthesizer = Synthesizer()
+# Attached here rather than left to the operator. Every rejection §4.2[9] made
+# was already being recorded and none of it arrived: uvicorn does not configure
+# application loggers, so INFO was dropped at the root and the log held nothing
+# while every synthesised sentence was being refused.
+observing.listen()
 logger = logging.getLogger("tradeflow.synthesis")
 
 
@@ -226,6 +232,11 @@ class AnalyzeRequest(BaseModel):
     #: next. Read for intent only — never for facts, which would let an
     #: already-answered sentence describe its trade twice.
     asked_about: str | None = None
+    #: Ask the answer to carry a record of how it was produced — what each
+    #: layer read and handed on, and how long each worker took. Off by default
+    #: and deliberately so: the record contains the company's own facts, and an
+    #: instrument that ships them to every caller is a leak with a switch.
+    trace: bool = False
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
 
@@ -537,6 +548,8 @@ def analyze_endpoint(
     # twice — and the reader met it twice, three lines apart.
     if any(result["said"].get(section) for section in read_intent(subject)):
         result["pointer"] = ""
+    if request.trace:
+        result["trace"] = _trace(request, reading, analysis, subject)
     result["holds"] = _holds(subject)
     result["coverage"] = _coverage(subject)
     # Which of the two the reader meets first. §4.2[9]'s sentence may only
@@ -576,6 +589,73 @@ def analyze_endpoint(
 #: Subjects the synthesised sentence can be about. A question about anything
 #: else is answered by the pointer, so the pointer goes first.
 _SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
+
+
+def _trace(
+    request: AnalyzeRequest,
+    reading: Any,
+    analysis: Any,
+    subject: str,
+) -> dict[str, Any]:
+    """What each layer read and what it handed on.
+
+    The response already showed the *result* of every layer — the plan, the
+    workers, the packet. What it never showed was the flow: which slots intake
+    read out of the sentence, which facts the orchestrator asserted, which of
+    them reached the rules. Finding out why `financing.purpose` was never
+    filled meant reading the code, because no answer said what had been handed
+    across.
+
+    Nothing here is used to decide anything. It is a mirror held up to a
+    request that has already been answered.
+    """
+    program = getattr(reading, "program", None)
+    return {
+        "utterance": {
+            "kind": read_kind(
+                request.utterance,
+                heard=read_utterance(request.utterance or "", as_of=_analysis_date(request.as_of)),
+                topics=read_intent(request.utterance or ""),
+            ),
+            "intent": list(read_intent(subject)),
+            "slots": read_utterance(
+                request.utterance or "", as_of=_analysis_date(request.as_of)
+            ),
+            "financing_purpose": financing_purpose(request.utterance),
+            "payment_structure": payment_structure(request.utterance),
+        },
+        "intake": {
+            "ready": getattr(reading, "ready", None),
+            "missing": list(getattr(reading, "missing", ())),
+            "cases": len(getattr(program, "cases", ()) or ()),
+            "company_facts": sorted(
+                (program.company.facts() if program is not None else {}) or {}
+            ),
+        },
+        "plan": analysis.plan.as_dict(),
+        "workers": {
+            "completed": list(analysis.report.completed),
+            "failed": analysis.report.failed,
+            "skipped": sorted(analysis.report.skipped),
+            "took_seconds": analysis.report.took,
+        },
+        "knowledge": {
+            "declared_structure": dict(analysis.declared_structure),
+            "decisions": len(
+                (analysis.decision_packet.decisions if analysis.decision_packet else ())
+            ),
+            "evidence": sorted(
+                {
+                    item.evidence_id
+                    for item in (
+                        analysis.decision_packet.evidence
+                        if analysis.decision_packet
+                        else ()
+                    )
+                }
+            ),
+        },
+    }
 
 
 def _subject_text(request: AnalyzeRequest) -> str:

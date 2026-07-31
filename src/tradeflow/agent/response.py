@@ -254,6 +254,10 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "completed": list(analysis.report.completed),
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
+            # Timing is not here. §6.2 asks that the same analysis reproduce,
+            # and the replay test compares the whole response — a duration
+            # differs between two identical runs by definition. It goes to the
+            # log, and to the trace switch, neither of which is the answer.
         },
         # What §5.3 is still waiting on. The profit inputs come from the
         # analysis; the quote is named here because nothing upstream can — a

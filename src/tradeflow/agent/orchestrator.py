@@ -9,6 +9,8 @@ missing information rather than filled in.
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -47,6 +49,7 @@ from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
+from tradeflow.runtime import observing
 from tradeflow.tools.intent import read_intent
 from tradeflow.tools.utterance import financing_purpose, payment_structure
 from tradeflow.domain.datasets import (
@@ -63,6 +66,8 @@ from tradeflow.tools.volatility import (
     require_fresh,
     scenario_band,
 )
+
+logger = logging.getLogger("tradeflow.orchestrator")
 
 FX_SOURCE = "ECOS_USD_KRW"
 
@@ -86,6 +91,10 @@ class WorkerReport:
     completed: list[str] = field(default_factory=list)
     failed: dict[str, str] = field(default_factory=dict)
     skipped: dict[str, str] = field(default_factory=dict)
+    #: Seconds each worker took, whether or not it produced anything. A worker
+    #: that failed after five seconds and one that failed immediately are
+    #: different problems, and the report used to keep only the failure.
+    took: dict[str, float] = field(default_factory=dict)
 
     def missing_information(self) -> tuple[str, ...]:
         return tuple(
@@ -95,12 +104,22 @@ class WorkerReport:
 
 
 def _isolated(report: WorkerReport, name: str, run: Callable[[], Any]) -> Any | None:
-    """Run one worker, recording a failure instead of propagating it (§9.3)."""
-    try:
-        return run()
-    except Exception as exc:  # noqa: BLE001 — any worker failure must be survivable
-        report.failed[name] = f"{type(exc).__name__}: {exc}"
-        return None
+    """Run one worker, recording a failure instead of propagating it (§9.3).
+
+    Also how long it took. This is the only place every worker passes through,
+    so measuring here costs one wrapper and covers all of them — and until it
+    existed, the answer to "which worker is slow" was to time the whole request
+    by hand. §4.2[9] took nineteen seconds for a week before anyone noticed.
+    """
+    with observing.took(report.took, name):
+        try:
+            result = run()
+        except Exception as exc:  # noqa: BLE001 — a worker failure must be survivable
+            report.failed[name] = f"{type(exc).__name__}: {exc}"
+            logger.warning("워커 실패 %s: %s", name, exc)
+            return None
+    logger.info("워커 %s %.3fs", name, report.took[name])
+    return result
 
 
 @dataclass(frozen=True)

@@ -123,6 +123,11 @@ def run(scenario: dict[str, Any]) -> Outcome:
                 profit_floor=_money(profit.get("profit_floor")),
                 hedge_measures=_measures(scenario, reading.program),
                 utterance=scenario["utterance"],
+                # Pinned, like everything else here. Left to the wall clock the
+                # freshness policy eventually calls the fixture snapshot stale
+                # and the market worker stops — so the score fell from 17 to 14
+                # because a day passed, not because anything changed.
+                as_of=datetime.combine(AS_OF, time(0, 0), tzinfo=UTC),
             )
         )
 
