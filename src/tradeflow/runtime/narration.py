@@ -49,6 +49,8 @@ def _particle(word: str, pair: tuple[str, str]) -> str:
 TOPIC = ("은", "는")
 OBJECT = ("을", "를")
 SUBJECT = ("이", "가")
+#: 「…이면」 / 「…면」. The branch conditions end in whatever the rulepack wrote.
+CONDITIONAL = ("이면", "면")
 
 
 #: How many items a sentence may name before it becomes a list. Past this the
@@ -149,18 +151,42 @@ def compliance(result: dict[str, Any]) -> list[str]:
     rest = len(findings) - len(engaged)
     said: list[str] = []
 
+    if engaged:
+        said.append(
+            f"말씀하신 거래 구조는 신고 대상이 될 수 있습니다. "
+            f"어느 쪽인지는 {len(engaged)}가지 갈래로 갈립니다."
+        )
+
+    # What the rule would mean if it applies, not which field is missing. The
+    # rulepack writes every condition as a sentence — 「양자간 상계」, 「일방
+    # 금액 미화 5천달러 초과」 — and names the authority, the action and the
+    # timing in its outcome. All of it was being withheld behind a list of
+    # field names, so the answer said less than the rules knew.
     for finding in engaged:
-        title = finding.get("title") or ""
-        wants = [
+        outcome = finding.get("outcome") or {}
+        authority = AUTHORITY_NAME.get(outcome.get("authority"), outcome.get("authority"))
+        act = FILING_ACTION.get(outcome.get("action"), "신고")
+        when = TIMING.get(outcome.get("timing"), "")
+        conditions = [
             check["description"]
             for check in finding.get("checks") or []
-            if check.get("status") == "uncertain"
+            if check["description"] not in SHARED_CONDITION
         ]
-        line = f"{title}{_particle(title, TOPIC)} 이 거래에 해당합니다."
-        if wants:
-            listed = _some(wants)
-            line += f" 갈래를 가르려면 {listed}{_particle(listed, SUBJECT)} 필요합니다."
-        said.append(line)
+        if not conditions:
+            continue
+        listed = _joined(conditions)
+        said.append(
+            f"{listed}{_particle(listed, CONDITIONAL)} "
+            f"{authority}에 {act}합니다{when}."
+        )
+
+    if engaged:
+        said.append(
+            "기준은 거래금액이 아니라 상계하는 채권과 채무 중 작은 금액입니다. "
+            "그 금액이 미화 5천 달러 이하이거나 신고예외에 해당하면 "
+            "신고 의무가 없습니다."
+        )
+        said.append("어느 갈래인지 정하려면 상계 당사자 수와 상계금액을 알려주세요.")
 
     if rest:
         said.append(
@@ -168,6 +194,23 @@ def compliance(result: dict[str, Any]) -> list[str]:
             "더 있습니다. 신고가 불필요하다는 판정은 아닙니다."
         )
     return said
+
+
+#: Conditions every netting rule shares. Repeating them once per branch turned
+#: three sentences into three copies of the same qualifier.
+SHARED_CONDITION = {
+    "거주자와 비거주자 간 채권·채무 상계",
+    "일방 금액 미화 5천달러 초과",
+    "그 밖의 신고예외가 확인되지 않음",
+    "신고예외가 확인되지 않음",
+}
+
+FILING_ACTION = {"report": "보고", "file": "신고"}
+
+TIMING = {
+    "confirm_before_execution": " — 상계 전에",
+    "confirm_with_authority": " — 시점은 거래 외국환은행에 확인하세요",
+}
 
 
 def actions(result: dict[str, Any]) -> list[str]:

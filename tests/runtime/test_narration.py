@@ -101,24 +101,71 @@ class SupportTests(unittest.TestCase):
 
 
 class ComplianceTests(unittest.TestCase):
+    RESULT = {
+        "risk_findings": [
+            {
+                "title": "양자간 상계 외국환은행 보고 검토",
+                "engaged": True,
+                "outcome": {
+                    "authority": "foreign_exchange_bank",
+                    "action": "report",
+                    "timing": "confirm_with_authority",
+                },
+                "checks": [
+                    {"description": "양자간 상계", "status": "uncertain"},
+                    {"description": "일방 금액 미화 5천달러 초과", "status": "uncertain"},
+                ],
+            },
+            {
+                "title": "다자간 상계 한국은행 신고 검토",
+                "engaged": True,
+                "outcome": {
+                    "authority": "bank_of_korea",
+                    "action": "file",
+                    "timing": "confirm_before_execution",
+                },
+                "checks": [{"description": "다자간 상계", "status": "uncertain"}],
+            },
+            {"title": "제3자 지급 신고", "engaged": False, "checks": []},
+        ]
+    }
+
+    def test_it_says_what_the_rule_says_not_which_field_is_missing(self) -> None:
+        """The rulepack writes every condition as a sentence and names the
+        authority, the action and the timing in its outcome. All of it was
+        being withheld behind a list of field names, so the answer said less
+        than the rules knew — and a general-purpose model answering the same
+        question sounded better while asserting a verdict it had no basis for.
+        """
+        said = " ".join(narration.compliance(self.RESULT))
+
+        self.assertIn("양자간 상계", said)
+        self.assertIn("외국환은행에 보고합니다", said)
+        self.assertIn("다자간 상계면 한국은행에 신고합니다", said)
+        self.assertIn("상계 전에", said)
+
+    def test_it_names_the_discriminator_the_reader_would_get_wrong(self) -> None:
+        """The threshold is measured on the offset amount, not the trade. A
+        company reading 「미화 5천 달러」 beside a 60,000 USD import will apply
+        it to the wrong number unless told."""
+        said = " ".join(narration.compliance(self.RESULT))
+
+        self.assertIn("거래금액이 아니라 상계하는 채권과 채무 중 작은 금액", said)
+
+    def test_it_still_refuses_to_conclude(self) -> None:
+        """Every branch is conditional. Nothing here says the company must
+        file — that is the rules' to say once they have the facts."""
+        said = " ".join(narration.compliance(self.RESULT))
+
+        self.assertIn("될 수 있습니다", said)
+        self.assertNotIn("신고 대상입니다.", said)
+
     def test_it_keeps_not_yet_known_apart_from_not_applicable(self) -> None:
         """§5.5 is explicit that a filing duty is never cleared until the
         company states its structure, so the count of undecided rules must not
         read as a clearance."""
-        said = narration.compliance(
-            {
-                "risk_findings": [
-                    {
-                        "title": "양자간 상계 외국환은행 보고",
-                        "engaged": True,
-                        "checks": [{"description": "양자간 상계", "status": "uncertain"}],
-                    },
-                    {"title": "제3자 지급 신고", "engaged": False, "checks": []},
-                ]
-            }
-        )
+        said = narration.compliance(self.RESULT)
 
-        self.assertIn("이 거래에 해당합니다", said[0])
         self.assertIn("신고가 불필요하다는 판정은 아닙니다", said[-1])
 
 
