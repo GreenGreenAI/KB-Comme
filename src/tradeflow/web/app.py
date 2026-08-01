@@ -1223,7 +1223,11 @@ def analyze_endpoint(
             ],
         }
 
-    evaluated_at = datetime.now(UTC)
+    # Reproducible API runs must evaluate point-in-time data against the
+    # request's analysis date. Using the wall clock here made an otherwise
+    # valid historical ECOS snapshot stale and prevented the HTTP API from
+    # reproducing the same exposure/hedge calculation a day later.
+    evaluated_at = datetime.combine(as_of, time.max, tzinfo=UTC)
     declarations = _declarations(
         request,
         company_id=reading.program.company.company_id,

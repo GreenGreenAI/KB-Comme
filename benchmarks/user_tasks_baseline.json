@@ -18,7 +18,8 @@
     "UT11",
     "UT12",
     "UT13",
-    "UT14"
+    "UT14",
+    "UT15"
   ],
   "latency": {
     "policy": "observe_only",

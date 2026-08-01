@@ -31,7 +31,7 @@ def _text_report(payload: dict) -> None:
         f"{capability['met']}/{capability['total']}"
     )
     print(
-        f"인프로세스 지연 — median {latency['median']} ms, "
+        f"ASGI HTTP 지연 — median {latency['median']} ms, "
         f"p95 {latency['p95']} ms\n"
     )
     for scenario in payload["scenarios"]:

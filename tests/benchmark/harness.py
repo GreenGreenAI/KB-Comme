@@ -17,15 +17,10 @@ from time import perf_counter
 from typing import Any
 from unittest.mock import patch
 
-from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from tradeflow.runtime.accounts import AccountStore
 from tradeflow.web import app as web_app
-from tradeflow.web.app import (
-    AnalyzeRequest,
-    ConsultationHandoffRequest,
-)
-
 from tests.acceptance.harness import run_all as run_capability_scenarios
 
 
@@ -183,6 +178,49 @@ def _evaluate_analyze(
         checks.append(
             _check("cashflow", actual_cashflow, expected["cashflow"])
         )
+    if "market_scenario" in expected:
+        market = result.get("market_scenario") or {}
+        wanted_market = expected["market_scenario"]
+        actual_market = {
+            key: market.get(key)
+            for key in wanted_market
+        }
+        checks.append(
+            _check("market_scenario", actual_market, wanted_market)
+        )
+    if "hedge_analysis" in expected:
+        hedge = result.get("hedge_analysis") or {}
+        wanted_hedge = expected["hedge_analysis"]
+        actual_hedge = {
+            key: hedge.get(key)
+            for key in wanted_hedge
+            if key != "payoff_points"
+        }
+        if "payoff_points" in wanted_hedge:
+            points = {
+                f"{scenario.get('label')}:{point.get('label')}": point.get(
+                    "profit"
+                )
+                for scenario in hedge.get("payoff_comparison") or []
+                for point in scenario.get("points") or []
+            }
+            actual_hedge["payoff_points"] = {
+                key: points.get(key)
+                for key in wanted_hedge["payoff_points"]
+            }
+        checks.append(
+            _check("hedge_analysis", actual_hedge, wanted_hedge)
+        )
+    if "workers_completed_include" in expected:
+        completed = set((result.get("workers") or {}).get("completed") or [])
+        wanted_workers = set(expected["workers_completed_include"])
+        checks.append(
+            _check(
+                "workers_completed_include",
+                sorted(completed & wanted_workers),
+                sorted(wanted_workers),
+            )
+        )
     if "missing_fields_absent" in expected:
         missing = {
             item.get("field")
@@ -257,17 +295,26 @@ def _run_handoff(scenario: dict[str, Any]) -> dict[str, Any]:
             account_id=account_spec["account_id"],
         )
         account = store.update_facts(account, account_spec.get("facts") or {})
-        token = store.open_session(account)
         with patch("tradeflow.web.app.accounts", store):
-            analysis = web_app.analyze_endpoint(
-                AnalyzeRequest(**scenario["request"]),
-                token,
-            )
-            handoff = web_app.create_consultation_handoff(
-                analysis["analysis_run_id"],
-                ConsultationHandoffRequest(consent=True),
-                token,
-            )["handoff"]
+            with TestClient(web_app.app) as client:
+                login = client.post("/api/auth/login", json={
+                    "email": account_spec["email"],
+                    "password": account_spec["password"],
+                })
+                login.raise_for_status()
+                analyzed = client.post(
+                    "/api/analyze",
+                    json=scenario["request"],
+                )
+                analyzed.raise_for_status()
+                analysis = analyzed.json()
+                handed_off = client.post(
+                    f"/api/analyses/{analysis['analysis_run_id']}"
+                    "/consultation-handoff",
+                    json={"consent": True},
+                )
+                handed_off.raise_for_status()
+                handoff = handed_off.json()["handoff"]
             audit = list(store.list_audit(account))
     return {"analysis": analysis, "handoff": handoff, "audit": audit}
 
@@ -316,40 +363,50 @@ def _run_handoff_safety(scenario: dict[str, Any]) -> dict[str, Any]:
             company_name=owner_spec["company_name"],
             account_id=owner_spec["account_id"],
         )
-        owner_token = store.open_session(owner)
         intruder = store.create(
             intruder_spec["email"],
             intruder_spec["password"],
             company_name=intruder_spec["company_name"],
             account_id=intruder_spec["account_id"],
         )
-        intruder_token = store.open_session(intruder)
         with patch("tradeflow.web.app.accounts", store):
-            analysis = web_app.analyze_endpoint(
-                AnalyzeRequest(**scenario["request"]),
-                owner_token,
-            )
-            run_id = analysis["analysis_run_id"]
-            first = web_app.create_consultation_handoff(
-                run_id,
-                ConsultationHandoffRequest(consent=True),
-                owner_token,
-            )["handoff"]
-            second = web_app.create_consultation_handoff(
-                run_id,
-                ConsultationHandoffRequest(consent=True),
-                owner_token,
-            )["handoff"]
-            try:
-                web_app.create_consultation_handoff(
-                    run_id,
-                    ConsultationHandoffRequest(consent=True),
-                    intruder_token,
+            with (
+                TestClient(web_app.app) as owner_client,
+                TestClient(web_app.app) as intruder_client,
+            ):
+                owner_login = owner_client.post("/api/auth/login", json={
+                    "email": owner_spec["email"],
+                    "password": owner_spec["password"],
+                })
+                owner_login.raise_for_status()
+                intruder_login = intruder_client.post("/api/auth/login", json={
+                    "email": intruder_spec["email"],
+                    "password": intruder_spec["password"],
+                })
+                intruder_login.raise_for_status()
+                analyzed = owner_client.post(
+                    "/api/analyze",
+                    json=scenario["request"],
                 )
-            except HTTPException as exc:
-                intruder_status = exc.status_code
-            else:
-                intruder_status = None
+                analyzed.raise_for_status()
+                run_id = analyzed.json()["analysis_run_id"]
+                path = f"/api/analyses/{run_id}/consultation-handoff"
+                first_response = owner_client.post(
+                    path,
+                    json={"consent": True},
+                )
+                first_response.raise_for_status()
+                first = first_response.json()["handoff"]
+                second_response = owner_client.post(
+                    path,
+                    json={"consent": True},
+                )
+                second_response.raise_for_status()
+                second = second_response.json()["handoff"]
+                intruder_status = intruder_client.post(
+                    path,
+                    json={"consent": True},
+                ).status_code
     return {
         "first": first,
         "second": second,
@@ -385,7 +442,10 @@ def _evaluate_handoff_safety(
 def run_scenario(scenario: dict[str, Any]) -> TaskOutcome:
     started = perf_counter()
     if scenario["kind"] == "analyze":
-        body = web_app.analyze_endpoint(AnalyzeRequest(**scenario["request"]))
+        with TestClient(web_app.app) as client:
+            response = client.post("/api/analyze", json=scenario["request"])
+            response.raise_for_status()
+            body = response.json()
         checks = _evaluate_analyze(body, scenario["expect"])
     elif scenario["kind"] == "consultation_handoff":
         payload = _run_handoff(scenario)
@@ -426,6 +486,7 @@ def run_benchmark() -> BenchmarkReport:
 def report_as_dict(report: BenchmarkReport) -> dict[str, Any]:
     return {
         "benchmark_id": report.benchmark_id,
+        "transport": "http_asgi_testclient",
         "task_success": {
             "passed": report.tasks_passed,
             "total": len(report.outcomes),

@@ -34,6 +34,9 @@ last-reviewed: 2026-07-31
 - 회귀 게이트: [`tests/benchmark/test_user_tasks.py`](../../tests/benchmark/test_user_tasks.py)
 - CLI: [`scripts/benchmark_user_tasks.py`](../../scripts/benchmark_user_tasks.py)
 
+모든 시나리오는 엔드포인트 함수를 직접 호출하지 않고 FastAPI ASGI HTTP 클라이언트로
+`POST /api/analyze`, 로그인, 상담 패킷 API를 호출한다.
+
 ### 실행
 
 ```powershell
@@ -62,6 +65,7 @@ python -m pytest -q tests/benchmark/test_user_tasks.py
 | UT11–UT12 | 자연어 표현 변형의 복합거래 분리 | 금액·날짜의 거래별 귀속 | 거래 간 사실 뒤바뀜 |
 | UT13 | 상담 패킷 재생성과 계정 격리 | ID 안정성·비전송·타 tenant 404 | 중복·정보노출 |
 | UT14 | 거래 설명 뒤 수출지원 질문 | 실제 거래 2건만 분리 | 지원 용어를 허위 거래로 생성 |
+| UT15 | 수입 환노출과 부분 헤지 계산 | 환율 밴드·불리한 손익·최적 헤지 비율·대안 손익 | API에서 계산 워커가 우회되거나 과거 재현 실패 |
 
 자동화 세트는 핵심 고객인 수출입 병행 제조기업의 가장 중요한 흐름과 오판 위험을 우선한다.
 모든 시나리오가 `critical=true`인 이유는 하나의 평균 점수로 안전 실패를 상쇄하지 않기 위해서다.
@@ -72,17 +76,17 @@ python -m pytest -q tests/benchmark/test_user_tasks.py
 
 | 지표 | 결과 |
 |---|---:|
-| 고객 과업 성공 | 14/14 |
-| 구조화 검증 성공 | 43/43 |
+| 고객 과업 성공 | 15/15 |
+| 구조화 검증 성공 | 48/48 |
 | Capability acceptance | 18/22 |
-| 인프로세스 median | 약 26 ms |
-| 인프로세스 p95 | 약 327 ms |
-| 상담 패킷 격리 과업 | 약 327 ms |
+| ASGI HTTP median | 약 70 ms |
+| ASGI HTTP p95 | 약 531 ms |
+| 상담 패킷 격리 과업 | 약 531 ms |
 
 지연은 개발 PC의 단일 실행 결과이므로 현재는 관찰값이다. 회귀 게이트로 사용하지 않으며 CI에서
 표본을 누적한 뒤 환경별 기준을 분리한다.
 
-Capability acceptance의 18/22와 user-task 14/14는 모순이 아니다. 자동화 고객 과업은 현재 지원
+Capability acceptance의 18/22와 user-task 15/15는 모순이 아니다. 자동화 고객 과업은 현재 지원
 범위에서 모두 성공하지만, 수출입은행 정책자금, UCP600 L/C 조항 검토, 바이어 신용조회 같은
 확장 능력은 아직 없다는 뜻이다.
 
@@ -269,7 +273,7 @@ python scripts/benchmark_user_tasks.py --json
 python scripts/benchmark_user_tasks.py --json
 ```
 
-JSON 결과는 build artifact로 보존하고 commit, OS, Python 버전과 함께 추세화한다. 인프로세스
+JSON 결과는 build artifact로 보존하고 commit, OS, Python 버전과 함께 추세화한다. ASGI HTTP
 지연과 브라우저 E2E 지연은 환경이 다르므로 같은 그래프에 합치지 않는다.
 
 릴리스 전:
@@ -283,9 +287,9 @@ JSON 결과는 build artifact로 보존하고 commit, OS, Python 버전과 함�
 
 ## 12. 다음 추가 케이스
 
-UT06–UT14에서 기초잔액, 상담 전후 상태, 계정 격리·중복 생성, EUR·D/A 범위와 지원 용어의
+UT06–UT15에서 기초잔액, 상담 전후 상태, 계정 격리·중복 생성, EUR·D/A 범위, 지원 용어의
 허위 거래 생성을 우선
-자동화했다. 남은 우선순위 케이스는 다음과 같다.
+생성과 환헤지 계산을 우선 자동화했다. 남은 우선순위 케이스는 다음과 같다.
 
 1. 현재 2개인 복합문 표현 변형을 10개 이상으로 확대
 2. 결제일이 반대 순서인 자연헤지 케이스
