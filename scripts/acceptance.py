@@ -22,12 +22,33 @@ from tests.acceptance.capabilities import BY_NAME  # noqa: E402
 from tests.acceptance.harness import run_all  # noqa: E402
 
 
+def routing_floor() -> tuple[int, int]:
+    """How many routing cases hold, out of how many.
+
+    Printed beside the scenario score because it is the other half of the same
+    question. The scenarios ask what the product can decide; this asks whether
+    the decision is reached when someone asks for it. A router that stops
+    calling a worker scores full marks on the first and zero on this.
+    """
+    from tests.acceptance.routing_floor import check_all  # noqa: PLC0415
+
+    outcomes = check_all()
+    return sum(1 for ok, _ in outcomes if ok), len(outcomes)
+
+
 def main() -> int:
     outcomes = run_all()
     met = sum(len(o.met) for o in outcomes)
     wanted = sum(len(o.met) + len(o.missing) for o in outcomes)
 
-    print(f"시나리오 수용 현황 — {met}/{wanted}\n")
+    held, cases = routing_floor()
+    print(f"시나리오 수용 현황 — {met}/{wanted}")
+    print(f"라우팅 바닥 — {held}/{cases}")
+    from tests.acceptance.routing_floor import check_all  # noqa: PLC0415
+    for ok, said in check_all():
+        if not ok:
+            print(f"        ✗ {said}")
+    print()
     for outcome in outcomes:
         print(f"  {outcome.scenario}  {outcome.score:>5}  {outcome.title}")
         for name in outcome.missing:

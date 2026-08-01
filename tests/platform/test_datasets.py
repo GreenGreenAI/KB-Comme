@@ -153,6 +153,44 @@ class SnapshotCatalogTests(unittest.TestCase):
             self.assertEqual(2, len(refs))
             self.assertEqual(expected, latest_snapshot_path(root, "ERP_TRADE_FEED"))
 
+    def test_historical_lookup_excludes_snapshots_not_yet_known(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            older = _write_trade_snapshot(
+                root,
+                _trade_payload(
+                    version="known",
+                    observed_at="2026-07-26T09:00:00+09:00",
+                ),
+            )
+            _write_trade_snapshot(
+                root,
+                _trade_payload(
+                    version="future",
+                    observed_at="2026-07-31T09:00:00+09:00",
+                ),
+            )
+
+            selected = latest_snapshot_path(
+                root,
+                "ERP_TRADE_FEED",
+                as_of=datetime(2026, 7, 28, 12, tzinfo=KST),
+            )
+
+            self.assertEqual(older, selected)
+
+    def test_historical_lookup_rejects_naive_cutoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_trade_snapshot(root, _trade_payload())
+
+            with self.assertRaisesRegex(ValueError, "timezone-aware"):
+                latest_snapshot_path(
+                    root,
+                    "ERP_TRADE_FEED",
+                    as_of=datetime(2026, 7, 28),
+                )
+
     def test_missing_source_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(SnapshotNotFoundError):

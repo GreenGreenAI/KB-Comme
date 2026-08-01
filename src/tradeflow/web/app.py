@@ -43,17 +43,21 @@ from tradeflow.knowledge.hedge_quotes import (
     UserQuoteHedgeAvailabilityService,
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
+from tradeflow.domain.models import CompanyProfile
+from tradeflow.runtime import introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
-from tradeflow.agent.orchestrator import analyze
+from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
+from tradeflow.tools.utterance_kind import ABOUT, GREETING, TRADE, read_kind
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
     financing_purpose,
     krw_amount,
+    payment_structure,
     place_utterance,
     read_utterance,
 )
@@ -77,6 +81,11 @@ accounts = AccountStore(ACCOUNT_DB)
 #: §4.2[9]. Constructed whether or not a key is present — without one it simply
 #: declines, and the screen writes its own sentence.
 synthesizer = Synthesizer()
+# Attached here rather than left to the operator. Every rejection §4.2[9] made
+# was already being recorded and none of it arrived: uvicorn does not configure
+# application loggers, so INFO was dropped at the root and the log held nothing
+# while every synthesised sentence was being refused.
+observing.listen()
 logger = logging.getLogger("tradeflow.synthesis")
 
 
@@ -204,6 +213,12 @@ class AnalyzeRequest(BaseModel):
     utterance: str | None = None
     company_name: str = "미입력 기업"
     is_sme: bool | None = None
+    #: §5.4's two most-asked company facts, for callers with no account. An
+    #: account carries six; these are the two the eligibility rules name first,
+    #: and without them a signed-out company asking about 지원제도 was told
+    #: which facts were missing and given no way to state them.
+    company_size: Literal["small", "mid_sized", "large"] | None = None
+    credit_issue_free: bool | None = None
     opening_balance_usd: str | None = None
     baseline_profit: str | None = None
     profit_floor: str | None = None
@@ -211,6 +226,17 @@ class AnalyzeRequest(BaseModel):
     #: Set only when the user has already answered "새 거래인가, 수정인가".
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
+    #: The sentence this turn is still answering, when the turn itself has
+    #: none. A request panel sends values and no words, and without this the
+    #: answer forgot what the conversation was about between one turn and the
+    #: next. Read for intent only — never for facts, which would let an
+    #: already-answered sentence describe its trade twice.
+    asked_about: str | None = None
+    #: Ask the answer to carry a record of how it was produced — what each
+    #: layer read and handed on, and how long each worker took. Off by default
+    #: and deliberately so: the record contains the company's own facts, and an
+    #: instrument that ships them to every caller is a leak with a switch.
+    trace: bool = False
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
 
@@ -355,9 +381,22 @@ def analyze_endpoint(
                     }
                 supplied = [*supplied[:-1], merged] if supplied else [merged]
 
+    # What the sentence is doing, before what it is missing. §4.2[1] counts
+    # slots, and a greeting is missing all three exactly as a half-described
+    # trade is — so counting alone answered "안녕" with a request for the
+    # amount and the settlement date. Only turns with nothing else to say
+    # reach the slot reader; a described trade goes straight past this.
+    kind = read_kind(
+        request.utterance,
+        heard=heard,
+        topics=read_intent(request.utterance or ""),
+    )
+    if kind != TRADE and not supplied_trade(supplied):
+        return _answer_without_a_trade(kind, request.utterance, as_of)
+
     reading = intake(
         supplied,
-        company=account.profile() if account else None,
+        company=account.profile() if account else _stated_profile(request),
         company_name=request.company_name,
         is_sme=request.is_sme,
         opening_balances=balances,
@@ -428,6 +467,7 @@ def analyze_endpoint(
         profit_floor=profit_floor,
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
+        intent=_subjects(request),
     )
     result = build_response(analysis)
 
@@ -437,17 +477,98 @@ def analyze_endpoint(
     # network, or a sentence that invented a number — leaves `summary` empty
     # and the screen assembles its own sentence, so prose is the only thing
     # that can be lost here.
-    written = synthesizer.write(figures(result), question=request.utterance)
+    written = synthesizer.write(
+        figures(result),
+        question=request.utterance,
+        subjects=list(read_intent(_subject_text(request))),
+        # The packet identifies the analysis (§6.2) and the sentence identifies
+        # the question. Together they decide the decoding, so the same answer
+        # to the same question reads the same and the next one does not
+        # inherit its wording.
+        seed=f"{result.get('packet_id')}|{_subject_text(request)}",
+    )
     if written.accepted:
         result["summary"] = written.sentence
     elif written.reason:
         logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
 
+    # What the conversation is about, for everything below. This turn's own
+    # words when it has any; otherwise the question still on the table.
+    subject = _subject_text(request)
+
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
-    result["pointer"] = pointer(result)
-    result["holds"] = _holds(request.utterance)
-    result["coverage"] = _coverage(request.utterance)
+    subjects = tuple(result["execution_plan"]["topics"])
+    result["pointer"] = pointer(result, intent=subjects)
+    if account is None:
+        # §5.4's rules read company facts, and an anonymous caller has none —
+        # so a question about 지원제도 is answered by naming two facts rather
+        # than a product. Signing in is where those facts already live, and
+        # not saying so leaves the reader to supply by hand what the account
+        # would have carried. Only the web layer knows there is no session;
+        # routing must not learn about sessions to say this.
+        blocked = (result.get("workers") or {}).get("skipped") or {}
+        if "support" in blocked and result["pointer"] == blocked["support"]:
+            result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
+    # The judgements as sentences. Written here rather than by §4.2[9], which
+    # may not utter a verdict, and rendered as prose rather than as folds —
+    # a record is something you audit, not something you read.
+    result["said"] = {
+        "support": narration.support(result),
+        "compliance": narration.compliance(result),
+        "actions": narration.actions(result),
+        "sources": narration.sources(result),
+        "detail": narration.detail(result),
+    }
+    # §4.2[9] again, on the judgements this time — but only to retell them.
+    # The instruction asks it to invent nothing; `check_retold` is what makes
+    # that a contract rather than a request. A refusal leaves the assembled
+    # sentences, which are already true and already complete.
+    #
+    # 신고의무는 넘기지 않는다. §5.5는 「아직 모름」이 「없음」으로 읽히는 것을
+    # 금지하고, 그 금지는 「신고가 불필요하다는 판정은 아닙니다」라는 한 문장에
+    # 실려 있다. 재작성은 그 문장을 지웠다 — 짧아졌고, 잘 읽히고, 회사는
+    # 신고 의무가 없다고 믿게 된다. 모델은 찾은 것을 다시 말할 수 있고,
+    # 보류한 것을 다시 말할 수는 없다.
+    # One answer, not four strands stitched together. Everything the workers
+    # produced goes in at once — the figures sentence, the eligibility
+    # judgements, the filing branches, the next action — and comes back as one
+    # piece of prose. What keeps that safe is not the instruction but
+    # `check_retold`: nothing new, nothing dropped, and the sentences §5.5
+    # rests on carried word for word.
+    told = [
+        *([result["summary"]] if result.get("summary") else []),
+        *result["said"]["support"],
+        *result["said"]["compliance"],
+        *result["said"]["actions"],
+    ]
+    retold = synthesizer.retell(
+        told,
+        # Every subject the rules judged. A rewrite may shorten a name; it may
+        # not leave a judgement out.
+        subjects=tuple(
+            row["title"] for row in result["said"]["detail"] if row["title"] != "필요서류"
+        ),
+        # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one sentence.
+        # A rewrite dropped it the first time it was allowed near it.
+        required=tuple(
+            line for line in result["said"]["compliance"] if "판정은 아닙니다" in line
+        ),
+        seed=f"retell|{result.get('packet_id')}",
+    )
+    if retold.accepted:
+        result["said"]["retold"] = retold.sentence
+    elif retold.reason:
+        logger.info("재작성 미채택: %s | %s", retold.reason, retold.sentence[:120])
+    # The pointer exists because the synthesised sentence may not carry a
+    # verdict. When the narration carries one, the pointer is the same claim
+    # twice — and the reader met it twice, three lines apart.
+    if any(result["said"].get(section) for section in subjects):
+        result["pointer"] = ""
+    if request.trace:
+        result["trace"] = _trace(request, reading, analysis, subject)
+    result["holds"] = _holds(subject)
+    result["coverage"] = _coverage(subject)
     # Which of the two the reader meets first. §4.2[9]'s sentence may only
     # quote `figures()`, and every figure in it is an exposure, a rate or a
     # hedge ratio — that is the whole safety division and it stays. But a
@@ -457,7 +578,24 @@ def analyze_endpoint(
     # was two lines further down, in the code-owned pointer.
     #
     # Ordering only. Nothing is added, removed or re-worded.
-    result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
+    result["lead"] = "pointer" if _leads(subjects) else "summary"
+    # What to ask for next, chosen by what was asked about. Every blocked
+    # worker still reports its reason in its own fold — nothing is hidden —
+    # but only one of them gets the top of the screen and an input panel.
+    # A company that asked whether its netting is reportable was being asked
+    # for its operating profit, which is §5.3's input and nobody's answer.
+    result["asking_for"] = _asking_for(subjects, result)
+    # The facts §5.4 is waiting for, when the caller is the one who can state
+    # them. A signed-in company already stated them once and is never asked.
+    result["required_inputs"]["profile"] = (
+        [
+            attribute
+            for attribute in STATED_COMPANY_FACTS
+            if getattr(request, attribute) is None
+        ]
+        if account is None and "support" in ((result.get("workers") or {}).get("skipped") or {})
+        else []
+    )
     return {
         "status": "ready",
         "understood": heard,
@@ -470,12 +608,269 @@ def analyze_endpoint(
 _SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
 
 
-def _pointer_leads(utterance: str | None) -> bool:
-    """True when the first thing the sentence asked about is not what the
-    summary can say. Silence — a trade description with no question — keeps
-    the default order."""
-    lead = next(iter(read_intent(utterance or "")), None)
+def _trace(
+    request: AnalyzeRequest,
+    reading: Any,
+    analysis: Any,
+    subject: str,
+) -> dict[str, Any]:
+    """What each layer read and what it handed on.
+
+    The response already showed the *result* of every layer — the plan, the
+    workers, the packet. What it never showed was the flow: which slots intake
+    read out of the sentence, which facts the orchestrator asserted, which of
+    them reached the rules. Finding out why `financing.purpose` was never
+    filled meant reading the code, because no answer said what had been handed
+    across.
+
+    Nothing here is used to decide anything. It is a mirror held up to a
+    request that has already been answered.
+    """
+    program = getattr(reading, "program", None)
+    return {
+        "utterance": {
+            "kind": read_kind(
+                request.utterance,
+                heard=read_utterance(request.utterance or "", as_of=_analysis_date(request.as_of)),
+                topics=read_intent(request.utterance or ""),
+            ),
+            "intent": list(read_intent(subject)),
+            "slots": read_utterance(
+                request.utterance or "", as_of=_analysis_date(request.as_of)
+            ),
+            "financing_purpose": financing_purpose(request.utterance),
+            "payment_structure": payment_structure(request.utterance),
+        },
+        "intake": {
+            "ready": getattr(reading, "ready", None),
+            "missing": list(getattr(reading, "missing", ())),
+            "cases": len(getattr(program, "cases", ()) or ()),
+            "company_facts": sorted(
+                (program.company.facts() if program is not None else {}) or {}
+            ),
+        },
+        "plan": analysis.plan.as_dict(),
+        "workers": {
+            "completed": list(analysis.report.completed),
+            "failed": analysis.report.failed,
+            "skipped": sorted(analysis.report.skipped),
+            "took_seconds": analysis.report.took,
+        },
+        "knowledge": {
+            "declared_structure": dict(analysis.declared_structure),
+            "decisions": len(
+                (analysis.decision_packet.decisions if analysis.decision_packet else ())
+            ),
+            "evidence": sorted(
+                {
+                    item.evidence_id
+                    for item in (
+                        analysis.decision_packet.evidence
+                        if analysis.decision_packet
+                        else ()
+                    )
+                }
+            ),
+        },
+    }
+
+
+def _subjects(request: AnalyzeRequest) -> tuple[str, ...]:
+    """What this turn is about — keywords first, the model appending.
+
+    The keyword reading keeps its lead, so every routing case pinned in
+    `tests/acceptance/routing.json` still holds whatever the model says. What
+    the model can do is notice a subject the word lists have no entry for:
+    「지금 환전해 두는 게 나을까요」 names no hedge word and is a hedge
+    question, and 「거래처가 망하면 대금을 못 받을 텐데」 names no support word
+    and is asking which insurance covers it.
+    """
+    said = _subject_text(request)
+    return planner.widen(said, read_intent(said), synthesizer=synthesizer, seed=said)
+
+
+def _subject_text(request: AnalyzeRequest) -> str:
+    """The sentence whose subject this turn is answering.
+
+    This turn's own words when it has any; otherwise the question still on the
+    table. Only the subject is taken from the older sentence — the slot reader
+    never sees it, so a trade described once is not described again.
+    """
+    return request.utterance or request.asked_about or ""
+
+
+def _leads(subjects: tuple[str, ...]) -> bool:
+    """True when the first thing asked about is not what the summary can say.
+
+    Silence — a trade description with no question — keeps the default order.
+    """
+    lead = next(iter(subjects), None)
     return lead is not None and lead not in _SENTENCE_SUBJECTS
+
+
+#: The company facts a request body may state, and where §5.4 reads them.
+STATED_COMPANY_FACTS = {
+    "company_size": "company.size",
+    "credit_issue_free": "company.credit_issue_free",
+}
+
+
+def _stated_profile(request: AnalyzeRequest) -> CompanyProfile | None:
+    """A profile from what the caller typed, for callers with no account.
+
+    An account is the better place for these — it holds six facts, states them
+    once, and does not ask again next session. This is the same facts by hand,
+    so a company that has not signed up still gets a judgement rather than a
+    list of what it would need.
+
+    Nothing stated produces no profile at all: §5.4 must go on reporting the
+    facts as missing rather than being handed an invented `False`. `is_sme`
+    follows from the size when the size is given — they are the same claim, and
+    letting them disagree would be a contradiction the rules cannot see.
+    """
+    stated = {
+        fact: getattr(request, attribute)
+        for attribute, fact in STATED_COMPANY_FACTS.items()
+        if getattr(request, attribute) is not None
+    }
+    is_sme = request.is_sme
+    if request.company_size is not None:
+        is_sme = request.company_size in ("small", "mid_sized")
+    if not stated and is_sme is None:
+        return None
+    return CompanyProfile(
+        company_id="COMPANY-001",
+        name=request.company_name,
+        is_sme=is_sme,
+        attributes=stated,
+    )
+
+
+def supplied_trade(cases: list[dict[str, Any]]) -> bool:
+    """Whether the form already holds anything about a trade.
+
+    A greeting typed into a session that has a trade on screen is still a
+    greeting, but it must not discard what is there — so the trade-less path
+    is only taken when there is genuinely no trade anywhere.
+    """
+    return any(any(value for value in case.values()) for case in cases)
+
+
+def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> dict[str, Any]:
+    """The three turns that are not a trade description.
+
+    None of them needs a trade, and all three used to get the same three
+    questions. What is said here is either fixed prose or read straight off a
+    snapshot — no worker runs, no packet is produced, and nothing is judged.
+    """
+    if kind == GREETING:
+        return {"status": "said", "understood": {}, "spoken": introduction.opening()}
+    if kind == ABOUT:
+        return {"status": "said", "understood": {}, "spoken": introduction.paragraph()}
+
+    # TOPIC. Some subjects have an answer that stands on its own; the rest
+    # still need the trade, and asking for it is right — after saying what
+    # did not need it.
+    said, figures = _standing_answer(utterance, as_of)
+    return {
+        "status": "said" if said else "needs_input",
+        "understood": {},
+        "spoken": said,
+        "figures": figures,
+        "questions": [] if said else [],
+        "coverage": _coverage(utterance),
+        "holds": _holds(utterance),
+        # Said whether or not the standing part answered: the subject they
+        # raised may still need the trade, and this is the sentence that says
+        # so instead of leaving them waiting.
+        "asks_for_trade": ASK_FOR_TRADE.get(
+            next(iter(read_intent(utterance or "")), ""), DEFAULT_ASK
+        ),
+    }
+
+
+#: What each subject still needs from the trade, once the standing part of the
+#: answer has been given. Written per subject because "금액과 날짜를 알려주세요"
+#: after a rate quote reads as the product having ignored its own answer.
+ASK_FOR_TRADE = {
+    "market_scenario": (
+        "이 환율이 특정 거래에 얼마인지 보시려면, 수출인지 수입인지와 금액, "
+        "대금을 주고받기로 한 날짜를 알려주세요."
+    ),
+    "hedge": (
+        "헤지비율은 거래가 있어야 계산합니다. 수출인지 수입인지와 금액, "
+        "대금을 주고받기로 한 날짜를 알려주세요."
+    ),
+    "exposure": (
+        "노출을 계산하려면 수출인지 수입인지와 금액, 대금을 주고받기로 한 "
+        "날짜가 필요합니다."
+    ),
+    "support": (
+        "자격을 판정하려면 수출인지 수입인지와 금액, 대금을 주고받기로 한 "
+        "날짜를 알려주세요."
+    ),
+    "compliance": (
+        "신고 의무는 거래 구조에서 발생하므로, 거래를 알려주시면 판정합니다."
+    ),
+}
+
+DEFAULT_ASK = (
+    "거래를 알려주시면 노출과 지원제도·신고의무를 함께 봐 드립니다."
+)
+
+
+def _standing_answer(utterance: str | None, as_of: date) -> tuple[str, list[str]]:
+    """The part of the subject that holds without a trade.
+
+    Today that is the published rate and the window behind it. It is read from
+    the same snapshot the band uses, under the same freshness policy, so a
+    number said here cannot disagree with the same number said in an answer.
+    A stale or absent snapshot says nothing rather than quoting an old rate.
+    """
+    topics = read_intent(utterance or "")
+    if "market_scenario" not in topics:
+        return "", []
+    try:
+        now = market_now(SNAPSHOT_ROOT, as_of=datetime.combine(as_of, time(0, 0), tzinfo=UTC))
+    except Exception as failure:  # noqa: BLE001 — stale, missing, unreadable
+        logger.info("환율 단독 응답 미채택: %s", type(failure).__name__)
+        return "", []
+    figures = [
+        f"현재 환율: {now.spot_rate} (KRW per USD, 한국은행 매매기준율 "
+        f"{now.observed_on.isoformat()} 기준)",
+        f"연환산 변동성: {now.annualized_volatility:.1%} "
+        f"(최근 {now.window}영업일, {now.first_observed.isoformat()}~"
+        f"{now.last_observed.isoformat()})",
+    ]
+    return "\n\n".join(figures), figures
+
+
+#: Which blocked worker each subject would want unblocked. A subject not
+#: listed has nothing to collect beyond the trade itself.
+_UNBLOCKS = {"hedge": "hedge", "exposure": "hedge", "support": "support"}
+
+
+def _asking_for(topics: tuple[str, ...], result: dict[str, Any]) -> str | None:
+    """The one worker whose missing input is worth the top of the screen.
+
+    §4.2[2] already decides why each worker was skipped and every reason is
+    rendered in its own fold. This decides which of them is also the thing
+    the reader is asked for right now — an input panel is a demand, and a
+    demand for a value the question did not need reads as the product not
+    having listened.
+
+    A sentence that asked about nothing in particular keeps the old behaviour:
+    a plain trade description is the funnel's own case, and §2's reader does
+    not know their exposure well enough to ask about it by name.
+    """
+    skipped = (result.get("workers") or {}).get("skipped") or {}
+    if not topics:
+        return "hedge" if "hedge" in skipped else None
+    for topic in topics:
+        worker = _UNBLOCKS.get(topic)
+        if worker and worker in skipped:
+            return worker
+    return None
 
 
 def _coverage(utterance: str | None) -> str:

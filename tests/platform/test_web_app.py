@@ -266,27 +266,165 @@ class AnswerOrderTests(unittest.TestCase):
     design and it stays — but it meant a company asking about 제작 자금 always
     opened the answer on its exchange-rate exposure, with the judgement it had
     asked for two lines below in the code-owned pointer.
+
+    Written against the subjects rather than the sentence: the reading is now
+    the keywords plus whatever the model adds, and this holds for both.
     """
 
-    def test_a_financing_question_is_answered_first(self) -> None:
-        self.assertTrue(
-            app._pointer_leads(
-                "제품 제작에 들어갈 자금이 부족합니다. 무역금융이 있을까요?"
-            )
-        )
-
     def test_a_filing_question_is_answered_first(self) -> None:
-        self.assertTrue(app._pointer_leads("신고해야 할 게 있나요?"))
+        self.assertTrue(app._leads(("compliance",)))
+
+    def test_a_financing_question_is_answered_first(self) -> None:
+        self.assertTrue(app._leads(("support",)))
 
     def test_an_exposure_question_keeps_the_sentence_first(self) -> None:
-        self.assertFalse(app._pointer_leads("환율이 얼마나 오를까요?"))
+        self.assertFalse(app._leads(("market_scenario",)))
+        self.assertFalse(app._leads(("exposure",)))
+        self.assertFalse(app._leads(("hedge",)))
 
     def test_a_trade_description_keeps_the_sentence_first(self) -> None:
         """No question in it, so nothing was asked out of order."""
-        self.assertFalse(
-            app._pointer_leads("10월 24일에 수출대금 10만 달러 받기로 했어요")
+        self.assertFalse(app._leads(()))
+
+
+class AskingForTests(unittest.TestCase):
+    """Which blocked worker gets the top of the screen and an input panel.
+
+    Every skipped worker reports its reason in its own fold, and that does not
+    change — but an input panel is a demand, and a demand for a value the
+    question did not need reads as the product not having listened. A company
+    asking whether its netting is reportable was being asked for its operating
+    profit, which is §5.3's input and nobody's answer.
+    """
+
+    def _skipped(self, *names: str) -> dict:
+        return {"workers": {"skipped": {name: "…" for name in names}}}
+
+    def test_a_filing_question_is_not_asked_for_the_operating_profit(self) -> None:
+        self.assertIsNone(app._asking_for(("compliance",), self._skipped("hedge")))
+
+    def test_a_hedge_question_is(self) -> None:
+        self.assertEqual(
+            "hedge", app._asking_for(("hedge",), self._skipped("hedge"))
         )
-        self.assertFalse(app._pointer_leads(None))
+
+    def test_a_trade_description_keeps_the_funnel(self) -> None:
+        """§2's reader does not know their exposure well enough to ask about it
+        by name, so a sentence that asked about nothing keeps the old
+        behaviour."""
+        self.assertEqual("hedge", app._asking_for((), self._skipped("hedge")))
+
+    def test_nothing_is_asked_for_when_nothing_is_blocked(self) -> None:
+        self.assertIsNone(app._asking_for(("hedge",), {}))
+
+
+class AnonymousSupportTests(unittest.TestCase):
+    """§5.4's rules read company facts and an anonymous caller has none, so a
+    question about 지원제도 is answered by naming two facts rather than a
+    product. Signing in is where those facts already live."""
+
+    def test_it_says_where_the_facts_already_live(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                cases=[],
+                utterance="10월 24일 수출 10만 달러인데 받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+            )
+        )
+        pointer = body["result"]["pointer"]
+
+        self.assertIn("기업규모와 신용 상태", pointer)
+        self.assertIn("로그인", pointer)
+
+
+class StatedProfileTests(unittest.TestCase):
+    """The same two facts by hand, for a company that has not signed up."""
+
+    def _support(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                utterance="받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+                **body,
+            )
+        )["result"]
+
+    def test_stating_them_produces_a_judgement(self) -> None:
+        result = self._support(company_size="small", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+        self.assertTrue(result["support_candidates"])
+
+    def test_stating_nothing_still_asks(self) -> None:
+        """§5.4 must go on reporting the facts as missing rather than being
+        handed an invented `False`."""
+        result = self._support()
+
+        self.assertIn("support", result["workers"]["skipped"])
+        self.assertEqual(
+            ["company_size", "credit_issue_free"], result["required_inputs"]["profile"]
+        )
+
+    def test_the_size_settles_whether_it_is_an_sme(self) -> None:
+        """They are the same claim, and letting them disagree would be a
+        contradiction the rules cannot see."""
+        result = self._support(company_size="large", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+
+
+class StandingSubjectTests(unittest.TestCase):
+    """A request panel sends values and no words.
+
+    Reading intent from that blank reordered the answer back to the default
+    the moment the user supplied what was asked for — the judgement they came
+    for closed itself as it arrived, and the funnel started asking again.
+    """
+
+    def _answer(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                as_of="2026-07-28",
+                company_size="small",
+                credit_issue_free=True,
+                **body,
+            )
+        )["result"]
+
+    def test_the_question_still_on_the_table_orders_the_answer(self) -> None:
+        result = self._answer(asked_about="받을 수 있는 지원제도가 있나요")
+
+        self.assertEqual("pointer", result["lead"])
+        self.assertEqual("support", result["execution_plan"]["section_order"][0])
+
+    def test_a_turn_with_no_subject_at_all_keeps_the_default(self) -> None:
+        result = self._answer()
+
+        self.assertEqual("summary", result["lead"])
+
+    def test_the_older_sentence_never_reaches_the_slot_reader(self) -> None:
+        """Ordering only. A trade described once must not describe itself a
+        second time — two turns would produce two trades."""
+        result = self._answer(
+            asked_about="12월 3일에 수입대금 5만 달러 지급합니다"
+        )
+
+        self.assertEqual(1, len(result["trade_timeline"]))
+        self.assertEqual("100000", result["trade_timeline"][0]["amount"])
 
 
 if __name__ == "__main__":

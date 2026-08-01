@@ -1,0 +1,85 @@
+{
+  "note": [
+    "무엇을 물으면 어떤 워커가 계획에 있어야 하는가.",
+    "",
+    "지금은 §4.2[2]가 키워드로 계획을 세운다. 명세는 라우팅 결정을 언젠가",
+    "LLM이 넘겨받는다고 적어 두었고, 그렇게 되면 이 파일이 바닥이 된다 —",
+    "라우터는 여기 적힌 것에 더할 수는 있어도 뺄 수는 없다.",
+    "",
+    "이 표가 없으면 라우팅은 조용히 나빠진다. 발명은 시끄러운 실패지만",
+    "누락은 아무 흔적도 남기지 않는다. 안 부른 워커는 화면에 아무것도",
+    "쓰지 않고, 사용자는 그 판정이 존재한다는 것조차 모른다.",
+    "",
+    "각 줄은 오늘 실제로 있었던 결함에서 왔다. `자금`을 환노출로 읽어",
+    "제작 자금을 물은 회사에게 환율을 답했고, `상계`를 읽지 못해 §5.5가",
+    "한 번도 돌지 않았고, 인사에 슬롯 세 개를 요구했다. 셋 다 키워드를",
+    "고쳐 막았으므로, 키워드를 쓰지 않는 라우터로 바꾸면 이 시험만 남는다."
+  ],
+  "cases": [
+    {
+      "id": "R1",
+      "why": "제작 자금은 조달 문제이지 환노출이 아니다",
+      "utterance": "베트남에 3억 원 규모 장비를 수출하는데 제품 제작에 들어갈 자금이 부족합니다. 중소기업이 쓸 수 있는 무역금융이나 정책자금이 있을까요?",
+      "case": {
+        "direction": "수출",
+        "amount": "230000",
+        "expected_payment_date": "2026-11-30"
+      },
+      "must_plan": ["support"],
+      "must_lead": "support",
+      "must_read": { "financing_purpose": "trade_finance" }
+    },
+    {
+      "id": "R2",
+      "why": "회사가 상계라고 말했으면 §5.5가 돌아야 한다",
+      "utterance": "8월 25일 수입 6만 달러를 상계로 처리하는데 신고 대상인가요",
+      "case": {
+        "direction": "수입",
+        "amount": "60000",
+        "expected_payment_date": "2026-08-25"
+      },
+      "must_plan": ["compliance"],
+      "must_lead": "compliance",
+      "must_read": { "payment_structure": ["payment.is_netting"] }
+    },
+    {
+      "id": "R3",
+      "why": "환율을 물으면 시나리오가 앞에 온다",
+      "utterance": "12월 3일 수출 15만 달러, 환율이 더 떨어지면 얼마나 손해인가요",
+      "case": {
+        "direction": "수출",
+        "amount": "150000",
+        "expected_payment_date": "2026-12-03"
+      },
+      "must_plan": ["exposure", "market_scenario"],
+      "must_lead": "market_scenario",
+      "must_read": {}
+    },
+    {
+      "id": "R4",
+      "why": "지원제도를 물으면 자격 판정이 계획에 있어야 한다",
+      "utterance": "10월 24일 수출 10만 달러인데 받을 수 있는 지원제도가 있나요",
+      "case": {
+        "direction": "수출",
+        "amount": "100000",
+        "expected_payment_date": "2026-10-24"
+      },
+      "must_plan": ["support"],
+      "must_lead": "support",
+      "must_read": {}
+    },
+    {
+      "id": "R5",
+      "why": "아무것도 특정해 묻지 않은 거래 서술은 전부를 본다",
+      "utterance": "10월 24일에 수출대금 10만 달러 받기로 했어요",
+      "case": {
+        "direction": "수출",
+        "amount": "100000",
+        "expected_payment_date": "2026-10-24"
+      },
+      "must_plan": ["exposure", "market_scenario", "support"],
+      "must_lead": null,
+      "must_read": {}
+    }
+  ]
+}

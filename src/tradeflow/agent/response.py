@@ -13,10 +13,11 @@ change them.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Mapping
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.runtime.analysis_service import decision_packet_document
+from tradeflow.runtime.sources import cite
 
 def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
@@ -54,8 +55,35 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
     }
 
 
+#: What a rulepack title says about itself and the reader does not need.
+_RULE_SUFFIXES = (" 후보", " 검토")
+
+
+def _product_name(title: str) -> str:
+    """The rule's title with its own bookkeeping removed."""
+    for suffix in _RULE_SUFFIXES:
+        if title.endswith(suffix):
+            return title[: -len(suffix)]
+    return title
+
+
+def _engaged(decision: dict[str, Any], declared: Mapping[str, bool]) -> bool:
+    """Whether the company's own words put this rule in play.
+
+    A declared fact is established, so it never appears in `missing_fields`;
+    what it does appear in is the satisfied condition the rule reports. That
+    is the signal, and it needs no list of which rule belongs to which family —
+    the rulepack already says so by naming the field.
+    """
+    if not declared:
+        return False
+    reasons = " ".join(decision.get("reasons") or ())
+    return any(f"{field}=" in reasons for field in declared)
+
+
 def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
     packet = analysis.decision_packet
+    declared = analysis.declared_structure
     if packet is None:
         return {
             "decision_packet": None,
@@ -76,12 +104,21 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
         projected = {
             "subject_id": decision["subject_id"],
             "rule_id": decision["rule_id"],
-            "title": decision["title"],
+            # The product, not the rule. A rulepack title ends in 후보 or 검토
+            # because that is what the rule produces; the company reading it
+            # wants the name of the thing it might apply for.
+            "title": _product_name(decision["title"]),
             "status": decision["status"],
             "matched": decision["matched"],
             "reasons": decision["reasons"],
             "missing_fields": decision["missing_fields"],
             "source_ids": decision["source_ids"],
+            # Named rather than counted. 「출처 2건」 is not a citation.
+            "sources": cite(decision["source_ids"]),
+            # Each condition in the words the rulepack wrote it in, so the
+            # answer can say what was checked instead of showing the
+            # comparison that checked it.
+            "checks": decision.get("checks") or [],
             "outcome": outcome,
         }
         if outcome.get("kind") == "support_candidate":
@@ -91,6 +128,14 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
                 else support_candidates
             ).append(projected)
         elif decision["matched"] is not False:
+            # Two rules can both say 정보부족 and mean different things. One
+            # knows it applies — the company said 상계 — and is waiting on the
+            # detail that decides which authority. The other does not know
+            # whether it applies at all, because nobody said whether there is
+            # a 상호계산 account. Nineteen rules run on every compliance
+            # request, so arriving as one list buries the three that were
+            # answering the question.
+            projected["engaged"] = _engaged(decision, declared)
             risk_findings.append(projected)
 
     actions = document["actions"]
@@ -209,6 +254,10 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "completed": list(analysis.report.completed),
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
+            # Timing is not here. §6.2 asks that the same analysis reproduce,
+            # and the replay test compares the whole response — a duration
+            # differs between two identical runs by definition. It goes to the
+            # log, and to the trace switch, neither of which is the answer.
         },
         # What §5.3 is still waiting on. The profit inputs come from the
         # analysis; the quote is named here because nothing upstream can — a

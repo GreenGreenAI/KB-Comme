@@ -132,6 +132,9 @@ export default function App() {
   }, []);
   const threadRef = useRef(null);
   const stick = useRef(true);
+  //: The last sentence the user wrote. Panel answers carry values and no
+  //: words, and the answer has to stay about what was asked.
+  const subject = useRef(null);
 
   /** The conversation continues where it left off, at the bottom.
    *
@@ -251,6 +254,9 @@ export default function App() {
     // resumes with every send. Only the reader scrolling during the arrival
     // turns it off again.
     stick.current = true;
+    // The last sentence the user actually wrote. Panel answers ride on it
+    // until they write another one.
+    if (utterance) subject.current = utterance;
     if (spoken) say({ who: "user", text: spoken });
     setView("work");
     setBusy(true);
@@ -260,6 +266,11 @@ export default function App() {
       const data = await analyze({
         cases: nextCases,
         utterance,
+        // What the conversation is still about. A panel answer carries values
+        // and no words, and the server was reading intent from that blank —
+        // so the judgement the user had just supplied a fact for closed
+        // itself as it arrived and the funnel started asking again.
+        ...(utterance ? {} : { asked_about: subject.current }),
         ...nextProfile,
         as_of: today(),
         ...(placement ? { placement } : {}),
@@ -309,6 +320,15 @@ export default function App() {
           heard: data.understood ?? {},
           spoken: Boolean(utterance),
         });
+      } else if (data.status === "said") {
+        // A greeting, a question about the product, or a subject that holds
+        // without a trade. No worker ran and nothing was judged, so there is
+        // no request panel to open — clearing `pending` matters, or the
+        // amount field from a previous turn stays on screen asking for a
+        // number this turn never needed.
+        await walk([], setThinking, spent);
+        setPending(null);
+        say({ who: "agent", kind: "said", ask: data });
       } else {
         await walk(stepsForAsk(data, utterance), setThinking, spent);
         setPending(data);
@@ -389,15 +409,25 @@ export default function App() {
               {!busy && !writing && (
                 <AskBar
                   pending={pending}
+                  /* The panel opens only for the worker this turn is asking
+                     about. §4.2[5]'s inputs are still named in the hedge fold
+                     whatever was asked — but a panel is a demand, and a
+                     company that asked whether its netting is reportable was
+                     being shown two boxes for its operating profit. */
                   requiredInputs={
-                    result?.hedge_analysis
+                    result?.hedge_analysis || result?.asking_for !== "hedge"
                       ? []
                       : result?.required_inputs?.hedge ?? []
                   }
                   quoteInputs={
-                    result?.hedge_analysis
+                    result?.hedge_analysis || result?.asking_for !== "hedge"
                       ? []
                       : result?.required_inputs?.quote ?? []
+                  }
+                  profileInputs={
+                    result?.asking_for === "support"
+                      ? result?.required_inputs?.profile ?? []
+                      : []
                   }
                   onSlot={(patch, said) => send(null, patch, null, said)}
                   onPlace={(utterance, placement, said) =>

@@ -122,9 +122,32 @@ def list_snapshot_refs(
     )
 
 
-def latest_snapshot_path(root: Path | str, source_id: str) -> Path:
-    """Return the most recently observed intact snapshot for a source."""
+def latest_snapshot_path(
+    root: Path | str,
+    source_id: str,
+    *,
+    as_of: datetime | None = None,
+) -> Path:
+    """Return the newest snapshot that was knowable at ``as_of``.
+
+    Historical analysis must not select a later observation merely because it
+    now exists on disk.  Both observation and retrieval time are bounded: data
+    observed earlier but collected after the requested decision time was not
+    available to that decision either.
+    """
     snapshots = list_snapshot_refs(root, source_id)
+    if as_of is not None:
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must be timezone-aware")
+        snapshots = tuple(
+            item
+            for item in snapshots
+            if item[1].observed_at <= as_of
+            and item[1].retrieved_at <= as_of
+        )
     if not snapshots:
-        raise SnapshotNotFoundError(f"no snapshot found for {source_id}")
+        suffix = f" at or before {as_of.isoformat()}" if as_of else ""
+        raise SnapshotNotFoundError(
+            f"no snapshot found for {source_id}{suffix}"
+        )
     return snapshots[-1][0]

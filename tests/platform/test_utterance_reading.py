@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from tradeflow.tools.utterance import financing_purpose, krw_amount, read_utterance
+from tradeflow.tools.utterance import financing_purpose, payment_structure, krw_amount, read_utterance
 
 AS_OF = date(2026, 7, 28)
 
@@ -184,6 +184,58 @@ class FinancingPurposeTests(unittest.TestCase):
         self.assertIsNone(financing_purpose("베트남에 10만 달러 수출합니다"))
         self.assertIsNone(financing_purpose(""))
         self.assertIsNone(financing_purpose(None))
+
+
+class PaymentStructureTests(unittest.TestCase):
+    """§5.5's compliance worker had been skipped on every request this product
+    ever served, and its skip reason asks for 상계·제3자 지급·상호계산 — while
+    the sentence it was answering said 「상계로 처리하는데 신고 대상인가요」.
+    Nineteen rules were loaded and ready the whole time."""
+
+    def test_it_reads_what_the_company_stated(self) -> None:
+        self.assertEqual(
+            {"payment.is_netting": True},
+            payment_structure("8월 25일 수입 6만 달러를 상계로 처리하는데 신고 대상인가요"),
+        )
+        self.assertEqual(
+            {"payment.is_netting": True}, payment_structure("네팅으로 차액만 결제합니다")
+        )
+        self.assertEqual(
+            {"payment.is_third_party": True},
+            payment_structure("제3자에게 대신 지급합니다"),
+        )
+        self.assertEqual(
+            {"payment.uses_mutual_account": True},
+            payment_structure("상호계산 계정을 쓰고 있어요"),
+        )
+
+    def test_a_negation_says_nothing_rather_than_saying_false(self) -> None:
+        """The asymmetry is the safety. Reading a stated netting as absent
+        leaves the rule asking a question the company can answer; reading an
+        absent netting as stated would tell a company with a filing duty that
+        it has none, slipping past §5.5's refusal to conclude 신고 불필요 from
+        silence by pretending the silence was speech."""
+        for said in ("상계는 아닙니다", "상계로 처리하지 않습니다", "상계 없습니다"):
+            with self.subTest(said=said):
+                self.assertEqual({}, payment_structure(said))
+
+    def test_a_syllable_hides_the_negation_a_naive_list_looks_for(self) -> None:
+        """The 니 in 아닙니다 sits inside 닙, so a search for 아니 walks
+        straight past the most common way to say no — and the failure is
+        silent: it reads as a declaration."""
+        self.assertEqual({}, payment_structure("상계가 아닙니다"))
+
+    def test_it_keeps_the_two_apart_in_one_sentence(self) -> None:
+        self.assertEqual(
+            {"payment.uses_mutual_account": True},
+            payment_structure("상계가 아니라 상호계산입니다"),
+        )
+
+    def test_a_plain_trade_declares_nothing(self) -> None:
+        self.assertEqual(
+            {}, payment_structure("10월 24일에 수출대금 10만 달러 받기로 했어요")
+        )
+        self.assertEqual({}, payment_structure(None))
 
 
 if __name__ == "__main__":

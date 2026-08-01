@@ -166,6 +166,34 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     );
   }
 
+  if (turn.kind === "said") {
+    // Nothing was computed for this turn and nothing is folded away beneath
+    // it. What the server sent is the whole answer, so it is set as prose —
+    // the answer blocks below belong to a decision and there is none here.
+    return (
+      <div className="turn agent">
+        <span className="who">TradeFlow</span>
+        {turn.ask.spoken
+          ?.split("\n\n")
+          .map((block) => (
+            <p className="prose" key={block}>
+              {block}
+            </p>
+          ))}
+
+        {/* Still owed. The subject may have had a part that holds on its own
+            — today's rate does — and a part that needs the trade. Saying so
+            is what stops the reader waiting for the rest. */}
+        {turn.ask.asks_for_trade && <p>{turn.ask.asks_for_trade}</p>}
+
+        {turn.ask.holds && <p className="pointer lead">{turn.ask.holds}</p>}
+        {turn.ask.coverage && (
+          <p className="pointer limit">{turn.ask.coverage}</p>
+        )}
+      </div>
+    );
+  }
+
   if (turn.kind === "ask") {
     return (
       <div className="turn agent">
@@ -237,15 +265,23 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   const line = result.summary
     ? [{ text: result.summary }]
     : sentence({
-        first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount,
-        opened, unread,
+        first, market, swing, net: result.cashflow_analysis?.net_exposure?.[0]?.amount,
+        hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread,
       });
   const words = line.reduce((n, seg) => n + seg.text.split(" ").length, 0);
   // Which of the two opens the answer, decided by the server from the intent
   // §4.2[2] already read. Absent — an older turn, or a trade description with
   // no question in it — keeps the sentence first.
   const leads = result.lead === "pointer";
-  const asksProfit = !hedge && hedgeInputs.length > 0;
+  // The server decides whether this turn asks for the hedge inputs. It used
+  // to be "the hedge worker is blocked", which is true on almost every turn —
+  // so a question about 신고의무 was answered with a demand for the operating
+  // profit §5.3 wanted. The reason still shows in the hedge fold either way.
+  const asksProfit =
+    !hedge && hedgeInputs.length > 0 && result.asking_for === "hedge";
+  // §4.2[2]'s own reason. The fold below shows it too, collapsed; this is the
+  // same sentence where a reader with the input bar open will actually see it.
+  const skippedHedge = result.workers?.skipped?.hedge;
 
   // The order the turn arrives in, as a gap before each unit: the sentence a
   // word at a time, then the blocks below it.
@@ -330,12 +366,14 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       )}
 
       {/* Asked once, and only in words. The fields live in the bar above the
-          composer so they stay reachable after the thread scrolls on. */}
-      {asksProfit && shown >= timeline.length && (
-        <p className={arrive.trim()}>
-          기준 영업이익과 회사가 지키려는 목표 손익 하한을 각각 입력해 주세요.
-          입력하지 않은 하한을 임의로 만들지 않습니다.
-        </p>
+          composer so they stay reachable after the thread scrolls on.
+
+          The words come from §4.2[2], which already decided why the worker did
+          not run. This paragraph used to carry its own, which asked for both
+          values whichever one was missing — and would have kept asking after
+          the routing condition changed, because nothing here is tied to it. */}
+      {asksProfit && shown >= timeline.length && skippedHedge && (
+        <p className={arrive.trim()}>{skippedHedge}</p>
       )}
     </div>
   );
@@ -425,6 +463,18 @@ const FACT_LABEL = {
   "trade.payment_term_days": "결제기간",
   "financing.purpose": "자금 용도",
   "financing.has_bank_consultation": "은행 상담 여부",
+  "payment.is_netting": "상계 여부",
+  "payment.netting.party_count": "상계 당사자 수",
+  "payment.netting.uses_center": "상계센터 경유 여부",
+  "payment.netting.smaller_claim_usd": "상계하는 채권·채무 중 작은 금액",
+  "payment.netting.exception_category": "상계 신고예외 유형",
+  "payment.is_third_party": "제3자 지급 여부",
+  "payment.third_party.amount_usd": "제3자 지급 금액",
+  "payment.third_party.exception_category": "제3자 지급 신고예외 유형",
+  "payment.uses_mutual_account": "상호계산 사용 여부",
+  "payment.uses_foreign_exchange_bank": "외국환은행 경유 여부",
+  "payment.direction": "지급·수령 방향",
+  "payment.nonbank.exception_category": "비은행 지급 신고예외 유형",
 };
 
 /** The object particle, chosen the way Korean chooses it.
@@ -452,12 +502,12 @@ const AUTHORITY_LABEL = {
  *  the analysis did, the less the screen said. Three candidates were being
  *  decided on every signed-in request and none of them reached the user.
  */
-function Support({ result }) {
+function Support({ result, open }) {
   const candidates = result.support_candidates ?? [];
   const excluded = result.excluded_candidates ?? [];
   if (candidates.length === 0 && excluded.length === 0) {
     return (
-      <details className="fold">
+      <details className="fold" open={open}>
         <summary>지원제도 · 해당하는 제도 없음</summary>
         <p className="fold-note">
           규칙을 모두 확인했고 이 거래에 해당하는 제도가 없었습니다. 판정하지
@@ -468,7 +518,7 @@ function Support({ result }) {
   }
   const settled = candidates.filter((c) => c.status !== "insufficient_information");
   return (
-    <details className="fold">
+    <details className="fold" open={open}>
       <summary>
         지원제도 · 후보 {settled.length}건
         {candidates.length - settled.length > 0 &&
@@ -485,16 +535,39 @@ function Support({ result }) {
   );
 }
 
+/** What a verdict means, said rather than labelled.
+ *
+ *  A chip reading 「전문가 확인 필요」 tells a company nothing it can act on:
+ *  does it qualify or not? These say what happened and what is left, which is
+ *  the same information the status carries and the only form of it a reader
+ *  can use. */
+const VERDICT_LINE = {
+  expert_confirmation_required:
+    "조건은 모두 맞습니다. 초안 규칙이라 공식 확인을 받으셔야 합니다.",
+  matched: "조건을 모두 충족합니다.",
+  not_matched: "이 거래에는 해당하지 않습니다.",
+  source_expired: "근거로 쓴 출처가 만료되어 판정을 보류했습니다.",
+};
+
+const CHECK_MARK = { passed: "✓", uncertain: "?", failed: "✗" };
+
 function Candidate({ candidate, excluded }) {
   const missing = candidate.missing_fields ?? [];
+  // The rule's own conditions, in the words the rulepack wrote them in. The
+  // comparison that produced each one stays one fold deeper — nobody should
+  // have to read `company.size=small in [...]` to learn what was checked,
+  // and nobody auditing one should be unable to.
+  const checks = candidate.checks ?? [];
+  const verdict = excluded
+    ? VERDICT_LINE.not_matched
+    : VERDICT_LINE[candidate.status];
+
   return (
     <div className="verdict">
       <div className="verdict-head">
         <b>{candidate.title}</b>
-        <span className={`chip ${excluded ? "out" : candidate.status}`}>
-          {excluded ? "조건 불충족" : STATUS_LABEL[candidate.status] ?? candidate.status}
-        </span>
       </div>
+      {verdict && <p className="fold-note">{verdict}</p>}
       {missing.length > 0 && (
         <p className="fold-note">
           {(() => {
@@ -503,15 +576,41 @@ function Candidate({ candidate, excluded }) {
           })()}
         </p>
       )}
+      {checks.length > 0 && (
+        <ul className="checks">
+          {checks.map((check) => (
+            <li className={check.status} key={check.field + check.description}>
+              <span className="check-mark">{CHECK_MARK[check.status] ?? "·"}</span>
+              {check.description}
+            </li>
+          ))}
+        </ul>
+      )}
       {/* The conditions as the rule wrote them. Summary first, the rule's own
           text one fold deeper (AC-5): nobody should have to read
           `company.size=small in [...]` to learn that a judgement was made, and
           nobody checking one should be unable to. */}
+      {candidate.sources?.length > 0 && (
+        <ul className="cites">
+          {candidate.sources.map((source) => (
+            <li key={source.source_id}>
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer">
+                  {source.title}
+                </a>
+              ) : (
+                source.title
+              )}
+              {source.organization && <em>{source.organization}</em>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* The comparisons as the engine made them. A count is not a citation,
+          and this fold is where the audit lives — not where the answer does. */}
       <details className="why">
-        <summary>
-          근거 {candidate.reasons?.length ?? 0}건 · 출처{" "}
-          {candidate.source_ids?.length ?? 0}건
-        </summary>
+        <summary>이 판정을 만든 비교 {candidate.reasons?.length ?? 0}건</summary>
         <ul className="reasons">
           {(candidate.reasons ?? []).map((line) => (
             <li key={line}>{line}</li>
@@ -529,9 +628,23 @@ function Candidate({ candidate, excluded }) {
  *  trade structure the company states, so silence means the structures we
  *  asked about were not present — not that nothing else could apply.
  */
-function Compliance({ result }) {
+function Compliance({ result, open }) {
   const obligations = result.filing_obligations ?? [];
-  if (obligations.length === 0) {
+  // Every §5.5 rule that ran and was not ruled out. `filing_obligations` is
+  // the subset that produced an action, so a rule saying "정보가 부족합니다"
+  // appeared nowhere — and the fold went on announcing 확인된 신고 사유 없음
+  // while seventeen rules were waiting to be told something. One is a
+  // question, the other is a clearance.
+  const findings = (result.risk_findings ?? []).filter(
+    (f) => f.outcome?.kind !== "support_candidate",
+  );
+  // The company said 상계, so the netting rules know they apply and are
+  // waiting on which authority. The rest do not know whether they apply at
+  // all. Showing both as one list buries the three that answer the question.
+  const engaged = findings.filter((f) => f.engaged);
+  const rest = findings.filter((f) => !f.engaged);
+
+  if (obligations.length === 0 && findings.length === 0) {
     return (
       <details className="fold">
         <summary>신고의무 · 확인된 신고 사유 없음</summary>
@@ -543,11 +656,24 @@ function Compliance({ result }) {
     );
   }
   return (
-    <details className="fold">
-      <summary>신고의무 · 검토 {obligations.length}건</summary>
+    <details className="fold" open={open || engaged.length > 0}>
+      <summary>
+        신고의무 · {engaged.length > 0 ? `해당 ${engaged.length}건` : `검토 ${findings.length}건`}
+      </summary>
       {obligations.map((item) => (
         <Candidate key={item.rule_id} candidate={item} />
       ))}
+      {engaged.map((item) => (
+        <Candidate key={item.rule_id} candidate={item} />
+      ))}
+      {rest.length > 0 && (
+        <details className="why">
+          <summary>말씀해 주신 것으로는 해당 여부를 알 수 없는 규칙 {rest.length}건</summary>
+          {rest.map((item) => (
+            <Candidate key={item.rule_id} candidate={item} />
+          ))}
+        </details>
+      )}
     </details>
   );
 }
@@ -619,14 +745,26 @@ const SECTION_LABEL = {
  *  Only the headline figures are open. Everything else is a fold — this is a
  *  chat message, and a message that takes four screens is not one. */
 /** The agent's line for this turn, as segments. */
-function sentence({ first, market, swing, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
+function sentence({ first, market, swing, net, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
   if (first && market && swing !== null) {
-    const direction =
-      market.adverse_cashflow_direction === "decrease" ? "적어집니다" : "많아집니다";
+    // Which way the money moves is the trade's, not the sentence's. This said
+    // 받는 금액 whatever the direction was, so an import — where a rising rate
+    // means paying more — was told its receipts had fallen. §4.2[9]'s own
+    // sentence has derived this from the sign since it was written; only this
+    // fallback, the one shown when the model is unavailable, did not.
+    // The direction the server sends is the *cashflow's*, and for a payer the
+    // amount paid moves against it: a net KRW cashflow that falls by 3,573,600
+    // is an importer paying that much more. Naming the noun without turning
+    // the verb produced 「내는 금액이 적어집니다」 on a rising rate — fluent,
+    // and the opposite of what happened to the company.
+    const receiving = Number(net) > 0;
+    const worse = market.adverse_cashflow_direction === "decrease";
+    const noun = receiving ? "받는 금액" : "내는 금액";
+    const direction = receiving === worse ? "적어집니다" : "많아집니다";
     return [
       { text: "계산했습니다." },
       { text: `결제일까지 불리한 환율이 ${won(market.adverse_rate)}원일 수 있고,`, strong: true },
-      { text: "그러면 받는 금액이 지금보다" },
+      { text: `그러면 ${noun}이 지금보다` },
       { text: `${won(swing)}원 ${direction}.`, strong: true },
     ];
   }
@@ -743,6 +881,24 @@ function Written({ segments, shown, settled }) {
 }
 
 
+/** The exposure card, folded when the question was about something else.
+ *
+ *  Folded rather than dropped. `intent.js`'s rule — 의도는 답의 순서를 정하지
+ *  범위를 좁히지 않는다 — is why: §2's reader does not know their own exposure,
+ *  and a company asking about 상계 still has 60,000 USD open. Rendering
+ *  nothing would mean they never learn it. So the judgement they asked for
+ *  opens, and the calculation waits one click away with its headline figure
+ *  in the summary. */
+function Calculation({ folded, children, net }) {
+  if (!folded) return children;
+  return (
+    <details className="fold calc">
+      <summary>환노출 · 순노출 {won(net)} USD</summary>
+      {children}
+    </details>
+  );
+}
+
 function Answer({ result, order, shown, arrive }) {
   // The card arrives with its first figures, not before them. Drawing the grey
   // box first left an empty panel waiting to be filled, which read as
@@ -757,47 +913,177 @@ function Answer({ result, order, shown, arrive }) {
   const natural = cash.natural_hedge_amount?.[0]?.amount;
   const matched = cash.maturity_matched_amount?.[0]?.amount;
   const skipped = result.workers?.skipped ?? {};
+  // The same signal that puts the judgement above the sentence: the question
+  // was about something the exposure card does not answer.
+  const folded = result.lead === "pointer";
+  // The section the question was about, if it was about one of these. It
+  // opens; a judgement that was asked for and arrives collapsed is the same
+  // failure as one rendered below the exchange rate — the reader has to go
+  // looking for the answer to their own question.
+  const asked = folded
+    ? order.find((s) => s !== "exposure" && s !== "market_scenario")
+    : null;
+  // Everything the question did not raise, in the plan's order.
+  const rest = order.filter(
+    (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
+  );
+  const said = result.said ?? {};
+  // Whether this turn's answer is sentences. When it is, the card is dropped:
+  // the box exists to hold a figure grid, and the grid is folded away.
+  const told =
+    folded &&
+    ((said.support ?? []).length > 0 || (said.compliance ?? []).length > 0);
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
-    <div className={`answer${arrive}`}>
-      <dl className="figrow">
-        <div>
-          <dt>순노출</dt>
-          <dd>
-            {Number(net) > 0 ? "+" : ""}
-            {won(net)} <small>USD</small>
-          </dd>
-        </div>
-        <div>
-          <dt>자금 공백</dt>
-          <dd className={Number(gap) > 0 ? "alarm" : ""}>
-            {won(gap)} <small>USD</small>
-          </dd>
-        </div>
-        <div>
-          <dt>자연헤지</dt>
-          <dd>
-            {won(natural)} <small>USD</small>
-          </dd>
-        </div>
-      </dl>
+    <div className={`answer${told ? " told-answer" : ""}${arrive}`}>
+      <Calculation folded={folded} net={net}>
+        <>
+          <dl className="figrow">
+            <div>
+              <dt>순노출</dt>
+              <dd>
+                {Number(net) > 0 ? "+" : ""}
+                {won(net)} <small>USD</small>
+              </dd>
+            </div>
+            <div>
+              <dt>자금 공백</dt>
+              <dd className={Number(gap) > 0 ? "alarm" : ""}>
+                {won(gap)} <small>USD</small>
+              </dd>
+            </div>
+            <div>
+              <dt>자연헤지</dt>
+              <dd>
+                {won(natural)} <small>USD</small>
+              </dd>
+            </div>
+          </dl>
 
-      {Number(natural) > 0 && Number(matched) === 0 && (
-        <p className="answer-note">
-          상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
-        </p>
-      )}
+          {Number(natural) > 0 && Number(matched) === 0 && (
+            <p className="answer-note">
+              상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
+            </p>
+          )}
 
-      {market && shown > 1 && <RateBand market={market} hedge={hedge} arrive={arrive} />}
+          {market && shown > 1 && (
+            <RateBand market={market} hedge={hedge} arrive={arrive} />
+          )}
+        </>
+      </Calculation>
 
-      {/* Sections follow the order §4.2[2]'s intent reading produced. */}
+      {/* Three tiers, not six equal rows. The section the question was about
+          is the answer and stands on its own; the ones nobody asked about are
+          one folded line together; the audit is the last line.
+
+          Before this every section — 환노출, 헤지, 신고의무, 지원제도 — sat in
+          one grey card at the same size, the same colour and the same indent,
+          so the screen said nothing about which of them was the answer. §2's
+          protection is unchanged: everything is still one click away. It just
+          no longer takes the same room as the thing that was asked for. */}
       {shown > (market ? 2 : 1) && (
         <div className={`folds${arrive}`}>
-        {order
-          .filter((section) => section !== "exposure" && section !== "market_scenario")
-          .map((section) => {
+        {/* The judgements, said. Assembled server-side from what the rules
+            decided and the words the rulepack wrote its conditions in — the
+            same information the folds held, in the shape a person reads.
+
+            What stays visual is what a sentence is the wrong shape for: the
+            band above (a position on a scale) and the payoff table (three
+            choices at three rates). A picture of a number is worse than the
+            number. */}
+        {/* §4.2[9] retold these when it could do so without adding or dropping
+            anything; otherwise they arrive as assembled. §5.5's 「신고가
+            불필요하다는 판정은 아닙니다」 goes in as a phrase the rewrite must
+            carry word for word — it is not that compliance cannot be retold,
+            it is that one sentence in it cannot be reworded. */}
+        {(said.retold
+          ? [said.retold]
+          : [
+              ...(said.support ?? []),
+              ...(said.compliance ?? []),
+              ...(said.actions ?? []),
+            ]
+        ).map((line) => (
+          <p className="told" key={line}>
+            {line}
+          </p>
+        ))}
+
+        {said.detail?.length > 0 && (
+          <details className="fold aside">
+            <summary>규칙이 확인한 것과 필요서류</summary>
+            {said.detail.map((row) => (
+              <div className="verdict" key={row.title}>
+                <div className="verdict-head">
+                  <b>{row.title}</b>
+                </div>
+                <ul className="checks">
+                  {row.met.map((word) => (
+                    <li className="passed" key={word}>
+                      <span className="check-mark">✓</span>
+                      {word}
+                    </li>
+                  ))}
+                  {row.wanted.map((word) => (
+                    <li className="uncertain" key={word}>
+                      <span className="check-mark">?</span>
+                      {word}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </details>
+        )}
+
+        {hedge && <Payoff hedge={hedge} />}
+
+        {/* Skipped workers still say why, in one line each. */}
+        {rest
+          .filter((section) => skipped[section])
+          .map((section) => (
+            <p className="told quiet" key={section}>
+              {skipped[section]}
+            </p>
+          ))}
+
+        {said.sources?.length > 0 && (
+          <p className="told quiet">
+            근거:{" "}
+            {said.sources.map((source, index) => (
+              <span key={source.source_id}>
+                {index > 0 && " · "}
+                {source.url ? (
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    {source.title}
+                  </a>
+                ) : (
+                  source.title
+                )}
+              </span>
+            ))}
+          </p>
+        )}
+
+        <details className="fold aside">
+          <summary>재현에 필요한 입력</summary>
+          <ul className="versions">
+            {(result.calculation_versions?.snapshots ?? []).map((item) => (
+              <li key={item.source_id}>
+                <span className="vk">{item.source_id}</span>
+                <span className="vv">{item.version}</span>
+              </li>
+            ))}
+          </ul>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+
+  function renderSection(section) {
             const reason = skipped[section === "hedge" ? "hedge" : section];
             if (section === "hedge" && hedge) {
               return (
@@ -827,31 +1113,15 @@ function Answer({ result, order, shown, arrive }) {
               );
             }
             if (section === "support") {
-              return <Support key={section} result={result} />;
+              return <Support key={section} result={result} open={section === asked} />;
             }
             if (section === "compliance") {
-              return <Compliance key={section} result={result} />;
+              return (
+                <Compliance key={section} result={result} open={section === asked} />
+              );
             }
             return null;
-          })}
-
-        <Actions actions={result.next_actions} />
-
-        <details className="fold">
-          <summary>근거 · 재현에 필요한 입력</summary>
-          <ul className="versions">
-            {(result.calculation_versions?.snapshots ?? []).map((item) => (
-              <li key={item.source_id}>
-                <span className="vk">{item.source_id}</span>
-                <span className="vv">{item.version}</span>
-              </li>
-            ))}
-          </ul>
-          </details>
-        </div>
-      )}
-    </div>
-  );
+  }
 }
 
 /** Where the rate can land by the last payment date, drawn to scale. */

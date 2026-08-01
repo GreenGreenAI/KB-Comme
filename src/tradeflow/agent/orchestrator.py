@@ -9,6 +9,8 @@ missing information rather than filled in.
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -47,8 +49,9 @@ from tradeflow.tools.exposure import analyze_exposure
 from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
+from tradeflow.runtime import observing
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance import financing_purpose
+from tradeflow.tools.utterance import financing_purpose, payment_structure
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -57,7 +60,14 @@ from tradeflow.domain.snapshot_file import SnapshotNotFoundError
 from tradeflow.knowledge.facts import FactContractError
 from tradeflow.knowledge.ksure import KsureCaseProfile, bind_country_policy
 from tradeflow.tools.source_freshness import load_source_verification
-from tradeflow.tools.volatility import ScenarioBand, require_fresh, scenario_band
+from tradeflow.tools.volatility import (
+    ScenarioBand,
+    estimate_volatility,
+    require_fresh,
+    scenario_band,
+)
+
+logger = logging.getLogger("tradeflow.orchestrator")
 
 FX_SOURCE = "ECOS_USD_KRW"
 
@@ -81,6 +91,10 @@ class WorkerReport:
     completed: list[str] = field(default_factory=list)
     failed: dict[str, str] = field(default_factory=dict)
     skipped: dict[str, str] = field(default_factory=dict)
+    #: Seconds each worker took, whether or not it produced anything. A worker
+    #: that failed after five seconds and one that failed immediately are
+    #: different problems, and the report used to keep only the failure.
+    took: dict[str, float] = field(default_factory=dict)
 
     def missing_information(self) -> tuple[str, ...]:
         return tuple(
@@ -90,12 +104,22 @@ class WorkerReport:
 
 
 def _isolated(report: WorkerReport, name: str, run: Callable[[], Any]) -> Any | None:
-    """Run one worker, recording a failure instead of propagating it (§9.3)."""
-    try:
-        return run()
-    except Exception as exc:  # noqa: BLE001 — any worker failure must be survivable
-        report.failed[name] = f"{type(exc).__name__}: {exc}"
-        return None
+    """Run one worker, recording a failure instead of propagating it (§9.3).
+
+    Also how long it took. This is the only place every worker passes through,
+    so measuring here costs one wrapper and covers all of them — and until it
+    existed, the answer to "which worker is slow" was to time the whole request
+    by hand. §4.2[9] took nineteen seconds for a week before anyone noticed.
+    """
+    with observing.took(report.took, name):
+        try:
+            result = run()
+        except Exception as exc:  # noqa: BLE001 — a worker failure must be survivable
+            report.failed[name] = f"{type(exc).__name__}: {exc}"
+            logger.warning("워커 실패 %s: %s", name, exc)
+            return None
+    logger.info("워커 %s %.3fs", name, report.took[name])
+    return result
 
 
 @dataclass(frozen=True)
@@ -116,6 +140,11 @@ class Analysis:
     review_reasons: tuple[str, ...]
     versions: CalculationVersions
     plan: ExecutionPlan
+    #: The §5.5 facts the company stated in words. Carried so the answer can
+    #: tell a rule that is waiting on a detail apart from one that does not
+    #: know whether it applies at all — nineteen rules run either way, and
+    #: without this they arrive as one undifferentiated list.
+    declared_structure: Mapping[str, bool] = field(default_factory=dict)
 
     @property
     def review_required(self) -> bool:
@@ -193,6 +222,11 @@ DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 #: What the company said the money is for. Separate from the company
 #: declaration above because it comes from the sentence, not the account.
 DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
+
+#: The §5.5 declarations the company made in the sentence. Separate from the
+#: structure this module computes: those came from a subtraction over dates,
+#: these came from the company saying so.
+DECLARED_STRUCTURE_EVIDENCE_ID = "TRADEFLOW_STRUCTURE_DECLARED"
 
 #: K-SURE's country acceptance policy, as a snapshot. The source is registered
 #: and the binder is written and tested; what is absent is the snapshot itself,
@@ -348,6 +382,107 @@ def _declared_company_assertions(
     return assertions, (descriptor,)
 
 
+@dataclass(frozen=True)
+class MarketNow:
+    """Today's rate and the window it was read over, with its snapshot.
+
+    §4.2[4]'s band needs a horizon, and a horizon needs a payment date — but
+    the rate itself and the volatility behind it need no trade at all. They
+    were being withheld anyway, because intake gated every worker on a trade
+    the user had not described yet: "환율이 요즘 어때?" was answered with a
+    request for the amount and the settlement date.
+    """
+
+    spot_rate: Decimal
+    observed_on: date
+    annualized_volatility: float
+    window: int
+    first_observed: date
+    last_observed: date
+    source_id: str
+    version: str
+
+
+def market_now(
+    snapshot_root: Path | str,
+    *,
+    as_of: datetime | None = None,
+) -> MarketNow:
+    """The published rate and the realized volatility around it.
+
+    Same snapshot, same freshness policy and same estimator the band uses, so
+    a number said here cannot disagree with the same number said in an answer.
+    Staleness raises rather than degrading: §4.2[4] makes it the stopping
+    condition, and a rate quoted without one is worse than no rate.
+    """
+    evaluated_at = as_of or datetime.now(UTC)
+    path = latest_snapshot_path(
+        snapshot_root,
+        FX_SOURCE,
+        as_of=evaluated_at,
+    )
+    ref, payload = read_snapshot(path)
+    require_fresh(ref, FX_FRESHNESS, evaluated_at)
+    observations = usd_krw_series(payload)
+    estimate = estimate_volatility(observations)
+    observed_on, spot = observations[-1]
+    return MarketNow(
+        spot_rate=spot,
+        observed_on=observed_on,
+        annualized_volatility=estimate.annualized,
+        window=estimate.window,
+        first_observed=estimate.first_observed,
+        last_observed=estimate.last_observed,
+        source_id=ref.source_id,
+        version=ref.version,
+    )
+
+
+def _declared_structure_assertions(
+    program: TradeProgram,
+    stated: Mapping[str, bool],
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the trade structure the company described in words.
+
+    §5.5's compliance worker has been skipped on every request this product has
+    served, because the four declarations it routes on were filled by nothing.
+    Its skip reason asks for 상계·제3자 지급·상호계산 — and the sentence it was
+    answering said 「상계로 처리하는데 신고 대상인가요」. Nineteen rules were
+    loaded and ready the whole time.
+
+    The catalog fixes the evidence role at `compliance`, so that is what this
+    carries. It is the company's own word, which is why the judgement resting
+    on it stays reviewable — but §5.5 was never asking for proof, it was asking
+    to be told.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    if not stated:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        DECLARED_STRUCTURE_EVIDENCE_ID,
+        EvidenceRole.COMPLIANCE,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(stated),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 문장으로 말한 거래 구조",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (DECLARED_STRUCTURE_EVIDENCE_ID,))
+            for field, value in stated.items()
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def _declared_financing_assertions(
     program: TradeProgram,
     utterance: str | None,
@@ -405,6 +540,15 @@ def analyze(
     hedge_measures: tuple[HedgeMeasure, ...] = (),
     knowledge_pipeline: TradeFlowPipeline | None = None,
     utterance: str | None = None,
+    #: What the conversation is still about, when this turn carries no
+    #: sentence of its own. Answering a request panel sends values and no
+    #: words, and reading intent from that blank reordered the answer back to
+    #: the default the moment the user supplied what was asked for — the
+    #: judgement they came for closed itself as it arrived.
+    #:
+    #: Ordering only. Facts are read from `utterance`, never from this: a
+    #: sentence already answered must not declare its trade a second time.
+    intent: tuple[str, ...] | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -419,7 +563,14 @@ def analyze(
     # What the trades themselves say about their structure. The four facts
     # only the company can state (netting and friends) are not here; see
     # routing.DECLARED_STRUCTURE_FIELDS.
-    structure = derive_structure(program)
+    # Two sources, kept apart. `derive_structure` subtracts dates the user
+    # gave, so its evidence says `calculation`; the declarations came from the
+    # company saying so, and the catalog fixes their role at `compliance`. The
+    # merged mapping is for routing only — asserting a field from both would be
+    # the same fact arriving twice, which the fact assembler refuses.
+    derived_structure = derive_structure(program)
+    declared_structure = payment_structure(utterance)
+    structure = {**derived_structure, **declared_structure}
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has
     # already run because every other decision reads its result.
@@ -431,7 +582,7 @@ def analyze(
         baseline_profit=baseline_profit,
         profit_floor=profit_floor,
         has_usable_measure=bool(usable_measures(hedge_measures)),
-        intent=read_intent(utterance),
+        intent=intent if intent is not None else read_intent(utterance),
     )
     report.skipped.update(plan.skipped())
 
@@ -463,10 +614,13 @@ def analyze(
         )
         evaluated_at_utc = as_of or datetime.now(UTC)
         assertions, structure_evidence = _structure_assertions(
-            program, structure, as_of=evaluated_at_utc
+            program, derived_structure, as_of=evaluated_at_utc
         )
         declared, declared_evidence = _declared_company_assertions(
             program, as_of=evaluated_at_utc
+        )
+        stated, stated_evidence = _declared_structure_assertions(
+            program, declared_structure, as_of=evaluated_at_utc
         )
         financing, financing_evidence = _declared_financing_assertions(
             program, utterance, as_of=evaluated_at_utc
@@ -476,14 +630,16 @@ def analyze(
             case_id: (
                 *assertions.get(case_id, ()),
                 *declared.get(case_id, ()),
+                *stated.get(case_id, ()),
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *financing, *country}
+            for case_id in {*assertions, *declared, *stated, *financing, *country}
         }
         structure_evidence = (
             *structure_evidence,
             *declared_evidence,
+            *stated_evidence,
             *financing_evidence,
             *country_evidence,
         )
@@ -524,7 +680,11 @@ def analyze(
 
     def _market() -> ScenarioBand:
         nonlocal snapshot
-        path = latest_snapshot_path(snapshot_root, FX_SOURCE)
+        path = latest_snapshot_path(
+            snapshot_root,
+            FX_SOURCE,
+            as_of=evaluated_at,
+        )
         ref, payload = read_snapshot(path)
         snapshot = ref
         require_fresh(ref, FX_FRESHNESS, evaluated_at)
@@ -608,6 +768,7 @@ def analyze(
         required_inputs=tuple(required_inputs),
         review_reasons=tuple(dict.fromkeys(review)),
         plan=plan,
+        declared_structure=declared_structure,
         versions=CalculationVersions(
             formula_version=FORMULA_VERSION,
             packet_schema_version=(

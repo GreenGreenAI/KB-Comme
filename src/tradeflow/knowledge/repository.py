@@ -12,7 +12,7 @@ from tradeflow.domain.enums import (
     RuleType,
     SourceStatus,
 )
-from tradeflow.domain.models import DecisionRequirement, RuleDecision
+from tradeflow.domain.models import DecisionCheck, DecisionRequirement, RuleDecision
 from tradeflow.knowledge.conditions import evaluate_condition
 from tradeflow.knowledge.documents import ApplicationDocumentSet, DocumentCatalog
 from tradeflow.knowledge.models import (
@@ -207,6 +207,25 @@ class KnowledgeRepository:
                         )
                         for result in conditional
                         if status is DecisionStatus.CONDITIONALLY_ELIGIBLE
+                    ),
+                    # Every condition in the words the rulepack wrote it in.
+                    # Separate from `requirements`, which means something
+                    # narrower — the remediable conditions blocking a
+                    # conditional eligibility — and is tested for meaning that.
+                    #
+                    # Without this the answer could only show the comparison
+                    # that produced a verdict: `company.size=small in
+                    # ['small', 'mid_sized']`. The Korean was written once, by
+                    # the person who wrote the rule, and dropped one layer
+                    # later.
+                    checks=tuple(
+                        DecisionCheck(
+                            field=result.condition.field,
+                            description=result.condition.description,
+                            status=result.status,
+                        )
+                        for result in results
+                        if result.condition.description
                     ),
                     source_claim_ids=source_claim_ids,
                     candidate_outcome=rule.candidate_outcome,
