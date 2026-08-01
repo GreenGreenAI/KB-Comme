@@ -69,6 +69,13 @@ FIELD_PRIORITY = {
     "profit_floor": 51,
 }
 
+ACTION_LABELS = {
+    "consult_and_apply_for_ksure_product": "K-SURE 상담 후 상품 신청",
+    "consult_and_apply_for_preshipment_guarantee": "선적전 수출신용보증 상담·신청",
+    "file_report": "신고서 제출",
+    "consult_designated_bank": "지정 외국환은행 상담",
+}
+
 USER_SCOPES = frozenset({"profile", "compliance_declaration", "case", "hedge"})
 
 
@@ -83,6 +90,20 @@ def _funding_gaps(result: Mapping[str, Any]) -> list[dict[str, Any]]:
     return list((result.get("cashflow_analysis") or {}).get("funding_gap") or [])
 
 
+def _decision_impact_counts(
+    result: Mapping[str, Any],
+) -> dict[tuple[str | None, str], int]:
+    """Count the decisions for which one missing fact is a blocker."""
+    counts: dict[tuple[str | None, str], int] = {}
+    for collection in ("support_candidates", "excluded_candidates", "risk_findings"):
+        for decision in result.get(collection) or []:
+            subject_id = decision.get("subject_id")
+            for field in set(decision.get("missing_fields") or []):
+                key = (subject_id, str(field))
+                counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def build_next_decisive_questions(
     result: Mapping[str, Any],
     *,
@@ -91,6 +112,7 @@ def build_next_decisive_questions(
     """Rank user-provided facts by the decision they can change."""
     questions: list[dict[str, Any]] = []
     balances = {key.upper(): value for key, value in (opening_balances or {}).items()}
+    impact_counts = _decision_impact_counts(result)
 
     # An unrecorded balance is not a required rule input, but it is often the
     # single fact with the largest direct effect on a company's funding gap.
@@ -119,6 +141,7 @@ def build_next_decisive_questions(
                 "formula": "max(0, current_funding_gap - opening_balance)",
             },
             "priority": FIELD_PRIORITY["opening_balance_usd"],
+            "affected_decision_count": 1,
         })
 
     seen = {item["question_id"] for item in questions}
@@ -131,6 +154,10 @@ def build_next_decisive_questions(
             continue
         seen.add(question_id)
         impacts = list(FIELD_IMPACTS.get(field, ("판정 상태",)))
+        affected_decision_count = max(
+            1,
+            impact_counts.get((item.get("subject_id"), field), 0),
+        )
         questions.append({
             "question_id": question_id,
             "field": field,
@@ -143,11 +170,14 @@ def build_next_decisive_questions(
             "reason": item.get("reason") or "현재 판정에 필요한 정보입니다.",
             "impact_preview": None,
             "priority": FIELD_PRIORITY.get(field, 90),
+            "affected_decision_count": affected_decision_count,
         })
 
     return sorted(
         questions,
         key=lambda item: (
+            0 if item["field"] == "opening_balance_usd" else 1,
+            -item["affected_decision_count"],
             item["priority"],
             item.get("subject_id") or "",
             item["field"],
@@ -197,10 +227,12 @@ def _candidate_changes(
     after: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     def index(result: Mapping[str, Any]) -> dict[tuple[str, str], Mapping[str, Any]]:
-        return {
-            (str(item.get("subject_id")), str(item.get("rule_id"))): item
-            for item in result.get("support_candidates") or []
-        }
+        indexed: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for collection in ("support_candidates", "excluded_candidates"):
+            for item in result.get(collection) or []:
+                key = (str(item.get("subject_id")), str(item.get("rule_id")))
+                indexed[key] = item
+        return indexed
 
     old = index(before)
     new = index(after)
@@ -225,6 +257,65 @@ def _candidate_changes(
     return changes
 
 
+def _action_changes(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    def index(
+        result: Mapping[str, Any],
+    ) -> dict[tuple[str, str, str, str, str, tuple[str, ...]], Mapping[str, Any]]:
+        return {
+            (
+                str(item.get("subject_id")),
+                str(item.get("action")),
+                str(item.get("authority")),
+                str(item.get("timing")),
+                str(item.get("deadline")),
+                tuple(sorted(str(value) for value in item.get("product_ids") or [])),
+            ): item
+            for item in result.get("next_actions") or []
+        }
+
+    old = index(before)
+    new = index(after)
+    changes: list[dict[str, Any]] = []
+    for key in sorted(set(old) | set(new)):
+        before_item = old.get(key)
+        after_item = new.get(key)
+        action = (after_item or before_item or {}).get("action")
+        label = ACTION_LABELS.get(str(action), str(action))
+        if before_item is None or after_item is None:
+            changes.append({
+                "kind": "decision_action",
+                "metric": "next_action",
+                "label": label,
+                "subject_id": key[0],
+                "action": action,
+                "authority": (after_item or before_item or {}).get("authority"),
+                "before": "not_required" if before_item is None else "required",
+                "after": "not_required" if after_item is None else "required",
+                "source_ids": (
+                    (after_item or before_item or {}).get("source_ids") or []
+                ),
+            })
+            continue
+
+        before_documents = sorted(before_item.get("required_documents") or [])
+        after_documents = sorted(after_item.get("required_documents") or [])
+        if before_documents != after_documents:
+            changes.append({
+                "kind": "required_documents",
+                "metric": "required_documents",
+                "label": f"{label} 필요서류",
+                "subject_id": key[0],
+                "action": action,
+                "before": before_documents,
+                "after": after_documents,
+                "source_ids": after_item.get("source_ids") or [],
+            })
+    return changes
+
+
 def compare_decisions(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
@@ -232,7 +323,11 @@ def compare_decisions(
     previous_analysis_run_id: str,
 ) -> dict[str, Any]:
     """Return only material, reproducible changes between two decisions."""
-    changes = [*_metric_changes(before, after), *_candidate_changes(before, after)]
+    changes = [
+        *_metric_changes(before, after),
+        *_candidate_changes(before, after),
+        *_action_changes(before, after),
+    ]
     previous_questions = {
         str(item.get("question_id")): item
         for item in before.get("next_decisive_questions") or []

@@ -49,6 +49,8 @@ jobs:
           npm ci
           npm test
           npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
       - name: Compile
         run: python -m compileall -q src tests examples
       - name: Check documentation

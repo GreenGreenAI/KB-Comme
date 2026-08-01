@@ -10,6 +10,8 @@ const STATUS = {
   expert_confirmation_required: "전문가 확인 필요",
   source_expired: "출처 갱신 필요",
   missing: "입력 필요",
+  required: "필요",
+  not_required: "불필요",
 };
 
 const FIELD = {
@@ -125,6 +127,7 @@ export function NextDecisiveQuestion({ result }) {
 
 function deltaValue(change, value) {
   if (change.kind === "cashflow_metric") return amount(value, change.unit);
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "없음";
   return STATUS[value] ?? present(value);
 }
 

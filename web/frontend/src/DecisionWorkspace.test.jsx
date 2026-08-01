@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import DecisionWorkspace, { ConsultationHandoff } from "./DecisionWorkspace.jsx";
+import DecisionWorkspace, { ConsultationHandoff, DecisionDelta } from "./DecisionWorkspace.jsx";
 
 const result = {
   company_profile: {
@@ -188,6 +188,39 @@ describe("DecisionWorkspace", () => {
     expect(screen.getByText("시스템 조회")).toBeInTheDocument();
     expect(screen.getByText("전문가 확인", { selector: "h4" })).toBeInTheDocument();
     expect(screen.getAllByText("연결 필요", { exact: false }).length).toBeGreaterThan(0);
+  });
+
+  it("renders action and document checklist changes in the delta", () => {
+    render(
+      <DecisionDelta result={{
+        decision_delta: {
+          changed: true,
+          changes: [
+            {
+              kind: "decision_action",
+              metric: "next_action",
+              label: "신고서 제출",
+              subject_id: "EXPORT-001",
+              before: "not_required",
+              after: "required",
+            },
+            {
+              kind: "required_documents",
+              metric: "required_documents",
+              label: "신고서 제출 필요서류",
+              subject_id: "EXPORT-001",
+              before: [],
+              after: ["신고서", "계약서"],
+            },
+          ],
+          resolved_questions: [],
+        },
+      }} />,
+    );
+
+    expect(screen.getByText("불필요")).toBeInTheDocument();
+    expect(screen.getByText("필요", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("신고서, 계약서")).toBeInTheDocument();
   });
 
   it("shows capability execution status without implying a provider call", async () => {
