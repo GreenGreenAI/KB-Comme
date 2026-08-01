@@ -51,7 +51,13 @@ from tradeflow.runtime.synthesis import Synthesis, Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
-from tradeflow.tools.utterance_kind import ABOUT, GREETING, TRADE, read_kind
+from tradeflow.tools.utterance_kind import (
+    ABOUT,
+    GREETING,
+    TRADE,
+    TRADE_SLOTS,
+    read_kind,
+)
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
@@ -392,7 +398,9 @@ def analyze_endpoint(
         topics=read_intent(request.utterance or ""),
     )
     if kind != TRADE and not supplied_trade(supplied):
-        return _answer_without_a_trade(kind, request.utterance, as_of)
+        return _answer_without_a_trade(
+            kind, request.utterance, as_of, _subjects(request)
+        )
 
     reading = intake(
         supplied,
@@ -764,11 +772,24 @@ def supplied_trade(cases: list[dict[str, Any]]) -> bool:
     A greeting typed into a session that has a trade on screen is still a
     greeting, but it must not discard what is there — so the trade-less path
     is only taken when there is genuinely no trade anywhere.
+
+    「거래」 is judged the same way `read_kind` judges it: an amount or a date.
+    A direction on its own is not one, and 「환변동보험에 대해 설명해줘」 puts a
+    direction into the case list on its way past — which made the sentence look
+    like a trade already on screen and sent it back to the funnel it had just
+    been kept out of.
     """
-    return any(any(value for value in case.values()) for case in cases)
+    return any(
+        any(case.get(slot) for slot in TRADE_SLOTS) for case in cases
+    )
 
 
-def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> dict[str, Any]:
+def _answer_without_a_trade(
+    kind: str,
+    utterance: str | None,
+    as_of: date,
+    subjects: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """The three turns that are not a trade description.
 
     None of them needs a trade, and all three used to get the same three
@@ -782,7 +803,8 @@ def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> di
 
     # TOPIC. Some subjects have an answer that stands on its own; the rest
     # still need the trade, and asking for it is right — after saying what
-    # did not need it.
+    # did not need it, and after saying what we do not do at all.
+    lead = next(iter(subjects), "")
     said, figures = _standing_answer(utterance, as_of)
     return {
         "status": "said" if said else "needs_input",
@@ -795,11 +817,33 @@ def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> di
         # Said whether or not the standing part answered: the subject they
         # raised may still need the trade, and this is the sentence that says
         # so instead of leaving them waiting.
-        "asks_for_trade": ASK_FOR_TRADE.get(
-            next(iter(read_intent(utterance or "")), ""), DEFAULT_ASK
-        ),
+        "asks_for_trade": ASK_FOR_TRADE.get(lead, DEFAULT_ASK),
+        # Named before the ask. A company that asked what a scheme is should
+        # learn that we do not answer that before being told what we want.
+        "cannot": CANNOT.get(lead, ""),
     }
 
+
+#: What this product does not do about a subject, said only when someone asks
+#: about that subject without a trade.
+#:
+#: 「환변동보험에 대해 설명해줘」 has no trade in it and no answer here. The
+#: rules judge whether a company qualifies; nothing in the product describes
+#: what a scheme is for, because a description with no source is the one thing
+#: §1.1 refuses and the extracts hold eligibility conditions only.
+#:
+#: Saying so is the answer. Asking for an amount and a settlement date is not —
+#: that is the funnel answering a question it did not read.
+CANNOT = {
+    "support": (
+        "다만 제도가 무엇인지 설명하는 것은 아직 다루지 않습니다. "
+        "출처에 근거가 없는 설명은 드리지 않습니다."
+    ),
+    "compliance": (
+        "다만 제도나 용어를 설명하는 것은 아직 다루지 않습니다. "
+        "외국환거래법 조문에 근거해 이 거래가 신고 대상인지를 판정합니다."
+    ),
+}
 
 #: What each subject still needs from the trade, once the standing part of the
 #: answer has been given. Written per subject because "금액과 날짜를 알려주세요"

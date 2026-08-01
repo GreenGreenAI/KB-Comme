@@ -181,6 +181,11 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             </p>
           ))}
 
+        {/* What we do not do about this subject, before what we want from
+            them. A company that asked what a scheme is should learn that we
+            do not answer that before being asked for an amount. */}
+        {turn.ask.cannot && <p className="told quiet">{turn.ask.cannot}</p>}
+
         {/* Still owed. The subject may have had a part that holds on its own
             — today's rate does — and a part that needs the trade. Saying so
             is what stops the reader waiting for the rest. */}

@@ -37,7 +37,13 @@ TOPIC_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "hedge",
-        ("헤지", "헷지", "선물환", "환변동보험", "위험 관리", "리스크 관리", "막을"),
+        # No 환변동보험. It is a hedging instrument and a K-SURE scheme both,
+        # and naming it is asking about the scheme — 「환변동보험이란 게
+        # 뭔가요」 read as a hedge question and the answer opened with
+        # 「헤지비율은 거래가 있어야 계산합니다」, which is not what was asked.
+        # A sentence that wants the hedge as well says so: 「환변동보험으로
+        # 헤지할까요」 carries 헤지 and reads as both.
+        ("헤지", "헷지", "선물환", "위험 관리", "리스크 관리", "막을"),
     ),
     (
         "exposure",
@@ -72,6 +78,12 @@ TOPIC_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "제도",
             "혜택",
             "무역금융",
+            # Scheme names. The company says the product it heard of, not the
+            # category we file it under.
+            "환변동보험",
+            "단기수출보험",
+            "수출신용보증",
+            "수출보험",
             # Raising money, not measuring exposure.
             "제작 자금",
             "제작에 들어갈 자금",

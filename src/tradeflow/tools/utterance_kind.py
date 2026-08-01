@@ -114,7 +114,7 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
     trade with a greeting attached, and answering the greeting would drop the
     trade — the one thing in the sentence that cost the user effort to write.
     """
-    if heard:
+    if _describes_a_trade(heard):
         return TRADE
     if not text or not text.strip():
         return TRADE
@@ -130,6 +130,24 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
     # product, nor a subject we recognise. Asking what the trade is remains the
     # honest move — the alternative is a guess about what they meant.
     return TRADE
+
+
+#: What makes a sentence a description of a trade rather than a mention of one.
+#:
+#: A direction on its own does not. 「일반형 **수출** 환변동보험에 대해 설명해줘」
+#: reads 수출 and nothing else, and the rule that any slot means a trade sent it
+#: down the funnel: the product asked for an amount and a settlement date from
+#: someone who had asked what a product was. Every K-SURE name carries a
+#: direction — 단기**수출**보험, **수입**금융 — so naming a product looks like
+#: describing a trade under that rule.
+#:
+#: An amount or a date has no reason to appear except from a trade, and intake
+#: says the same thing from the other side: a direction alone is never `ready`.
+TRADE_SLOTS = ("amount", "expected_payment_date")
+
+
+def _describes_a_trade(heard: dict[str, str] | None) -> bool:
+    return bool(heard) and any(heard.get(slot) for slot in TRADE_SLOTS)
 
 
 def _is_only_greeting(lowered: str) -> bool:
