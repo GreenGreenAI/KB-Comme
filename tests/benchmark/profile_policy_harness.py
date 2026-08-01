@@ -128,6 +128,7 @@ def _evaluate_expectation(
         "missing_fields_include": "missing_fields",
         "classification_evidence_ids_include": None,
         "route_capabilities_include": "route_capabilities",
+        "authorized_capabilities_include": "authorized_capabilities",
         "missing_consents_include": "missing_consents",
     }
     for expectation_key, result_key in include_mappings.items():

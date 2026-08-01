@@ -91,6 +91,7 @@
       "critical": true,
       "title": "fresh 공식 국가정책으로 고위험 거래 태그를 만든다",
       "input": {
+        "as_of": "2026-07-31T12:00:00+09:00",
         "countries": ["XZ"],
         "country_policy": {
           "country": "XZ",
@@ -204,6 +205,7 @@
       "critical": true,
       "title": "검증된 수출실적을 근거로 기존 수출기업을 분류한다",
       "input": {
+        "as_of": "2026-07-31T12:00:00+09:00",
         "facts": [{
           "field": "trade.export_volume.trailing_12m_usd",
           "value": "1000000",
@@ -225,12 +227,21 @@
       "critical": true,
       "title": "조회 요구를 capability와 동의 조건으로 반환한다",
       "input": {
-        "primary_type": "existing_exporter_sme",
+        "company_size": "small",
+        "trade_maturity_months": 24,
+        "facts": [{
+          "field": "trade.export_volume.trailing_12m_usd",
+          "value": "1000000",
+          "provenance": "verified",
+          "evidence_id": "trade-history:pp13"
+        }],
         "consents": ["company_trade_data.read"]
       },
       "expect": {
         "route_capabilities_include": ["trade_history.lookup.v1"],
         "required_consent": "company_trade_data.read",
+        "authorized_capabilities_include": ["trade_history.lookup.v1"],
+        "executed_capabilities_absent": ["trade_history.lookup.v1"],
         "fabricated_endpoint_absent": true
       }
     },
@@ -240,7 +251,14 @@
       "critical": true,
       "title": "동의가 없으면 회사 실적 조회를 실행하지 않는다",
       "input": {
-        "primary_type": "existing_exporter_sme",
+        "company_size": "small",
+        "trade_maturity_months": 24,
+        "facts": [{
+          "field": "trade.export_volume.trailing_12m_usd",
+          "value": "1000000",
+          "provenance": "verified",
+          "evidence_id": "trade-history:pp14"
+        }],
         "consents": []
       },
       "expect": {
@@ -255,7 +273,8 @@
       "critical": true,
       "title": "유형 일치만으로 금융상품 적격을 확정하지 않는다",
       "input": {
-        "primary_type": "potential_exporter",
+        "trade_roles": ["potential_exporter"],
+        "export_volume_trailing_12m_usd": "0",
         "financing_needs": ["pre_shipment_working_capital"],
         "eligibility_evidence": []
       },

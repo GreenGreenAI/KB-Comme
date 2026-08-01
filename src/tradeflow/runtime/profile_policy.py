@@ -8,6 +8,7 @@ capability requests whose provider bindings live at the integration edge.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
 
@@ -39,6 +40,45 @@ def _decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+
+
+def _integer(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(str(value))
+    except ValueError:
+        return None
+
+
+def _instant(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        try:
+            parsed_date = date.fromisoformat(normalized)
+        except ValueError:
+            return None
+        parsed = datetime.combine(parsed_date, time.min, tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _evaluation_instant(profile: UserProfileFacts) -> datetime | None:
+    return _instant(profile.values.get("as_of"))
+
+
+def _expired(valid_until: Any, as_of: datetime | None) -> bool:
+    if valid_until is None:
+        return False
+    if as_of is None:
+        return True
+    expiry = _instant(valid_until)
+    return expiry is None or expiry < as_of
 
 
 def _string_set(value: Any) -> set[str]:
@@ -76,6 +116,7 @@ def _fact_evidence_ids(
 
 def _profile_fact_state(
     facts_by_field: Mapping[str, tuple[ProfileFact, ...]],
+    as_of: datetime | None,
 ) -> tuple[str, bool]:
     conflicting = False
     for facts in facts_by_field.values():
@@ -84,6 +125,7 @@ def _profile_fact_state(
             for item in facts
             if item.provenance
             in {FactProvenance.VERIFIED, FactProvenance.USER_DECLARED}
+            and not _expired(item.valid_until, as_of)
         ]
         values = {str(item.value) for item in usable}
         if len(values) > 1 or any(
@@ -95,6 +137,7 @@ def _profile_fact_state(
         return "conflicting", True
     if any(
         fact.provenance is FactProvenance.STALE
+        or _expired(fact.valid_until, as_of)
         for facts in facts_by_field.values()
         for fact in facts
     ):
@@ -106,6 +149,7 @@ def _export_volume(
     profile: UserProfileFacts,
     facts_by_field: Mapping[str, tuple[ProfileFact, ...]],
     missing_fields: list[str],
+    as_of: datetime | None,
 ) -> tuple[Decimal | None, tuple[str, ...], str | None]:
     field = "trade.export_volume.trailing_12m_usd"
     facts = facts_by_field.get(field, ())
@@ -114,6 +158,7 @@ def _export_volume(
         for item in facts
         if item.provenance
         in {FactProvenance.VERIFIED, FactProvenance.USER_DECLARED}
+        and not _expired(item.valid_until, as_of)
     }
     if len(usable_values) > 1:
         return None, _fact_evidence_ids(facts), FactProvenance.CONFLICTING.value
@@ -123,9 +168,20 @@ def _export_volume(
                 item
                 for item in facts
                 if item.provenance is FactProvenance.VERIFIED
+                and not _expired(item.valid_until, as_of)
             ),
-            facts[0],
+            next(
+                (
+                    item
+                    for item in facts
+                    if item.provenance is FactProvenance.USER_DECLARED
+                    and not _expired(item.valid_until, as_of)
+                ),
+                None,
+            ),
         )
+        if preferred is None:
+            return None, _fact_evidence_ids(facts), FactProvenance.STALE.value
         return (
             _decimal(preferred.value),
             _fact_evidence_ids((preferred,)),
@@ -149,12 +205,14 @@ def _export_volume(
 def classify_profile(profile: UserProfileFacts) -> SegmentClassification:
     values = profile.values
     facts_by_field = _fact_index(profile)
+    as_of = _evaluation_instant(profile)
     missing_fields: list[str] = []
-    fact_status, review_required = _profile_fact_state(facts_by_field)
+    fact_status, review_required = _profile_fact_state(facts_by_field, as_of)
     export_volume, export_evidence, used_provenance = _export_volume(
         profile,
         facts_by_field,
         missing_fields,
+        as_of,
     )
     if (
         values.get("trade_history_status") == FactProvenance.UNAVAILABLE.value
@@ -239,10 +297,15 @@ def classify_profile(profile: UserProfileFacts) -> SegmentClassification:
             )
         )
 
+    established_year = _integer(values.get("established_year"))
+    as_of_year = _integer(values.get("as_of_year"))
+    company_age = (
+        as_of_year - established_year
+        if as_of_year is not None and established_year is not None
+        else None
+    )
     startup = values.get("startup") is True or (
-        isinstance(values.get("established_year"), int)
-        and values.get("as_of_year")
-        and int(values["as_of_year"]) - int(values["established_year"]) <= 5
+        company_age is not None and 0 <= company_age <= 5
     )
     if startup and maturity_months is not None and maturity_months < 12:
         primary_candidates.append("startup_early_exporter")
@@ -316,23 +379,34 @@ def classify_profile(profile: UserProfileFacts) -> SegmentClassification:
     country_policy = values.get("country_policy")
     if isinstance(country_policy, Mapping):
         policy_provenance = country_policy.get("provenance")
+        evidence_id = country_policy.get("evidence_id")
+        valid_until = country_policy.get("valid_until")
+        policy_expired = _expired(valid_until, as_of)
+        policy_current = bool(evidence_id and valid_until and not policy_expired)
         if (
             policy_provenance == FactProvenance.VERIFIED.value
             and country_policy.get("status") == "restricted"
+            and policy_current
         ):
             axes["risk"].append("high_risk_country")
             secondary.append("high_risk_country_trade")
-            evidence_id = country_policy.get("evidence_id")
             matches.append(
                 SegmentMatch(
                     type="high_risk_country_trade",
                     score="1.0",
-                    evidence_ids=(str(evidence_id),) if evidence_id else (),
+                    evidence_ids=(str(evidence_id),),
                     matched_facts=("검증된 현행 국가정책상 제한",),
                 )
             )
-        elif policy_provenance == FactProvenance.STALE.value:
+        elif policy_provenance == FactProvenance.STALE.value or policy_expired:
             review_required = True
+        elif policy_provenance == FactProvenance.VERIFIED.value:
+            review_required = True
+        if policy_provenance == FactProvenance.VERIFIED.value:
+            if not evidence_id:
+                _append_unique(missing_fields, "country_policy.evidence_id")
+            if not valid_until:
+                _append_unique(missing_fields, "country_policy.valid_until")
 
     primary_type = primary_candidates[0] if primary_candidates else None
     for candidate in primary_candidates[1:]:
@@ -355,11 +429,11 @@ def route_profile_policy(
     classification: SegmentClassification,
 ) -> PolicyRoute:
     values = profile.values
-    primary_type = values.get("primary_type") or classification.primary_type
+    primary_type = classification.primary_type
     secondary_types = set(classification.secondary_types)
     consents = _string_set(values.get("consents"))
     capabilities: list[CapabilityRequest] = []
-    executed: list[str] = []
+    authorized: list[str] = []
     missing_consents: list[str] = []
     fallback: str | None = None
     priority_views: list[str] = []
@@ -379,15 +453,27 @@ def route_profile_policy(
             )
         )
         if executable:
-            executed.append("trade_history.lookup.v1")
+            authorized.append("trade_history.lookup.v1")
         else:
             missing_consents.append(consent)
             fallback = "manual_evidence_request"
 
     country_policy = values.get("country_policy")
-    if isinstance(country_policy, Mapping) and (
+    country_policy_needs_refresh = isinstance(country_policy, Mapping) and (
         country_policy.get("provenance") == FactProvenance.STALE.value
-    ):
+        or _expired(
+            country_policy.get("valid_until"),
+            _evaluation_instant(profile),
+        )
+        or (
+            country_policy.get("provenance") == FactProvenance.VERIFIED.value
+            and (
+                not country_policy.get("evidence_id")
+                or not country_policy.get("valid_until")
+            )
+        )
+    )
+    if country_policy_needs_refresh:
         capabilities.append(
             CapabilityRequest(
                 capability_id="country_policy.refresh.v1",
@@ -425,7 +511,8 @@ def route_profile_policy(
     return PolicyRoute(
         priority_views=tuple(dict.fromkeys(priority_views)),
         capabilities=tuple(capabilities),
-        executed_capabilities=tuple(executed),
+        authorized_capabilities=tuple(authorized),
+        executed_capabilities=(),
         missing_consents=tuple(missing_consents),
         fallback=fallback,
         decision_status=decision_status,

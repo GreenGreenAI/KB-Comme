@@ -97,11 +97,20 @@ last-reviewed: 2026-07-31
     "required_inputs": ["company_id", "period"],
     "fallback": "manual_evidence_request"
   }],
+  "authorized_capabilities": ["trade_history.lookup.v1"],
+  "executed_capabilities": [],
   "decision_boundary": "classification_only"
 }
 ```
 
 provider별 endpoint, 인증과 응답 매핑은 integration 계층에서만 정의한다.
+동의와 필수 입력이 충족된 capability는 `authorized_capabilities`에만 기록한다.
+`executed_capabilities`는 integration 어댑터가 실제 호출 결과와 감사 근거를
+반환한 뒤에만 채우며, 정책 라우터가 실행을 선제적으로 주장하지 않는다.
+
+분류와 국가위험 판정은 호출자가 주입한 `primary_type`을 신뢰하지 않고 정규화된
+사실에서 다시 계산한다. `valid_until`이 있는 근거는 요청의 `as_of` 시점과 비교하며,
+국가정책의 verified 판정에는 `evidence_id`와 `valid_until`을 모두 요구한다.
 
 ## 3. 벤치마크 트랙
 

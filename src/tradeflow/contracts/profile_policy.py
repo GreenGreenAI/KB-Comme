@@ -158,6 +158,7 @@ class CapabilityRequest:
 class PolicyRoute:
     priority_views: tuple[str, ...]
     capabilities: tuple[CapabilityRequest, ...]
+    authorized_capabilities: tuple[str, ...] = ()
     executed_capabilities: tuple[str, ...] = ()
     missing_consents: tuple[str, ...] = ()
     fallback: str | None = None
@@ -182,6 +183,7 @@ class PolicyRoute:
             "route_capabilities": [
                 item.capability_id for item in self.capabilities
             ],
+            "authorized_capabilities": list(self.authorized_capabilities),
             "executed_capabilities": list(self.executed_capabilities),
             "required_consents": list(required_consents),
             "missing_consents": list(self.missing_consents),
