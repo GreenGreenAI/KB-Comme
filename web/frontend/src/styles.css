@@ -1001,6 +1001,39 @@
   .review-banner details { margin-top: .2rem; }
   .review-banner summary { cursor: pointer; color: var(--accent-deep); }
   .review-banner ul { margin: .45rem 0 0; padding-left: 1.15rem; color: var(--ink-70); }
+  .decision-signature {
+    display: grid; gap: .55rem; padding: .9rem; border: 1px solid var(--accent);
+    border-radius: 12px; background: color-mix(in srgb, var(--tint) 55%, var(--paper));
+  }
+  .decision-signature h3 { margin: 0; font-size: .9rem; }
+  .decision-signature p { margin: 0; color: var(--ink-70); font-size: .72rem; line-height: 1.55; }
+  .decision-signature small { color: var(--ink-45); }
+  .signature-kicker {
+    color: var(--accent-deep); font-family: var(--mono); font-size: .625rem;
+    font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .signature-question { color: var(--ink) !important; font-size: .82rem !important; font-weight: 700; }
+  .impact-preview {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .75rem;
+    padding: .55rem .65rem; border-radius: 8px; background: var(--paper); font-size: .7rem;
+  }
+  .impact-preview strong { font-family: var(--mono); font-size: .85rem; }
+  .impact-tags { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .impact-tags span {
+    padding: .2rem .45rem; border: 1px solid var(--accent); border-radius: 99px;
+    color: var(--accent-deep); font-size: .625rem;
+  }
+  .delta-list { display: grid; gap: .4rem; }
+  .delta-list article {
+    display: grid; grid-template-columns: minmax(7rem, 1fr) 2fr; gap: .6rem;
+    align-items: center; padding: .55rem .65rem; border-radius: 8px; background: var(--paper);
+    font-size: .6875rem;
+  }
+  .delta-list article > span { color: var(--ink-70); }
+  .delta-list article > div { display: flex; align-items: center; gap: .45rem; }
+  .delta-list del { color: var(--ink-45); }
+  .delta-list b { color: var(--accent); }
+  .delta-list .resolved-question strong { line-height: 1.45; }
   .company-summary {
     display: grid; grid-template-columns: 1fr auto auto; gap: .4rem .65rem;
     align-items: center; padding: .65rem .85rem; border: 1px solid var(--rule-faint);

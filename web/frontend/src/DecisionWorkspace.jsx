@@ -93,6 +93,74 @@ export function ReviewBanner({ result }) {
   );
 }
 
+function amount(value, unit) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return present(value);
+  return `${unit ? `${unit} ` : ""}${numeric.toLocaleString("ko-KR")}`;
+}
+
+export function NextDecisiveQuestion({ result }) {
+  const question = result.next_decisive_questions?.[0];
+  if (!question) return null;
+  const preview = question.impact_preview;
+  return (
+    <section className="decision-signature decisive-question" aria-labelledby="decisive-title">
+      <div className="signature-kicker">Next Decisive Question</div>
+      <h3 id="decisive-title">무엇이 결과를 바꾸나요?</h3>
+      <p className="signature-question">{question.question}</p>
+      <p>{question.reason}</p>
+      {preview ? (
+        <div className="impact-preview">
+          <span>현재 {question.changes[0]}</span>
+          <strong>{amount(preview.current, preview.currency)}</strong>
+        </div>
+      ) : null}
+      <div className="impact-tags" aria-label="변경되는 결과">
+        {question.changes.map((item) => <span key={item}>{item}</span>)}
+      </div>
+      <small>아래 입력창에 답하면 변경된 부분만 다시 계산합니다.</small>
+    </section>
+  );
+}
+
+function deltaValue(change, value) {
+  if (change.kind === "cashflow_metric") return amount(value, change.unit);
+  return STATUS[value] ?? present(value);
+}
+
+export function DecisionDelta({ result }) {
+  const delta = result.decision_delta;
+  if (!delta) return null;
+  return (
+    <section className="decision-signature decision-delta" aria-labelledby="delta-title">
+      <div className="signature-kicker">Decision Delta</div>
+      <h3 id="delta-title">이번 답변으로 달라진 결정</h3>
+      {!delta.changed ? (
+        <p>판정과 계산 결과에 실질적인 변화가 없습니다.</p>
+      ) : (
+        <div className="delta-list">
+          {delta.changes.map((change) => (
+            <article key={`${change.kind}:${change.subject_id}:${change.rule_id ?? change.metric}`}>
+              <span>{change.label}</span>
+              <div>
+                <del>{deltaValue(change, change.before)}</del>
+                <b aria-hidden="true">→</b>
+                <strong>{deltaValue(change, change.after)}</strong>
+              </div>
+            </article>
+          ))}
+          {delta.resolved_questions.map((item) => (
+            <article key={item.question_id} className="resolved-question">
+              <span>해결된 확인사항</span>
+              <strong>{item.question}</strong>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function TradeTimeline({ trades = [] }) {
   if (trades.length === 0) return null;
   return (
@@ -420,10 +488,11 @@ export function ConsultationHandoff({ result, signedIn }) {
       className="decision-section consultation-handoff"
       aria-labelledby="consultation-title"
     >
-      <h3 id="consultation-title">KB국민은행 상담 인계</h3>
+      <div className="signature-kicker">Decision Passport</div>
+      <h3 id="consultation-title">KB국민은행 상담자료</h3>
       <p>
-        현재는 은행 시스템에 자동 전송하지 않고, 분석·자금공백·지원제도·필요서류를
-        하나의 상담 패킷으로 내려받아 담당자에게 전달합니다.
+        사실·계산·규칙·공식 출처와 Decision Delta를 하나의 재현 가능한 자료로 묶습니다.
+        현재는 은행 시스템에 자동 전송하지 않고 담당자에게 직접 전달합니다.
       </p>
       {!signedIn ? (
         <p className="decision-empty">
@@ -448,7 +517,7 @@ export function ConsultationHandoff({ result, signedIn }) {
             onClick={prepare}
             disabled={!consented || state === "working"}
           >
-            {state === "working" ? "패킷 준비 중" : "KB 상담 패킷 내려받기"}
+            {state === "working" ? "자료 준비 중" : "Decision Passport 내려받기"}
           </button>
           {state === "ready" ? (
             <p role="status">
@@ -466,6 +535,8 @@ export default function DecisionWorkspace({ result, signedIn = false }) {
   return (
     <div className="decision-workspace">
       <ReviewBanner result={result} />
+      <DecisionDelta result={result} />
+      <NextDecisiveQuestion result={result} />
       <CompanySummary profile={result.company_profile} />
       <TradeTimeline trades={result.trade_timeline ?? []} />
       <DocumentPanel trades={result.trade_timeline ?? []} signedIn={signedIn} />

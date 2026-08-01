@@ -51,6 +51,7 @@ def build_consultation_packet(
     )
     return {
         "schema_version": SCHEMA_VERSION,
+        "packet_type": "decision_passport",
         "handoff_id": f"HANDOFF-{digest}",
         "state": "ready_for_manual_handoff",
         "channel": {
@@ -85,6 +86,12 @@ def build_consultation_packet(
             "risk_findings": result.get("risk_findings") or [],
             "next_actions": result.get("next_actions") or [],
             "missing_inputs": result.get("missing_input_queue") or [],
+        },
+        "decision_experience": {
+            "next_decisive_questions": (
+                result.get("next_decisive_questions") or []
+            ),
+            "decision_delta": result.get("decision_delta"),
         },
         "document_checklist": required_documents,
         "evidence": result.get("evidence") or [],

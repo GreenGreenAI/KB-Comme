@@ -41,6 +41,10 @@ from tradeflow.agent.intake import intake
 from tradeflow.contracts.consultation_packet import (
     ManualBankConsultationHandoffProvider,
 )
+from tradeflow.contracts.decision_experience import (
+    build_next_decisive_questions,
+    compare_decisions,
+)
 from tradeflow.domain.enums import TradeDirection
 from tradeflow.knowledge.hedge_quotes import (
     HedgeQuoteSide,
@@ -387,6 +391,14 @@ class AnalyzeRequest(BaseModel):
     #: being resolved by a guess.
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
+    #: A tenant-scoped saved run to compare with this redecision. Anonymous
+    #: callers cannot name one because there is no identity boundary with
+    #: which to prove that the earlier decision belongs to them.
+    previous_analysis_run_id: str | None = Field(
+        default=None,
+        min_length=5,
+        max_length=80,
+    )
 
 
 class ComplianceGatewayInput(BaseModel):
@@ -1102,6 +1114,24 @@ def analyze_endpoint(
             "analysis:write",
             target_type="analysis",
         )
+    previous_analysis = None
+    if request.previous_analysis_run_id:
+        if account is None:
+            raise HTTPException(
+                status_code=401,
+                detail={"reason": "판정 변화 비교는 로그인이 필요합니다"},
+            )
+        previous_analysis = accounts.read_analysis(
+            account,
+            request.previous_analysis_run_id,
+        )
+        if previous_analysis is None:
+            # AccountStore scopes this lookup by organization. The same 404
+            # covers a missing ID and another tenant's ID without disclosure.
+            raise HTTPException(
+                status_code=404,
+                detail={"reason": "비교할 이전 분석을 찾을 수 없습니다"},
+            )
     _validate_case_facts(request.cases)
     as_of = _analysis_date(request.as_of)
     opening_balance = _money(request.opening_balance_usd, "opening_balance_usd")
@@ -1254,6 +1284,19 @@ def analyze_endpoint(
     result["capability_trace"] = _capability_trace(
         result["profile_policy"],
         result,
+    )
+    result["next_decisive_questions"] = build_next_decisive_questions(
+        result,
+        opening_balances=reading.program.opening_balances,
+    )
+    result["decision_delta"] = (
+        compare_decisions(
+            previous_analysis["result"],
+            result,
+            previous_analysis_run_id=previous_analysis["run_id"],
+        )
+        if previous_analysis is not None
+        else None
     )
     result["summary"] = deterministic_summary(result)
 

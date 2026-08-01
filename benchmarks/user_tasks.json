@@ -549,6 +549,87 @@
           "hedge"
         ]
       }
+    },
+    {
+      "id": "UT16",
+      "metric": "decision_change_experience",
+      "critical": true,
+      "title": "결과를 바꾸는 질문부터 변화 증빙과 KB 상담자료까지 연결한다",
+      "job": "보유 외화와 은행 상담 여부를 보완해 달라진 자금 공백과 지원 후보 상태를 확인하고 상담자료로 보존한다",
+      "kind": "decision_delta",
+      "account": {
+        "email": "delta-benchmark@example.com",
+        "password": "delta-password",
+        "company_name": "델타무역",
+        "account_id": "BENCHMARK-DELTA",
+        "facts": {
+          "company.size": "small",
+          "company.credit_issue_free": true
+        }
+      },
+      "before_request": {
+        "as_of": "2026-08-01",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          },
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US",
+            "case_facts": {
+              "financing.purpose": "trade_finance",
+              "financing.has_bank_consultation": false
+            }
+          }
+        ]
+      },
+      "after_request": {
+        "as_of": "2026-08-01",
+        "opening_balance_usd": "20000",
+        "cases": [
+          {
+            "direction": "import",
+            "amount": "60000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-08-25",
+            "country": "VN"
+          },
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US",
+            "case_facts": {
+              "financing.purpose": "trade_finance",
+              "financing.has_bank_consultation": true
+            }
+          }
+        ]
+      },
+      "expect": {
+        "first_decisive_question": "opening_balance_usd",
+        "funding_gap": {
+          "before": "60000",
+          "after": "40000"
+        },
+        "candidate": {
+          "rule_id": "KSURE_EXPORT_CREDIT_GUARANTEE_PRESHIPMENT_CANDIDATE",
+          "before": "conditionally_eligible",
+          "after": "expert_confirmation_required"
+        }
+      }
     }
   ]
 }

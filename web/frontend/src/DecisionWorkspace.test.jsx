@@ -114,6 +114,31 @@ const result = {
     input_fingerprint: "sha256:input",
     business_input_hash: "sha256:business",
   },
+  next_decisive_questions: [{
+    question_id: "liquidity.opening_balance.USD",
+    field: "opening_balance_usd",
+    fields: ["opening_balance_usd"],
+    scope: "liquidity",
+    subject_id: "USD",
+    actor: "user",
+    question: "현재 보유한 USD 외화잔액은 얼마인가요?",
+    reason: "보유 외화만큼 최대 자금 공백이 줄어듭니다.",
+    changes: ["최대 자금 공백"],
+    impact_preview: { current: "60000", currency: "USD" },
+  }],
+  decision_delta: {
+    changed: true,
+    changes: [{
+      kind: "cashflow_metric",
+      metric: "funding_gap",
+      label: "최대 자금 공백",
+      subject_id: "USD",
+      before: "60000",
+      after: "40000",
+      unit: "USD",
+    }],
+    resolved_questions: [],
+  },
   review_required: true,
   review_reasons: ["KSURE-FX: insufficient_information"],
   workers: {
@@ -137,6 +162,11 @@ describe("DecisionWorkspace", () => {
     expect(screen.getAllByText("한국은행").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2026-08-31").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("검토 필요")).toHaveTextContent("사람의 검토가 필요합니다");
+    expect(screen.getByRole("heading", { name: "무엇이 결과를 바꾸나요?" })).toBeInTheDocument();
+    expect(screen.getByText("현재 보유한 USD 외화잔액은 얼마인가요?")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "이번 답변으로 달라진 결정" })).toBeInTheDocument();
+    expect(screen.getAllByText("USD 60,000").length).toBeGreaterThan(0);
+    expect(screen.getByText("USD 40,000")).toBeInTheDocument();
   });
 
   it("exposes official evidence and reproducibility within one disclosure", async () => {
@@ -213,7 +243,7 @@ describe("DecisionWorkspace", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "KB 상담 패킷 내려받기" });
+    const button = screen.getByRole("button", { name: "Decision Passport 내려받기" });
     expect(button).toBeDisabled();
     await user.click(screen.getByRole("checkbox"));
     await user.click(button);

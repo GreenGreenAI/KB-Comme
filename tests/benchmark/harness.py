@@ -439,6 +439,94 @@ def _evaluate_handoff_safety(
     )
 
 
+def _run_decision_delta(scenario: dict[str, Any]) -> dict[str, Any]:
+    account_spec = scenario["account"]
+    with TemporaryDirectory() as directory:
+        store = AccountStore(Path(directory) / "accounts.db")
+        account = store.create(
+            account_spec["email"],
+            account_spec["password"],
+            company_name=account_spec["company_name"],
+            account_id=account_spec["account_id"],
+        )
+        store.update_facts(account, account_spec.get("facts") or {})
+        with patch("tradeflow.web.app.accounts", store):
+            with TestClient(web_app.app) as client:
+                login = client.post("/api/auth/login", json={
+                    "email": account_spec["email"],
+                    "password": account_spec["password"],
+                })
+                login.raise_for_status()
+                first_response = client.post(
+                    "/api/analyze",
+                    json=scenario["before_request"],
+                )
+                first_response.raise_for_status()
+                first = first_response.json()
+                after_request = {
+                    **scenario["after_request"],
+                    "previous_analysis_run_id": first["analysis_run_id"],
+                }
+                second_response = client.post("/api/analyze", json=after_request)
+                second_response.raise_for_status()
+                second = second_response.json()
+                passport_response = client.post(
+                    f"/api/analyses/{second['analysis_run_id']}"
+                    "/consultation-handoff",
+                    json={"consent": True},
+                )
+                passport_response.raise_for_status()
+                passport = passport_response.json()["handoff"]
+    return {"first": first, "second": second, "passport": passport}
+
+
+def _evaluate_decision_delta(
+    payload: dict[str, Any],
+    expected: dict[str, Any],
+) -> tuple[Check, ...]:
+    first_result = payload["first"]["result"]
+    second_result = payload["second"]["result"]
+    delta = second_result.get("decision_delta") or {}
+    changes = delta.get("changes") or []
+    gap = next(
+        (item for item in changes if item.get("metric") == "funding_gap"),
+        {},
+    )
+    candidate = next(
+        (
+            item
+            for item in changes
+            if item.get("rule_id") == expected["candidate"]["rule_id"]
+        ),
+        {},
+    )
+    passport_delta = (
+        payload["passport"].get("decision_experience") or {}
+    ).get("decision_delta")
+    return (
+        _check(
+            "first_decisive_question",
+            (first_result.get("next_decisive_questions") or [{}])[0].get("field"),
+            expected["first_decisive_question"],
+        ),
+        _check(
+            "funding_gap_delta",
+            {"before": gap.get("before"), "after": gap.get("after")},
+            expected["funding_gap"],
+        ),
+        _check(
+            "candidate_status_delta",
+            {"before": candidate.get("before"), "after": candidate.get("after")},
+            {
+                "before": expected["candidate"]["before"],
+                "after": expected["candidate"]["after"],
+            },
+        ),
+        _check("passport_type", payload["passport"].get("packet_type"), "decision_passport"),
+        _check("passport_preserves_delta", passport_delta, delta),
+    )
+
+
 def run_scenario(scenario: dict[str, Any]) -> TaskOutcome:
     started = perf_counter()
     if scenario["kind"] == "analyze":
@@ -453,6 +541,9 @@ def run_scenario(scenario: dict[str, Any]) -> TaskOutcome:
     elif scenario["kind"] == "consultation_handoff_safety":
         payload = _run_handoff_safety(scenario)
         checks = _evaluate_handoff_safety(payload, scenario["expect"])
+    elif scenario["kind"] == "decision_delta":
+        payload = _run_decision_delta(scenario)
+        checks = _evaluate_decision_delta(payload, scenario["expect"])
     else:
         raise ValueError(f"unknown benchmark scenario kind: {scenario['kind']}")
     elapsed = (perf_counter() - started) * 1000

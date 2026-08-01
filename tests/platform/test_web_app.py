@@ -533,6 +533,99 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
             )
         )
 
+    def test_redecision_returns_tenant_scoped_delta_and_passport_history(self) -> None:
+        cases = [
+            {
+                "direction": "import",
+                "currency": "USD",
+                "amount": "60000",
+                "expected_payment_date": "2026-08-25",
+            },
+            {
+                "direction": "export",
+                "currency": "USD",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+                "case_facts": {
+                    "financing.purpose": "trade_finance",
+                    "financing.has_bank_consultation": False,
+                },
+            },
+        ]
+        with TemporaryDirectory() as directory:
+            store = AccountStore(Path(directory) / "accounts.db")
+            account = store.create(
+                "delta@example.com",
+                "pw",
+                company_name="델타무역",
+                account_id="COMPANY-DELTA",
+            )
+            token = store.open_session(account)
+            with patch("tradeflow.web.app.accounts", store):
+                update_profile(
+                    ProfileFactsRequest(
+                        facts={
+                            "company.size": "small",
+                            "company.credit_issue_free": True,
+                        }
+                    ),
+                    token,
+                )
+                first = analyze_endpoint(
+                    AnalyzeRequest(as_of="2026-08-01", cases=cases),
+                    token,
+                )
+                cases[1]["case_facts"]["financing.has_bank_consultation"] = True
+                second = analyze_endpoint(
+                    AnalyzeRequest(
+                        as_of="2026-08-01",
+                        cases=cases,
+                        opening_balance_usd="20000",
+                        previous_analysis_run_id=first["analysis_run_id"],
+                    ),
+                    token,
+                )
+                passport = create_consultation_handoff(
+                    second["analysis_run_id"],
+                    ConsultationHandoffRequest(consent=True),
+                    token,
+                )["handoff"]
+
+        result = second["result"]
+        delta = result["decision_delta"]
+        self.assertTrue(delta["changed"])
+        self.assertIn(
+            ("funding_gap", "60000", "40000"),
+            {
+                (item["metric"], item["before"], item["after"])
+                for item in delta["changes"]
+            },
+        )
+        self.assertIn(
+            ("conditionally_eligible", "expert_confirmation_required"),
+            {
+                (item["before"], item["after"])
+                for item in delta["changes"]
+                if item["metric"] == "support_candidate_status"
+            },
+        )
+        self.assertEqual("decision_passport", passport["packet_type"])
+        self.assertEqual(
+            delta,
+            passport["decision_experience"]["decision_delta"],
+        )
+
+    def test_anonymous_redecision_cannot_name_a_saved_run(self) -> None:
+        with self.assertRaises(HTTPException) as context:
+            analyze_endpoint(
+                AnalyzeRequest(
+                    cases=[self._case()],
+                    previous_analysis_run_id="RUN-NOT-MINE",
+                )
+            )
+
+        self.assertEqual(401, context.exception.status_code)
+
 
 class SecondTradeTests(unittest.TestCase):
     """A sentence about a different trade must reach the answer.
