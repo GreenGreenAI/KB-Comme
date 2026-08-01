@@ -336,6 +336,12 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       {/* The sentence arrives a word at a time. Written as segments rather than
           JSX so words can be mounted one by one; emphasis rides along on the
           segment. */}
+      {/* What we do not do about the subject they raised, before anything we
+          do. A company that asked what a scheme is met a request for its size
+          and its credit standing, and never learned that the question had no
+          answer here. */}
+      {result.cannot && <p className="told">{result.cannot}</p>}
+
       {/* Written by code, not by §4.2[9]: the sentence is about the figures,
           and this says what else the answer holds. Counts only — every verdict
           is rendered from its own worker's output below.
@@ -349,8 +355,16 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}
 
-      {shown > 0 && !result.said?.retold && (
+      {shown > 0 && !result.said?.retold && !result.cannot && (
         <Written segments={line} shown={shown} settled={settled} />
+      )}
+
+      {/* Still shown, and quietly. §2's reader does not know their own
+          exposure, so it must not disappear — but it is not an answer to a
+          question about what a scheme is, and it was taking the first half of
+          one. */}
+      {shown > 0 && result.cannot && !result.said?.retold && (
+        <p className="told quiet">{line.map((seg) => seg.text).join(" ")}</p>
       )}
 
       {!leads && shown > words && result.pointer && (

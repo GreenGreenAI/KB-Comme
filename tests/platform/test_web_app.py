@@ -427,6 +427,48 @@ class StandingSubjectTests(unittest.TestCase):
         self.assertEqual("100000", result["trade_timeline"][0]["amount"])
 
 
+class AsksMeaningTests(unittest.TestCase):
+    """「환변동보험이 뭐야」 and 「받을 수 있는 지원제도가 있나요」 read as the
+    same subject and want different things.
+
+    The first has no answer here — the extracts hold eligibility conditions
+    and nothing describes what a scheme is for — and the second does. The
+    honest line and the request panel both hang on telling them apart.
+    """
+
+    TRADE = {
+        "direction": "수출",
+        "amount": "150000",
+        "expected_payment_date": "2026-12-03",
+    }
+
+    def _answer(self, utterance: str) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[self.TRADE], utterance=utterance, as_of="2026-07-31"
+            )
+        )["result"]
+
+    def test_a_question_about_meaning_is_answered_as_one(self) -> None:
+        """It lived only on the path taken when there was no trade, so the
+        moment a company had described one every question about what something
+        is came back as an analysis of that trade."""
+        result = self._answer("환변동보험이 뭐야?")
+
+        self.assertIn("설명하는 것은 아직 다루지 않습니다", result["cannot"])
+
+    def test_a_question_about_eligibility_is_not(self) -> None:
+        self.assertEqual("", self._answer("받을 수 있는 지원제도가 있나요")["cannot"])
+
+    def test_no_panel_opens_under_a_question_we_declined(self) -> None:
+        """A panel is a demand. Opening one under a question we have just said
+        we cannot answer asks for facts about something else."""
+        self.assertIsNone(self._answer("환변동보험이 뭐야?")["asking_for"])
+        self.assertEqual(
+            "support", self._answer("받을 수 있는 지원제도가 있나요")["asking_for"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

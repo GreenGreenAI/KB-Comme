@@ -507,6 +507,15 @@ def analyze_endpoint(
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
     subjects = tuple(result["execution_plan"]["topics"])
+    # Said whether or not a trade is on screen. That this product judges
+    # eligibility and does not describe schemes is true either way, and it
+    # lived only on the path taken when there was no trade — so the moment a
+    # company had described one, every question about what something is came
+    # back as an analysis of that trade with no word about the question.
+    meaning = _asks_meaning(request.utterance)
+    result["cannot"] = (
+        CANNOT.get(next(iter(subjects), ""), "") if meaning else ""
+    )
     result["pointer"] = pointer(result, intent=subjects)
     if account is None:
         # §5.4's rules read company facts, and an anonymous caller has none —
@@ -604,7 +613,11 @@ def analyze_endpoint(
     # but only one of them gets the top of the screen and an input panel.
     # A company that asked whether its netting is reportable was being asked
     # for its operating profit, which is §5.3's input and nobody's answer.
-    result["asking_for"] = _asking_for(subjects, result)
+    # A panel is a demand. Opening one under a question we have just said we
+    # cannot answer asks the reader to supply facts for something they did not
+    # ask about. The sentence still names what would unlock the judgement, so
+    # nothing is withheld — it is offered instead of demanded.
+    result["asking_for"] = None if result["cannot"] else _asking_for(subjects, result)
     # The facts §5.4 is waiting for, when the caller is the one who can state
     # them. A signed-in company already stated them once and is never asked.
     result["required_inputs"]["profile"] = (
@@ -820,7 +833,7 @@ def _answer_without_a_trade(
         "asks_for_trade": ASK_FOR_TRADE.get(lead, DEFAULT_ASK),
         # Named before the ask. A company that asked what a scheme is should
         # learn that we do not answer that before being told what we want.
-        "cannot": CANNOT.get(lead, ""),
+        "cannot": CANNOT.get(lead, "") if _asks_meaning(utterance) else "",
     }
 
 
@@ -834,6 +847,34 @@ def _answer_without_a_trade(
 #:
 #: Saying so is the answer. Asking for an amount and a settlement date is not —
 #: that is the funnel answering a question it did not read.
+#: A sentence asking what something *is*, as distinct from whether it applies.
+#:
+#: 「환변동보험이 뭐야」 and 「받을 수 있는 지원제도가 있나요」 read as the same
+#: subject and want different things. The first has no answer here and the
+#: second does, so the honest line and the request panel both hang on telling
+#: them apart. Kept tight on purpose: 「지원제도 알려줘」 is asking which ones,
+#: not what they are, and belongs on the judging side.
+_ASKS_MEANING = (
+    "뭐야",
+    "뭔가요",
+    "뭔지",
+    "무엇인가",
+    "무엇인지",
+    "이란",
+    "란 게",
+    "설명해",
+    "설명 좀",
+    "어떤 제도",
+    "무슨 제도",
+    "차이가",
+    "차이점",
+)
+
+
+def _asks_meaning(utterance: str | None) -> bool:
+    return bool(utterance) and any(word in utterance for word in _ASKS_MEANING)
+
+
 CANNOT = {
     "support": (
         "다만 제도가 무엇인지 설명하는 것은 아직 다루지 않습니다. "
