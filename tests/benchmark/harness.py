@@ -140,6 +140,14 @@ def _evaluate_analyze(
         )
 
     result = body.get("result") or {}
+    if expected.get("summary_nonempty"):
+        checks.append(
+            _check(
+                "summary_nonempty",
+                bool(str(result.get("summary") or "").strip()),
+                True,
+            )
+        )
     if "trade_count" in expected:
         checks.append(
             _check(

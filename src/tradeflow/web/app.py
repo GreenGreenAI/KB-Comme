@@ -58,7 +58,13 @@ from tradeflow.runtime.documents import (
     decode_upload,
 )
 from tradeflow.runtime.postgres_accounts import PostgresAccountStore
-from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
+from tradeflow.runtime.profile_policy import evaluate_profile_policy
+from tradeflow.runtime.synthesis import (
+    Synthesizer,
+    deterministic_summary,
+    figures,
+    pointer,
+)
 from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze
 from tradeflow.agent.orchestrator import DECLARED_COMPANY_FIELDS
@@ -947,6 +953,134 @@ def _analysis_date(raw: str | None) -> date:
     return value
 
 
+def _profile_policy_projection(
+    program: Any,
+    result: dict[str, Any],
+    *,
+    as_of: date,
+) -> dict[str, Any]:
+    company_facts = program.company.facts()
+    raw_size = company_facts.get("company.size")
+    size = {
+        "mid_sized": "medium",
+        "large": "large",
+    }.get(raw_size, raw_size)
+    if not size and program.company.is_sme is True:
+        size = "small"
+    trade_roles = list(dict.fromkeys(
+        "exporter" if case.direction is TradeDirection.EXPORT else "importer"
+        for case in program.cases
+    ))
+    net_exposure = result.get("cashflow_analysis", {}).get("net_exposure") or []
+    payload = {
+        "as_of": as_of.isoformat(),
+        "company_size": size,
+        "trade_roles": trade_roles,
+        "currency_cashflows": [
+            {
+                "currency": item.get("currency"),
+                "net_amount": item.get("amount"),
+            }
+            for item in net_exposure
+        ],
+        # Until a bank adapter is configured, routing may prepare work but may
+        # not claim that a bank lookup or submission happened.
+        "bank_provider_status": "unavailable",
+        "consents": [],
+    }
+    return evaluate_profile_policy(payload).as_dict()
+
+
+def _capability_trace(
+    profile_policy: dict[str, Any],
+    result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    trace: list[dict[str, Any]] = []
+    authorized = set(profile_policy.get("authorized_capabilities") or [])
+    executed = set(profile_policy.get("executed_capabilities") or [])
+    missing_consents = set(profile_policy.get("missing_consents") or [])
+    for capability in profile_policy.get("capabilities") or []:
+        capability_id = capability["capability_id"]
+        consent = capability.get("required_consent")
+        if capability_id in executed:
+            status = "succeeded"
+        elif capability_id in authorized:
+            status = "authorized_not_executed"
+        elif consent and consent in missing_consents:
+            status = "blocked_consent"
+        else:
+            status = "provider_unavailable"
+        trace.append({
+            "capability_id": capability_id,
+            "kind": "provider",
+            "status": status,
+            "attempted": capability_id in executed,
+            "reason": capability.get("reason"),
+        })
+
+    existing = {item["capability_id"] for item in trace}
+    for fetch in result.get("system_fetches") or []:
+        capability_id = fetch["capability_id"]
+        if capability_id in existing:
+            continue
+        existing.add(capability_id)
+        trace.append({
+            "capability_id": capability_id,
+            "kind": "provider",
+            "status": fetch.get("status", "provider_unavailable"),
+            "attempted": False,
+            "reason": fetch.get("reason"),
+        })
+
+    workers = result.get("workers") or {}
+    for worker in workers.get("completed") or []:
+        trace.append({
+            "capability_id": f"worker.{worker}",
+            "kind": "local_worker",
+            "status": "succeeded",
+            "attempted": True,
+            "reason": None,
+        })
+    for worker, reason in (workers.get("failed") or {}).items():
+        trace.append({
+            "capability_id": f"worker.{worker}",
+            "kind": "local_worker",
+            "status": "failed",
+            "attempted": True,
+            "reason": reason,
+        })
+    for worker, reason in (workers.get("skipped") or {}).items():
+        trace.append({
+            "capability_id": f"worker.{worker}",
+            "kind": "local_worker",
+            "status": "skipped",
+            "attempted": False,
+            "reason": reason,
+        })
+    return trace
+
+
+def _add_runtime_fetches(result: dict[str, Any]) -> None:
+    """Expose unavailable runtime data as system work, not a user question."""
+    failed = (result.get("workers") or {}).get("failed") or {}
+    if "market_scenario" not in failed:
+        return
+    fetches = result.setdefault("system_fetches", [])
+    capability_id = "market_data.ecos_usd_krw.refresh.v1"
+    if any(item.get("capability_id") == capability_id for item in fetches):
+        return
+    fetches.append({
+        "field": "market_data.ecos_usd_krw",
+        "capability_id": capability_id,
+        "subject_id": None,
+        "status": "provider_unavailable",
+        "reason": (
+            "최신 ECOS USD/KRW 스냅샷을 수집·검증한 뒤 "
+            "환율 시나리오를 다시 계산해야 합니다."
+        ),
+    })
+
+
 @app.post("/api/analyze")
 def analyze_endpoint(
     request: AnalyzeRequest,
@@ -1107,6 +1241,17 @@ def analyze_endpoint(
         as_of=evaluated_at,
     )
     result = build_response(analysis)
+    _add_runtime_fetches(result)
+    result["profile_policy"] = _profile_policy_projection(
+        reading.program,
+        result,
+        as_of=as_of,
+    )
+    result["capability_trace"] = _capability_trace(
+        result["profile_policy"],
+        result,
+    )
+    result["summary"] = deterministic_summary(result)
 
     # §4.2[9]: the last step, and the only one a language model touches. It is
     # given the figures the tools produced and nothing else, and what it writes

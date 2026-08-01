@@ -163,6 +163,25 @@ class MultipleTradeIntakeTests(unittest.TestCase):
         self.assertEqual("수출", body["candidates"][1]["direction"])
         self.assertEqual("100000", body["candidates"][1]["amount"])
 
+    def test_support_question_does_not_create_a_phantom_export_trade(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                utterance=(
+                    "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, "
+                    "완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다. "
+                    "그 사이 부족한 자금과 환위험, 받을 수 있는 수출지원이 궁금합니다."
+                ),
+            )
+        )
+
+        self.assertEqual("needs_trade_split", body["status"])
+        self.assertEqual(2, len(body["candidates"]))
+        self.assertEqual(
+            ["수입", "수출"],
+            [item["direction"] for item in body["candidates"]],
+        )
+
     def test_confirmed_split_cases_produce_the_expected_maturity_gap(self) -> None:
         as_of = date.today()
         body = analyze_endpoint(
@@ -198,6 +217,101 @@ class MultipleTradeIntakeTests(unittest.TestCase):
         self.assertEqual(
             "40000",
             exposure["net_exposure"][0]["amount"],
+        )
+        self.assertTrue(body["result"]["summary"])
+        self.assertIn("60,000 USD", body["result"]["summary"])
+
+
+class ProfilePolicyWebIntegrationTests(unittest.TestCase):
+    def test_ready_response_exposes_profile_policy_and_capability_trace(self) -> None:
+        as_of = date.today()
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=as_of.isoformat(),
+                company_name="한빛정밀",
+                is_sme=True,
+                company_facts={"company.size": "small"},
+                cases=[{
+                    "direction": "export",
+                    "amount": "100000",
+                    "currency": "USD",
+                    "payment_method": "TT",
+                    "expected_payment_date": (
+                        as_of + timedelta(days=60)
+                    ).isoformat(),
+                    "country": "US",
+                }],
+            )
+        )
+
+        self.assertEqual("ready", body["status"])
+        result = body["result"]
+        self.assertEqual("1.0", result["profile_policy"]["schema_version"])
+        self.assertIn(
+            "exporter",
+            result["profile_policy"]["axes"]["trade_role"],
+        )
+        self.assertIsInstance(result["capability_trace"], list)
+
+    def test_missing_work_is_partitioned_by_actor(self) -> None:
+        as_of = date.today()
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=as_of.isoformat(),
+                is_sme=True,
+                company_facts={
+                    "company.is_domestic": True,
+                    "company.size": "small",
+                    "company.credit_issue_free": True,
+                    "company.ksure_exporter_grade": "A",
+                },
+                cases=[{
+                    "direction": "export",
+                    "amount": "100000",
+                    "currency": "USD",
+                    "payment_method": "TT",
+                    "expected_payment_date": (
+                        as_of + timedelta(days=60)
+                    ).isoformat(),
+                    "country": "US",
+                    "case_facts": {"trade.payment_term_days": 60},
+                }],
+            )
+        )
+
+        result = body["result"]
+        question_ids = {
+            item["question_id"] for item in result["user_questions"]
+        }
+        self.assertIn("trade_structure_confirmation", question_ids)
+        capabilities = {
+            item["capability_id"] for item in result["system_fetches"]
+        }
+        self.assertIn("ksure.country_policy.lookup.v1", capabilities)
+        self.assertIn("ksure.importer_grade.lookup.v1", capabilities)
+        self.assertTrue(result["expert_tasks"])
+
+    def test_failed_market_worker_becomes_a_system_refresh_task(self) -> None:
+        from tradeflow.web.app import _add_runtime_fetches
+
+        result = {
+            "workers": {
+                "completed": ["exposure"],
+                "failed": {"market_scenario": "snapshot is stale"},
+                "skipped": {},
+            },
+            "system_fetches": [],
+        }
+
+        _add_runtime_fetches(result)
+
+        self.assertEqual(
+            "market_data.ecos_usd_krw.refresh.v1",
+            result["system_fetches"][0]["capability_id"],
+        )
+        self.assertEqual(
+            "provider_unavailable",
+            result["system_fetches"][0]["status"],
         )
 
 

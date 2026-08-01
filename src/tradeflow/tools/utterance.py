@@ -464,11 +464,30 @@ def split_trade_candidates(
     for index, anchor in enumerate(anchors):
         clause = text[boundaries[index] : boundaries[index + 1]].strip()
         heard = read_utterance(clause, as_of=as_of)
+        # A direction word inside a question or product name is not a trade.
+        # ``수출지원``, ``수출보험`` and ``수입금융`` used to survive because
+        # the direction injected below made an otherwise empty reading truthy.
+        # Require transaction evidence that was independently read from the
+        # clause before treating the anchor as a separate case.
+        if not any(
+            field in heard
+            for field in (
+                "amount",
+                "expected_payment_date",
+                "country",
+                "currency",
+                "payment_method",
+            )
+        ):
+            continue
         # The anchor itself is authoritative even when another directional
         # verb appears in the same clause near the boundary.
         heard["direction"] = "수출" if anchor.group(0) == "수출" else "수입"
         if heard:
             candidates.append(heard)
+    candidate_directions = {item["direction"] for item in candidates}
+    if len(candidates) < 2 or len(candidate_directions) < 2:
+        return ()
     return tuple(candidates)
 
 

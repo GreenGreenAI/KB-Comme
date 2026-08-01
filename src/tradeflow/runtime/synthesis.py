@@ -405,6 +405,42 @@ def figures(result: dict[str, Any]) -> list[str]:
     return written
 
 
+def deterministic_summary(result: dict[str, Any]) -> str:
+    """A non-empty, non-judgemental answer assembled from tool output.
+
+    LLM synthesis is optional decoration. API clients must still receive an
+    answer when the key is absent, the network fails, or the generated prose
+    is rejected. Values are copied from the response contract and only given
+    thousands separators; no eligibility verdict or new arithmetic is added.
+    """
+
+    def money(value: Any) -> str:
+        try:
+            return f"{int(str(value)):,}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    cash = result.get("cashflow_analysis") or {}
+    gaps = cash.get("funding_gap") or []
+    exposures = cash.get("net_exposure") or []
+    parts: list[str] = []
+    if gaps:
+        gap = gaps[0]
+        parts.append(
+            f"최대 자금 공백은 {money(gap.get('peak_amount'))} "
+            f"{gap.get('currency')}입니다."
+        )
+    if exposures:
+        exposure = exposures[0]
+        parts.append(
+            f"결제일을 반영한 순노출은 {money(exposure.get('amount'))} "
+            f"{exposure.get('currency')}입니다."
+        )
+    if not parts:
+        return "분석 결과를 아래 항목별로 확인해 주세요."
+    return " ".join(parts)
+
+
 def pointer(result: dict[str, Any]) -> str:
     """What else this answer holds, counted rather than judged.
 

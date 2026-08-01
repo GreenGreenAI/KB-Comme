@@ -24,6 +24,9 @@ const FIELD = {
   "trade.payment_term_days": "결제기간",
   "financing.purpose": "금융 목적",
   "financing.has_bank_consultation": "은행 상담 여부",
+  "counterparty.country_restricted": "거래국 인수 제한 여부",
+  "counterparty.ksure_importer_grade": "K-SURE 수입자 등급",
+  "market_data.ecos_usd_krw": "ECOS USD/KRW 시장 데이터",
   baseline_profit: "기준 영업이익",
   profit_floor: "목표 손익 하한",
 };
@@ -131,13 +134,20 @@ export function CompanySummary({ profile }) {
 }
 
 function DecisionCard({ item }) {
+  const statusReason = {
+    expert_confirmation_required: "공개 요건상 검토 후보이며 전문가 확인이 필요합니다.",
+    insufficient_information: "추가 정보가 있어야 후보 여부를 판단할 수 있습니다.",
+    conditionally_eligible: "표시된 선행 조건을 확인해야 다음 단계로 진행할 수 있습니다.",
+    not_eligible: "현재 확인된 조건에서는 대상이 아닙니다.",
+    source_expired: "근거 출처를 갱신한 뒤 다시 판단해야 합니다.",
+  }[item.status];
   return (
     <article className={`decision-card status-${item.status}`}>
       <header>
         <b>{item.title}</b>
         <span className="decision-status">{label(STATUS, item.status)}</span>
       </header>
-      <p>{item.reasons?.join(" · ") || "판정 이유가 기록되지 않았습니다."}</p>
+      <p>{statusReason || item.reasons?.join(" · ") || "판정 이유가 기록되지 않았습니다."}</p>
       {item.missing_fields?.length > 0 ? (
         <p className="decision-missing">
           필요한 정보: {item.missing_fields.map((field) => FIELD[field] ?? field).join(", ")}
@@ -247,12 +257,61 @@ export function ActionPlan({ result }) {
 }
 
 export function MissingInputQueue({ result }) {
+  const questions = result.user_questions ?? [];
+  const fetches = result.system_fetches ?? [];
+  const expertTasks = result.expert_tasks ?? [];
   const queue = (result.missing_input_queue ?? []).slice(0, 3);
-  if (queue.length === 0 && (result.missing_information ?? []).length === 0) return null;
+  const hasPartitionedWork = questions.length > 0 || fetches.length > 0 || expertTasks.length > 0;
+  if (!hasPartitionedWork && queue.length === 0 && (result.missing_information ?? []).length === 0) return null;
   return (
     <section className="decision-section" aria-labelledby="missing-title">
-      <h3 id="missing-title">다음 판정을 여는 정보</h3>
-      {queue.length > 0 ? (
+      <h3 id="missing-title">다음 판정을 여는 작업</h3>
+      {hasPartitionedWork ? (
+        <div className="work-queues">
+          {questions.length > 0 ? (
+            <div>
+              <h4>고객 확인</h4>
+              <ol className="missing-queue">
+                {questions.map((item) => (
+                  <li key={item.question_id}>
+                    <b>{item.fields?.map((field) => FIELD[field] ?? field).join(", ")}</b>
+                    <span>{item.question}</span>
+                    <small>고객 답변 대기</small>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+          {fetches.length > 0 ? (
+            <div>
+              <h4>시스템 조회</h4>
+              <ul className="missing-queue plain">
+                {fetches.map((item) => (
+                  <li key={`${item.capability_id}:${item.subject_id ?? "program"}`}>
+                    <b>{FIELD[item.field] ?? item.field}</b>
+                    <span>{item.reason}</span>
+                    <small>{item.capability_id} · {item.status === "provider_unavailable" ? "연결 필요" : item.status}</small>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {expertTasks.length > 0 ? (
+            <div>
+              <h4>전문가 확인</h4>
+              <ul className="missing-queue plain">
+                {expertTasks.map((item) => (
+                  <li key={item.task_id}>
+                    <b>{item.title}</b>
+                    <span>{item.reason}</span>
+                    <small>{label(AUTHORITY, item.authority)}</small>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : queue.length > 0 ? (
         <ol className="missing-queue">
           {queue.map((item) => (
             <li key={`${item.subject_id ?? "program"}:${item.field}`}>
@@ -268,6 +327,33 @@ export function MissingInputQueue({ result }) {
         </ul>
       )}
     </section>
+  );
+}
+
+export function CapabilityTrace({ result }) {
+  const capabilities = result.capability_trace ?? [];
+  if (capabilities.length === 0) return null;
+  const statusLabel = {
+    succeeded: "실행 완료",
+    failed: "실행 실패",
+    skipped: "미실행",
+    authorized_not_executed: "실행 가능·미실행",
+    blocked_consent: "동의 필요",
+    provider_unavailable: "연결 필요",
+  };
+  return (
+    <details className="decision-evidence capability-trace">
+      <summary>시스템 실행 내역</summary>
+      <ul className="missing-queue plain">
+        {capabilities.map((item) => (
+          <li key={item.capability_id}>
+            <b>{item.capability_id}</b>
+            <span>{statusLabel[item.status] ?? item.status}</span>
+            {item.reason ? <small>{item.reason}</small> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -388,6 +474,7 @@ export default function DecisionWorkspace({ result, signedIn = false }) {
       <MissingInputQueue result={result} />
       <ActionPlan result={result} />
       <ConsultationHandoff result={result} signedIn={signedIn} />
+      <CapabilityTrace result={result} />
       <EvidenceSummary result={result} />
     </div>
   );

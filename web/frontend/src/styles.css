@@ -1151,6 +1151,10 @@
   .missing-queue span { margin-top: .15rem; color: var(--ink-70); line-height: 1.45; }
   .missing-queue small { margin-top: .12rem; color: var(--ink-45); }
   .missing-queue.plain { color: var(--ink-70); }
+  .work-queues { display: grid; gap: .8rem; }
+  .work-queues h4 { margin: 0 0 .35rem; font-size: .75rem; }
+  .capability-trace { margin-bottom: .65rem; }
+  .capability-trace .missing-queue { margin-top: .65rem; }
 
   .decision-evidence {
     padding: .7rem .85rem; border: 1px dashed var(--rule); border-radius: 10px;

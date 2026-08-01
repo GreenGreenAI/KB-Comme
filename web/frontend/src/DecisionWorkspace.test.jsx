@@ -66,6 +66,37 @@ const result = {
     },
   ],
   missing_information: [],
+  user_questions: [
+    {
+      question_id: "credit_confirmation",
+      fields: ["company.credit_issue_free"],
+      question: "신용 제한 사유가 없는지 확인해 주세요.",
+    },
+  ],
+  system_fetches: [
+    {
+      field: "counterparty.ksure_importer_grade",
+      capability_id: "ksure.importer_grade.lookup.v1",
+      subject_id: "EXPORT-001",
+      status: "provider_unavailable",
+      reason: "K-SURE 등급 조회가 필요합니다.",
+    },
+  ],
+  expert_tasks: [
+    {
+      task_id: "EXPORT-001:KSURE-FX",
+      title: "환변동보험 후보",
+      authority: "ksure",
+      reason: "전문가 확인 필요",
+    },
+  ],
+  capability_trace: [
+    {
+      capability_id: "ksure.importer_grade.lookup.v1",
+      status: "provider_unavailable",
+      reason: "K-SURE provider is not configured",
+    },
+  ],
   evidence: [
     {
       role: "official_source",
@@ -118,6 +149,24 @@ describe("DecisionWorkspace", () => {
       "https://www.ksure.or.kr/example",
     );
     expect(screen.getByText("sha256:input")).toBeInTheDocument();
+  });
+
+  it("separates customer questions, system fetches and expert tasks", () => {
+    render(<DecisionWorkspace result={result} />);
+
+    expect(screen.getByText("고객 확인")).toBeInTheDocument();
+    expect(screen.getByText("시스템 조회")).toBeInTheDocument();
+    expect(screen.getByText("전문가 확인", { selector: "h4" })).toBeInTheDocument();
+    expect(screen.getAllByText("연결 필요", { exact: false }).length).toBeGreaterThan(0);
+  });
+
+  it("shows capability execution status without implying a provider call", async () => {
+    const user = userEvent.setup();
+    render(<DecisionWorkspace result={result} />);
+
+    await user.click(screen.getByText("시스템 실행 내역"));
+    expect(screen.getAllByText("ksure.importer_grade.lookup.v1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("연결 필요").length).toBeGreaterThan(0);
   });
 
   it("distinguishes a skipped worker from a completed empty result", () => {

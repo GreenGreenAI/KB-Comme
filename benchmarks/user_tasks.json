@@ -66,6 +66,7 @@
       },
       "expect": {
         "status": "ready",
+        "summary_nonempty": true,
         "trade_count": 2,
         "cashflow": {
           "funding_gap": "60000",
@@ -459,6 +460,34 @@
       "expect": {
         "transmission_performed": false,
         "cross_tenant_status": 404
+      }
+    },
+    {
+      "id": "UT14",
+      "metric": "intake_robustness",
+      "critical": true,
+      "title": "거래 뒤의 수출지원 질문을 별도 수출 건으로 오인하지 않는다",
+      "job": "수출입 거래 설명과 지원제도 질문을 한 문장에 입력해도 실제 거래 두 건만 확인한다",
+      "kind": "analyze",
+      "request": {
+        "as_of": "2026-07-28",
+        "utterance": "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, 완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다. 그 사이 부족한 자금과 환위험, 받을 수 있는 수출지원이 궁금합니다."
+      },
+      "expect": {
+        "status": "needs_trade_split",
+        "candidate_summaries": [
+          {
+            "direction": "수입",
+            "amount": "60000",
+            "expected_payment_date": "2026-08-25"
+          },
+          {
+            "direction": "수출",
+            "amount": "100000",
+            "expected_payment_date": "2026-10-24"
+          }
+        ],
+        "result_absent": true
       }
     }
   ]
