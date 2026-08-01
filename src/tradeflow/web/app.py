@@ -47,7 +47,7 @@ from tradeflow.domain.models import CompanyProfile
 from tradeflow.runtime import introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
-from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
+from tradeflow.runtime.synthesis import Synthesis, Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
@@ -542,20 +542,32 @@ def analyze_endpoint(
         *result["said"]["compliance"],
         *result["said"]["actions"],
     ]
-    retold = synthesizer.retell(
-        told,
-        # Every subject the rules judged. A rewrite may shorten a name; it may
-        # not leave a judgement out.
-        subjects=tuple(
-            row["title"] for row in result["said"]["detail"] if row["title"] != "필요서류"
-        ),
-        # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one sentence.
-        # A rewrite dropped it the first time it was allowed near it.
-        required=tuple(
-            line for line in result["said"]["compliance"] if "판정은 아닙니다" in line
-        ),
-        seed=f"retell|{result.get('packet_id')}",
-    )
+    # A rewrite exists to make several judgements read as one answer. Given a
+    # single line it has nothing to combine and becomes a machine that says the
+    # same thing twice — the screen then showed both, three lines apart, in the
+    # same words. Fewer than two judgements is not an answer that needs one.
+    retold = Synthesis("", False, "합칠 판정이 없습니다")
+    if len(told) > 1 and any(
+        result["said"][section] for section in ("support", "compliance", "actions")
+    ):
+        retold = synthesizer.retell(
+            told,
+            # Every subject the rules judged. A rewrite may shorten a name; it
+            # may not leave a judgement out.
+            subjects=tuple(
+                row["title"]
+                for row in result["said"]["detail"]
+                if row["title"] != "필요서류"
+            ),
+            # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one
+            # sentence. A rewrite dropped it the first time it was near it.
+            required=tuple(
+                line
+                for line in result["said"]["compliance"]
+                if "판정은 아닙니다" in line
+            ),
+            seed=f"retell|{result.get('packet_id')}",
+        )
     if retold.accepted:
         result["said"]["retold"] = retold.sentence
     elif retold.reason:

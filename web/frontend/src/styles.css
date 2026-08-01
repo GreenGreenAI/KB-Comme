@@ -737,14 +737,8 @@
     margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
     border-radius: 12px; background: var(--wash-2);
   }
-  /* When the answer is prose there is no card. The box was drawn around a
-     figure grid; wrapping sentences in it made the reply look like a record
-     the reader had been handed rather than an answer they had been given. */
-  .answer.told-answer {
-    padding: 0; border: none; background: none; margin-top: .2rem;
-  }
-  .answer.told-answer .folds { margin-top: 0; }
-  .answer.told-answer .folds .fold { border-top: none; padding-top: 0; }
+  /* The card holds the figure grid and the band. Sentences sit above it, in
+     the message — a reply in a grey box reads as a document handed over. */
   .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
   .figrow > div { min-width: 0; }
   .figrow dt { font-size: .6875rem; color: var(--ink-45); }

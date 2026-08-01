@@ -344,7 +344,9 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}
 
-      {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
+      {shown > 0 && !result.said?.retold && (
+        <Written segments={line} shown={shown} settled={settled} />
+      )}
 
       {!leads && shown > words && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
@@ -930,14 +932,31 @@ function Answer({ result, order, shown, arrive }) {
   const said = result.said ?? {};
   // Whether this turn's answer is sentences. When it is, the card is dropped:
   // the box exists to hold a figure grid, and the grid is folded away.
-  const told =
-    folded &&
-    ((said.support ?? []).length > 0 || (said.compliance ?? []).length > 0);
+  // The card is the figure grid and the band. Prose never belonged inside it —
+  // sentences in a grey box read as a document handed over, not an answer
+  // given, which is the impression the folds were removed to stop.
+  const spoken = said.retold
+    ? [said.retold]
+    : [
+        ...(said.support ?? []),
+        ...(said.compliance ?? []),
+        ...(said.actions ?? []),
+      ];
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
-    <div className={`answer${told ? " told-answer" : ""}${arrive}`}>
+    <>
+    {/* Said first, and outside the card. When the rewrite landed it already
+        carries the figures sentence, so the one above is the same claim twice
+        — three lines apart, in the same words. */}
+    {spoken.map((line) => (
+      <p className="told" key={line}>
+        {line}
+      </p>
+    ))}
+
+    <div className={`answer${arrive}`}>
       <Calculation folded={folded} net={net}>
         <>
           <dl className="figrow">
@@ -998,19 +1017,6 @@ function Answer({ result, order, shown, arrive }) {
             불필요하다는 판정은 아닙니다」 goes in as a phrase the rewrite must
             carry word for word — it is not that compliance cannot be retold,
             it is that one sentence in it cannot be reworded. */}
-        {(said.retold
-          ? [said.retold]
-          : [
-              ...(said.support ?? []),
-              ...(said.compliance ?? []),
-              ...(said.actions ?? []),
-            ]
-        ).map((line) => (
-          <p className="told" key={line}>
-            {line}
-          </p>
-        ))}
-
         {said.detail?.length > 0 && (
           <details className="fold aside">
             <summary>규칙이 확인한 것과 필요서류</summary>
@@ -1043,6 +1049,7 @@ function Answer({ result, order, shown, arrive }) {
         {/* Skipped workers still say why, in one line each. */}
         {rest
           .filter((section) => skipped[section])
+          .filter((section) => !(asked || result.asking_for === section))
           .map((section) => (
             <p className="told quiet" key={section}>
               {skipped[section]}
@@ -1081,6 +1088,7 @@ function Answer({ result, order, shown, arrive }) {
         </div>
       )}
     </div>
+    </>
   );
 
   function renderSection(section) {

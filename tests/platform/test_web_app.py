@@ -429,3 +429,41 @@ class StandingSubjectTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetellGuardTests(unittest.TestCase):
+    """A rewrite exists to make several judgements read as one answer.
+
+    Given a single line it has nothing to combine and becomes a machine that
+    says the same thing twice — and the screen showed both, three lines apart,
+    in the same words.
+    """
+
+    def _answer(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "150000",
+                        "expected_payment_date": "2026-12-03",
+                    }
+                ],
+                utterance="환율이 더 떨어지면 얼마나 손해인가요",
+                as_of="2026-07-31",
+                **body,
+            )
+        )["result"]
+
+    def test_nothing_to_combine_is_not_retold(self) -> None:
+        """An anonymous caller gets no eligibility judgement, so the only line
+        would be the figures sentence the screen already shows."""
+        result = self._answer()
+
+        self.assertEqual([], result["said"]["support"])
+        self.assertNotIn("retold", result["said"])
+
+    def test_judgements_are_retold(self) -> None:
+        result = self._answer(company_size="small", credit_issue_free=True)
+
+        self.assertTrue(result["said"]["support"])
