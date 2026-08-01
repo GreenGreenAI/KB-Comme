@@ -149,6 +149,7 @@ function QuoteFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={rate}
         placeholder="계약환율"
         aria-label="계약환율"
@@ -156,6 +157,7 @@ function QuoteFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={cost}
         placeholder="수수료율 (0.0025)"
         aria-label="수수료율"
@@ -347,6 +349,7 @@ function AmountField({ onSlot }) {
         <input
           ref={focus}
           inputMode="decimal"
+          autoComplete="off"
           value={shown}
           placeholder="100,000"
           aria-label="금액 (USD)"
@@ -437,6 +440,7 @@ function ProfitFields({ onSlot }) {
       <input
         ref={focus}
         inputMode="decimal"
+        autoComplete="off"
         value={baseline}
         placeholder="기준 영업이익 (원)"
         aria-label="기준 영업이익"
@@ -444,6 +448,7 @@ function ProfitFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={floor}
         placeholder="목표 손익 하한 (원)"
         aria-label="목표 손익 하한"

@@ -759,12 +759,24 @@
   .rate-fill { position: absolute; top: 0; bottom: 0; background: var(--tint-strong); }
   .rate-now { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
   .rate-be { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--accent); }
+  /* The end the trade suffers at. A band without it is a range with no
+     direction — an exporter loses on the left and an importer on the right,
+     and nothing in the drawing said which. */
+  .rate-adverse {
+    position: absolute; top: 0; bottom: 0;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
   .rate-legend {
     display: flex; justify-content: space-between; align-items: baseline;
     margin: .35rem 0 0; font-family: var(--mono); font-size: .6875rem;
     color: var(--ink-45); font-variant-numeric: tabular-nums;
   }
   .rate-legend b { color: var(--ink); font-size: .75rem; }
+  .rate-legend .adverse { color: var(--accent-deep); }
+  .rate-legend em {
+    font-style: normal; font-family: var(--sans, inherit); font-size: .625rem;
+    margin: 0 .25rem; letter-spacing: .04em;
+  }
 
   .folds { margin-top: .85rem; display: grid; gap: .1rem; }
   .folds .fold { margin: 0; border-top: 1px dashed var(--rule); padding-top: .45rem; }

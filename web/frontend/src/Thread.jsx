@@ -959,6 +959,11 @@ function Answer({ result, order, shown, arrive }) {
     <div className={`answer${arrive}`}>
       <Calculation folded={folded} net={net}>
         <>
+          {/* A zero is a result and it is not news. On a single export all
+              three columns but the first read 0, and two thirds of the grid
+              said nothing while taking the same room as the figure that did.
+              The zeros are stated below in one line, so nothing is hidden and
+              nothing is repeated at full size. */}
           <dl className="figrow">
             <div>
               <dt>순노출</dt>
@@ -967,19 +972,32 @@ function Answer({ result, order, shown, arrive }) {
                 {won(net)} <small>USD</small>
               </dd>
             </div>
-            <div>
-              <dt>자금 공백</dt>
-              <dd className={Number(gap) > 0 ? "alarm" : ""}>
-                {won(gap)} <small>USD</small>
-              </dd>
-            </div>
-            <div>
-              <dt>자연헤지</dt>
-              <dd>
-                {won(natural)} <small>USD</small>
-              </dd>
-            </div>
+            {Number(gap) > 0 && (
+              <div>
+                <dt>자금 공백</dt>
+                <dd className="alarm">
+                  {won(gap)} <small>USD</small>
+                </dd>
+              </div>
+            )}
+            {Number(natural) > 0 && (
+              <div>
+                <dt>자연헤지</dt>
+                <dd>
+                  {won(natural)} <small>USD</small>
+                </dd>
+              </div>
+            )}
           </dl>
+
+          {(Number(gap) === 0 || Number(natural) === 0) && (
+            <p className="answer-note">
+              {Number(gap) === 0 && "결제일에 모자라는 외화는 없습니다."}
+              {Number(gap) === 0 && Number(natural) === 0 && " "}
+              {Number(natural) === 0 &&
+                "같은 시기에 상계될 반대 방향 거래도 없습니다."}
+            </p>
+          )}
 
           {Number(natural) > 0 && Number(matched) === 0 && (
             <p className="answer-note">
@@ -1138,6 +1156,13 @@ function RateBand({ market, hedge, arrive }) {
   const upper = Number(market.band_upper);
   const spot = Number(market.spot_rate);
   const be = hedge?.breakeven_rate ? Number(hedge.breakeven_rate) : null;
+  // Which end is the bad one. The band drawn without it is a range with no
+  // direction: an exporter loses on the left and an importer on the right, and
+  // the reader has to work that out from a sentence three lines above. The
+  // adverse rate is already computed — §5.2 picks the end the trade suffers at
+  // — so the drawing can simply say which one it was.
+  const adverse = market.adverse_rate ? Number(market.adverse_rate) : null;
+  const adverseIsLow = adverse !== null && Math.abs(adverse - lower) < Math.abs(adverse - upper);
 
   // The track spans the band exactly, so the numbers printed at each end are
   // the numbers at each end. Padding is added only to bring a breakeven rate
@@ -1157,15 +1182,31 @@ function RateBand({ market, hedge, arrive }) {
           className="rate-fill"
           style={{ left: `${at(lower)}%`, width: `${at(upper) - at(lower)}%` }}
         />
+        {adverse !== null && (
+          <span
+            className={`rate-adverse ${adverseIsLow ? "low" : "high"}`}
+            style={
+              adverseIsLow
+                ? { left: `${at(min)}%`, width: `${at(adverse) - at(min)}%` }
+                : { left: `${at(adverse)}%`, width: `${at(max) - at(adverse)}%` }
+            }
+          />
+        )}
         <span className="rate-now" style={{ left: `${at(spot)}%` }} />
         {be !== null && (
           <span className="rate-be" style={{ left: `${at(be)}%` }} />
         )}
       </div>
       <p className="rate-legend">
-        <span>{won(lower)}</span>
+        <span className={adverseIsLow ? "adverse" : ""}>
+          {won(lower)}
+          {adverse !== null && adverseIsLow && <em>불리</em>}
+        </span>
         <b>현재 {won(spot)}</b>
-        <span>{won(upper)}</span>
+        <span className={adverse !== null && !adverseIsLow ? "adverse" : ""}>
+          {adverse !== null && !adverseIsLow && <em>불리</em>}
+          {won(upper)}
+        </span>
       </p>
       <p className="answer-note">
         {market.horizon_business_days}영업일 · 신뢰 {pct(market.confidence_level, 0)}{" "}
