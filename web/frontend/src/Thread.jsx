@@ -359,14 +359,6 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <Written segments={line} shown={shown} settled={settled} />
       )}
 
-      {/* Still shown, and quietly. §2's reader does not know their own
-          exposure, so it must not disappear — but it is not an answer to a
-          question about what a scheme is, and it was taking the first half of
-          one. */}
-      {shown > 0 && result.cannot && !result.said?.retold && (
-        <p className="told quiet">{line.map((seg) => seg.text).join(" ")}</p>
-      )}
-
       {!leads && shown > words && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
       )}
@@ -380,6 +372,17 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
 
       {shown > words && result.coverage && (
         <p className={`pointer limit${arrive}`}>{result.coverage}</p>
+      )}
+
+      {/* Moved, not shrunk. It is not an answer to a question about what a
+          scheme is and must not lead — but it is a figure the tools computed,
+          and §2's reader does not know their own exposure. Set small and grey
+          it wore the style the limits wear, and a computed amount read as a
+          disclaimer: the demotion meant to keep it visible was removing it.
+
+          Demotion is position here, not size. Same rule as 답·맥락·감사. */}
+      {shown > 0 && result.cannot && !result.said?.retold && (
+        <p className="told">{line.map((seg) => seg.text).join(" ")}</p>
       )}
 
       {shown > words && (
