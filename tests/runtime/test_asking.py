@@ -14,30 +14,42 @@ def _short(field: str, title: str = "K-SURE 단기수출보험") -> dict:
 class AskableTests(unittest.TestCase):
     """Which missing facts become questions, and which never do."""
 
-    def test_it_asks_only_for_what_the_company_is_the_one_to_know(self) -> None:
-        """A rule reports every fact it is short of. Two kinds must not be put
-        to the reader: one we look up, and one we already have.
+    RESULT = {
+        "support_candidates": [
+            {
+                "title": "K-SURE 단기수출보험(선적후·개별)",
+                "status": "insufficient_information",
+                "missing_fields": [
+                    "company.ksure_exporter_grade",
+                    "counterparty.country_restricted",
+                    "trade.payment_term_days",
+                ],
+            }
+        ]
+    }
 
-        Asking a company whether its buyer's country is on K-SURE's restricted
-        list is asking them to make our judgement, and their answer would be
-        evidence of nothing."""
-        result = {
-            "support_candidates": [
-                {
-                    "title": "K-SURE 단기수출보험(선적후·개별)",
-                    "status": "insufficient_information",
-                    "missing_fields": [
-                        "company.ksure_exporter_grade",
-                        "counterparty.country_restricted",
-                        "trade.payment_term_days",
-                    ],
-                }
-            ]
-        }
+    def test_a_fact_we_look_up_is_never_put_to_the_company(self) -> None:
+        """Asking a company whether its buyer's country is on K-SURE's
+        restricted list is asking them to make our judgement, and their answer
+        would be evidence of nothing."""
+        asked = [item["field"] for item in asking.questions(self.RESULT)]
 
-        asked = [item["field"] for item in asking.questions(result)]
+        self.assertNotIn("counterparty.country_restricted", asked)
 
-        self.assertEqual(["company.ksure_exporter_grade"], asked)
+    def test_a_fact_we_compute_is_asked_for_by_its_input(self) -> None:
+        """Never for the value. A payment term the company typed could
+        disagree with the dates beside it on screen, and nothing would say
+        which one the rule used — so the question is the shipment date, and
+        the subtraction stays ours."""
+        asked = asking.questions(self.RESULT)
+        term = next(item for item in asked if item["field"] != "company.ksure_exporter_grade")
+
+        self.assertEqual("expected_shipment_date", term["field"])
+        self.assertEqual("case", term["answer_as"])
+        self.assertEqual("date", term["kind"])
+        self.assertNotIn(
+            "trade.payment_term_days", [item["field"] for item in asked]
+        )
 
     def test_a_judgement_that_reached_a_verdict_is_not_asked_about(self) -> None:
         settled = {

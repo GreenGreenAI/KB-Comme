@@ -29,6 +29,7 @@ from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.agent.routing import (
     COMPLIANCE,
+    derive_payment_terms,
     derive_structure,
     EXPOSURE,
     HEDGE,
@@ -223,6 +224,11 @@ DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 #: What the company said the money is for. Separate from the company
 #: declaration above because it comes from the sentence, not the account.
 DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
+
+#: The payment term, subtracted from the shipment and payment dates the
+#: company gave. Its own descriptor because the catalog demands `user_trade`
+#: for that field, and the derived-structure evidence attests `calculation`.
+PAYMENT_TERM_EVIDENCE_ID = "TRADEFLOW_PAYMENT_TERM_DERIVED"
 
 #: What the company answered when §5.4 asked for it. One per evidence role,
 #: because the fact catalog fixes the role per field and a single descriptor
@@ -537,6 +543,50 @@ def _declared_financing_assertions(
     return assertions, (descriptor,)
 
 
+def _payment_term_assertions(
+    program: TradeProgram,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the payment term this module subtracted out of the user's dates.
+
+    `user_trade`, not `calculation`, and the catalog is why — it fixes the role
+    per field, and for this one it says the term is a fact about the trade. The
+    two inputs are the company's own dates, so what the evidence attests is
+    still the company's trade; the payload carries the arithmetic so the audit
+    can see it was subtracted rather than stated.
+
+    That is the whole difference from asking. A term the company typed could
+    disagree with the dates beside it on screen, and nothing would say which
+    one the rule used.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    terms = derive_payment_terms(program)
+    if not terms:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        PAYMENT_TERM_EVIDENCE_ID,
+        EvidenceRole.USER_TRADE,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(sorted(terms.items())),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 말한 선적일과 결제일의 차이",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (PAYMENT_TERM_EVIDENCE_ID,))
+            for field, value in sorted(terms.items())
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
 def _answered_fact_assertions(
     program: TradeProgram,
     answered: Mapping[str, str] | None,
@@ -703,6 +753,9 @@ def analyze(
         answered, answered_evidence = _answered_fact_assertions(
             program, answered_facts, as_of=evaluated_at_utc
         )
+        terms, term_evidence = _payment_term_assertions(
+            program, as_of=evaluated_at_utc
+        )
         assertions = {
             case_id: (
                 *assertions.get(case_id, ()),
@@ -711,9 +764,11 @@ def analyze(
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
                 *answered.get(case_id, ()),
+                *terms.get(case_id, ()),
             )
             for case_id in {
-                *assertions, *declared, *stated, *financing, *country, *answered
+                *assertions, *declared, *stated, *financing, *country,
+                *answered, *terms,
             }
         }
         structure_evidence = (
@@ -723,6 +778,7 @@ def analyze(
             *financing_evidence,
             *country_evidence,
             *answered_evidence,
+            *term_evidence,
         )
         decision_packet = _isolated(
             report,

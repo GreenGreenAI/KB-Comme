@@ -425,8 +425,17 @@ const CREDIT_OPTIONS = [
  *  an offer, and the reader can decide it is not worth answering.
  */
 function FactAsk({ ask, onSlot }) {
+  // Some of these are not facts about the company at all — they are the trade
+  // detail a fact is computed from, and they travel back the way every other
+  // trade detail does. The server says which, because the server is what knows
+  // whether it asks for a value or for the input to one.
   const answer = (value, label) =>
-    onSlot({ facts: { [ask.field]: value } }, label ?? value);
+    onSlot(
+      ask.answer_as === "case"
+        ? { case: { [ask.field]: value } }
+        : { facts: { [ask.field]: value } },
+      label ?? value,
+    );
 
   if (ask.options?.length > 0) {
     return (
@@ -443,12 +452,12 @@ function FactAsk({ ask, onSlot }) {
   }
   return (
     <Ask label={ask.question} note={ask.opens ? `${ask.opens} 판정에 필요합니다` : null}>
-      <FactField onSubmit={answer} />
+      <FactField kind={ask.kind} onSubmit={answer} />
     </Ask>
   );
 }
 
-function FactField({ onSubmit }) {
+function FactField({ kind, onSubmit }) {
   const [value, setValue] = useState("");
   const focus = useAutoFocus();
   const submit = () => value.trim() && onSubmit(value.trim());
@@ -457,7 +466,7 @@ function FactField({ onSubmit }) {
     <div className="ask-row">
       <input
         ref={focus}
-        type="text"
+        type={kind === "date" ? "date" : "text"}
         value={value}
         autoComplete="off"
         onChange={(event) => setValue(event.target.value)}

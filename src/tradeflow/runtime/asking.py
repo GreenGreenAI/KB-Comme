@@ -90,6 +90,24 @@ ASKABLE: dict[str, dict[str, Any]] = {
 }
 
 
+#: Facts this product works out, and the trade detail each one needs.
+#:
+#: The fact itself is never put to the company — a term they typed could
+#: disagree with the dates beside it on screen, and nothing would say which one
+#: the rule used. What is asked for is the missing input, which is a fact about
+#: their own trade and one they plainly know.
+#:
+#: So the question changes but the arithmetic does not, and the answer arrives
+#: as a trade detail rather than as a judgement about a trade.
+DERIVED: dict[str, dict[str, Any]] = {
+    "trade.payment_term_days": {
+        "slot": "expected_shipment_date",
+        "question": "언제 선적하시나요?",
+        "kind": "date",
+    },
+}
+
+
 def _options(field: str, entry: dict[str, Any]) -> list[dict[str, str]]:
     """The answers on offer, in the catalog's own order.
 
@@ -128,17 +146,36 @@ def questions(
         if candidate.get("status") != "insufficient_information":
             continue
         for field in candidate.get("missing_fields") or []:
-            if field in answered or field in asked or field not in ASKABLE:
+            if field in answered or field in asked:
+                continue
+            # Why it is being asked, in the name of the thing it opens. A
+            # question with no stated purpose reads as a form.
+            opens = candidate.get("title") or ""
+            if field in DERIVED:
+                # The answer is a trade detail, so it goes back the way a trade
+                # detail does. Absent it the fact stays missing and the rule
+                # keeps saying so, which is the correct answer rather than a
+                # gap: a term computed from a shipment date nobody gave would
+                # be manufactured out of a blank field.
+                asked[field] = {
+                    "field": DERIVED[field]["slot"],
+                    "answer_as": "case",
+                    "question": DERIVED[field]["question"],
+                    "opens": opens,
+                    "kind": DERIVED[field]["kind"],
+                    "options": [],
+                }
+                continue
+            if field not in ASKABLE:
                 continue
             entry = facts.get(field)
             if entry is None:
                 continue
             asked[field] = {
                 "field": field,
+                "answer_as": "fact",
                 "question": ASKABLE[field]["question"],
-                # Why it is being asked, in the name of the thing it opens. A
-                # question with no stated purpose reads as a form.
-                "opens": candidate.get("title") or "",
+                "opens": opens,
                 "kind": entry.get("type") or "text",
                 "options": _options(field, entry),
             }
