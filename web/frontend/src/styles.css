@@ -657,6 +657,7 @@
      because they are not it — the previous shape gave every section the same
      size and colour, so the screen said nothing about which one was. */
   .fold.aside > summary { color: var(--ink-45); font-size: .8125rem; }
+  .fold.aside > summary:hover { color: var(--accent); }
   .fold.aside[open] > summary { margin-bottom: .4rem; }
   .fold.aside > .fold { margin-left: .6rem; }
 
@@ -782,6 +783,8 @@
     margin: 0 .25rem; letter-spacing: .04em;
   }
 
+  /* The separators still span the column — it is the summary inside that hugs
+     its label, so the rule stays a rule and the control stays a control. */
   .folds { margin-top: .85rem; display: grid; gap: .1rem; }
   .folds .fold { margin: 0; border-top: 1px dashed var(--rule); padding-top: .45rem; }
   .folds .fold + .fold { margin-top: .25rem; }
@@ -896,10 +899,37 @@
   /* A section with nothing to show yet: the reason still appears, on one
      line, so refusing to guess does not cost a full card of height. */
 
-  /* Reference material: present when checked for, folded when reading. */
-  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
-  .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
+  /* Reference material: present when checked for, folded when reading.
+
+     The row has to look like something you can press. Inside the grey card it
+     read as a control because the card was a surface and the row sat on it;
+     with the card gone the summary was 12px grey text on the page, the same
+     weight as the sentences above it, and nothing said it opened. So the
+     affordance is the row's own: a hit area wider than the words, a surface
+     that appears under the pointer, and a marker that turns. */
+  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .3rem; }
+  .fold > summary {
+    cursor: pointer; font-size: .75rem; color: var(--ink-70); list-style: none;
+    /* Hugs its label rather than spanning the column: a full-width row reads
+       as a heading, and a shape the size of its own words reads as a control.
+       This is the resting state doing the work — hover cannot be the whole
+       affordance when half the readers are on a touch screen and never
+       hover at all. */
+    display: inline-flex; align-items: baseline; gap: .15rem;
+    padding: .25rem .7rem .25rem .55rem;
+    border: 1px solid var(--rule-faint); border-radius: 999px;
+    transition: background .13s ease, color .13s ease, border-color .13s ease;
+  }
   .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary:hover { background: var(--wash-2); border-color: var(--soft); }
+  .fold > summary:active { background: var(--tint-strong); }
+  /* Open reads as pressed: the shape stays, the ground fills in. */
+  .fold[open] > summary { background: var(--tint); border-color: var(--rule); }
+  /* Keyboard reaches these too, and a control nobody can see focus on is a
+     control nobody can use without a mouse. */
+  .fold > summary:focus-visible {
+    outline: none; background: var(--wash-2); box-shadow: var(--focus-ring);
+  }
 
   /* Each decision at three rates. Figures right-aligned and tabular so the
      columns compare by eye — that is the whole point of the table. */
@@ -980,9 +1010,17 @@
   .sources {
     margin: 0; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
   }
-  .fold > summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform .15s ease; }
+  /* The marker turns rather than swapping glyphs: the rotation is what says
+     the row did something. Kept dimmer than the label so it reads as a hinge
+     and not as punctuation, and it takes the accent along with the label under
+     the pointer. */
+  .fold > summary::before {
+    content: "▸"; display: inline-block; width: 1em; flex: none;
+    color: var(--ink-30); transition: transform .15s ease, color .13s ease;
+  }
   .fold[open] > summary::before { transform: rotate(90deg); }
   .fold > summary:hover { color: var(--accent); }
+  .fold > summary:hover::before { color: var(--accent); }
   .fold-note { margin: .5rem 0 0; font-size: .6875rem; color: var(--ink-45); line-height: 1.6; }
 
 
