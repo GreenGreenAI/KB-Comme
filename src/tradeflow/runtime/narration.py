@@ -81,6 +81,56 @@ def _some(words: list[str]) -> str:
     return f"{_joined(words[:NAMED])} 등 {len(words)}가지"
 
 
+#: How many trades are on screen is not a fact about a rule.
+#:
+#: Every rule runs against every trade, so the packet holds one judgement per
+#: (trade, rule) — which is right, because a duty and an eligibility both
+#: attach to a trade and the audit has to show which. These paragraphs never
+#: name a trade, so the same judgement arrived once per trade: three trades
+#: printed 「다자간 상계면 한국은행에 신고합니다」 three times in a row and
+#: counted fourteen undecided rules as forty-three.
+def _rule_key(item: dict[str, Any]) -> str:
+    """What makes two judgements the same judgement, said in this paragraph.
+
+    `rule_id` on anything the packet produced; the title is the fallback for a
+    hand-written case, and it names the same thing.
+    """
+    return str(item.get("rule_id") or item.get("title") or id(item))
+
+
+def _one_per_rule(
+    items: Any, *, prefer: Any = lambda new, kept: False
+) -> list[dict[str, Any]]:
+    """One judgement per rule, choosing which copy speaks for the rest.
+
+    `prefer(new, kept)` decides when a later copy replaces an earlier one.
+    Copies can disagree — a product can be settled on one trade and short of a
+    fact on another — and the sentence cannot say which trade it means, so the
+    weaker claim is the one kept. Saying 「조건을 충족합니다」 on the strength of
+    one of two trades would be this paragraph deciding something no rule did.
+    """
+    kept: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = _rule_key(item)
+        seen = kept.get(key)
+        if seen is None or prefer(item, seen):
+            kept[key] = item
+    return list(kept.values())
+
+
+def _weaker(new: dict[str, Any], kept: dict[str, Any]) -> bool:
+    """A judgement still short of a fact outranks one that reached a verdict."""
+    return new.get("status") == _SETTLED and kept.get("status") != _SETTLED
+
+
+def _louder(new: dict[str, Any], kept: dict[str, Any]) -> bool:
+    """A rule the company's own words put in play outranks one they did not.
+
+    §5.5's direction: a branch that might apply is stated, never dropped.
+    """
+    return bool(new.get("engaged")) and not kept.get("engaged")
+
+
 def support(result: dict[str, Any]) -> list[str]:
     """What the eligibility rules decided, in paragraphs.
 
@@ -88,7 +138,7 @@ def support(result: dict[str, Any]) -> list[str]:
     short of a fact, and one for what to do about the first. Products with
     nothing to say produce no paragraph rather than an empty heading.
     """
-    candidates = result.get("support_candidates") or []
+    candidates = _one_per_rule(result.get("support_candidates") or [], prefer=_weaker)
     if not candidates:
         return []
 
@@ -139,11 +189,14 @@ def compliance(result: dict[str, Any]) -> list[str]:
     「해당 없음」 and 「아직 모름」 are different answers and §5.5 is explicit
     that the second must never be read as the first.
     """
-    findings = [
-        f
-        for f in (result.get("risk_findings") or [])
-        if (f.get("outcome") or {}).get("kind") != "support_candidate"
-    ]
+    findings = _one_per_rule(
+        (
+            f
+            for f in (result.get("risk_findings") or [])
+            if (f.get("outcome") or {}).get("kind") != "support_candidate"
+        ),
+        prefer=_louder,
+    )
     if not findings:
         return []
 
@@ -213,10 +266,29 @@ TIMING = {
 }
 
 
+def _one_per_errand(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """The same errand once, however many trades produced it.
+
+    An action is keyed by where you go and what you do there — two trades at
+    the same authority for the same product are one visit, and 「다음은
+    한국무역보험공사 상담 및 청약입니다」 twice is not two things to do.
+    """
+    kept: dict[tuple, dict[str, Any]] = {}
+    for action in result.get("next_actions") or []:
+        key = (
+            action.get("authority"),
+            action.get("action"),
+            tuple(sorted(str(p) for p in action.get("product_ids") or [])),
+            tuple(action.get("required_documents") or []),
+        )
+        kept.setdefault(key, action)
+    return list(kept.values())
+
+
 def actions(result: dict[str, Any]) -> list[str]:
     """What the reader has to go and do, and with which documents."""
     said: list[str] = []
-    for action in result.get("next_actions") or []:
+    for action in _one_per_errand(result):
         authority = AUTHORITY_NAME.get(action.get("authority"), action.get("authority"))
         line = f"다음은 {authority} {ACTION_NAME.get(action.get('action'), '상담 및 신청')}입니다."
         documents = action.get("required_documents") or []
@@ -249,8 +321,13 @@ def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
     judgement be inspectable. It is one fold away instead of in the first
     paragraph.
     """
+    # Deduped the same way the sentences are. The fold is a longer look at the
+    # same judgements, and a title repeated per trade also collided as a key on
+    # the way to the screen.
     rows: list[dict[str, Any]] = []
-    for candidate in result.get("support_candidates") or []:
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
         rows.append(
             {
                 "title": candidate.get("title") or "",
@@ -266,7 +343,7 @@ def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
                 ],
             }
         )
-    for action in result.get("next_actions") or []:
+    for action in _one_per_errand(result):
         documents = action.get("required_documents") or []
         if documents:
             rows.append({"title": "필요서류", "met": [], "wanted": documents})
