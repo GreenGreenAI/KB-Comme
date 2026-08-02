@@ -1,5 +1,5 @@
 ---
-status: active
+status: proposed
 owner: shared
 reviewers: product, knowledge-domain, platform-runtime
 last-reviewed: 2026-08-02
