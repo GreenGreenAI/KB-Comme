@@ -656,7 +656,11 @@
   /* The sections nobody asked about, and the audit. Quieter than the answer
      because they are not it — the previous shape gave every section the same
      size and colour, so the screen said nothing about which one was. */
-  .fold.aside > summary { color: var(--ink-45); font-size: .8125rem; }
+  /* 형제와 같은 잉크로. 이 라벨만 한 단계 흐렸던 것은 카드 시절에 「이건
+     답이 아니라 곁가지」를 색으로 말한 것인데, 답이 산문으로 위에 있고 이것이
+     아래에 있는 지금은 곁가지라는 것을 순서가 이미 말한다. 테두리는 누를 수
+     있다고 하고 글자는 못 누른다고 하는 상태만 남아 있었다. */
+  .fold.aside > summary { font-size: .8125rem; }
   .fold.aside > summary:hover { color: var(--accent); }
   .fold.aside[open] > summary { margin-bottom: .4rem; }
   .fold.aside > .fold { margin-left: .6rem; }
