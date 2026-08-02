@@ -33,7 +33,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from tradeflow.agent.intake import intake
 from tradeflow.domain.enums import TradeDirection
@@ -95,7 +95,25 @@ observing.listen()
 logger = logging.getLogger("tradeflow.synthesis")
 
 
+#: 모르는 필드는 받지 않습니다.
+#:
+#: Pydantic의 기본값은 모르는 필드를 조용히 버리는 것입니다. `opening_balances`를
+#: `opening_balance_usd` 대신 보내면 서버는 200으로 답하고 그 값을 버렸습니다 —
+#: 답 자체는 서버가 읽은 입력에 대해 정확하지만, 부른 쪽은 자기가 보낸 값이
+#: 반영된 줄 압니다. 화면에도 아무 표시가 없습니다.
+#:
+#: 이 제품이 하는 말은 「입력한 값으로 계산했습니다」이고, 버려진 입력은 그 말을
+#: 거짓으로 만듭니다. 그래서 422로 거부합니다 — 계산이 조용히 다른 입력 위에서
+#: 도는 것보다 요청이 시끄럽게 실패하는 편이 낫습니다.
+#:
+#: 역할 A의 런타임 handoff 명세(#25)도 같은 것을 요구합니다 — 「Pydantic의 기본
+#: extra-field 무시는 사용할 수 없다」.
+STRICT = ConfigDict(extra="forbid")
+
+
 class LoginRequest(BaseModel):
+    model_config = STRICT
+
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
 
@@ -112,6 +130,8 @@ class ForwardQuoteInput(BaseModel):
     not match the analysis, and the availability service would then reject the
     quote for a mismatch the screen itself had caused.
     """
+
+    model_config = STRICT
 
     provider: str = Field(min_length=1, max_length=64)
     contract_rate: str
@@ -202,6 +222,8 @@ def _account_view(account: Account) -> dict[str, Any]:
 class CaseInput(BaseModel):
     """One trade, as far as the user has described it."""
 
+    model_config = STRICT
+
     direction: str | None = None
     amount: str | None = None
     expected_payment_date: str | None = None
@@ -215,6 +237,8 @@ class CaseInput(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    model_config = STRICT
+
     cases: list[CaseInput] = Field(default_factory=list)
     utterance: str | None = None
     company_name: str = "미입력 기업"

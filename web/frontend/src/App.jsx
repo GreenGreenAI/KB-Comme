@@ -274,7 +274,7 @@ export default function App() {
     try {
       const started = performance.now();
       const data = await analyze({
-        cases: nextCases,
+        cases: nextCases.map(asStated),
         utterance,
         // What the conversation is still about. A panel answer carries values
         // and no words, and the server was reading intent from that blank —
@@ -454,6 +454,21 @@ export default function App() {
       )}
     </>
   );
+}
+
+/** 서버가 정하는 것은 돌려보내지 않습니다.
+ *
+ *  거래 목록은 답에서 온 `trade_timeline`을 그대로 다시 싣는데, 그 행에는
+ *  §4.2[1]이 매긴 `case_id`가 함께 옵니다. 요청 모델이 모르는 필드를 거부하기
+ *  시작하면서 이것이 422로 돌아왔고, 그 거절이 옳습니다 — case_id는 인테이크가
+ *  결정론적으로 붙이는 식별자이고, 클라이언트가 보낸 값을 받아 주면 화면이
+ *  패킷 안의 신원을 고를 수 있게 됩니다. 사용자가 말한 것만 올려 보냅니다. */
+const SERVER_OWNED = ["case_id"];
+
+function asStated(trade) {
+  const stated = { ...(trade ?? {}) };
+  for (const field of SERVER_OWNED) delete stated[field];
+  return stated;
 }
 
 function stripEmpty(object) {

@@ -2,6 +2,7 @@ import unittest
 from datetime import date, timedelta
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from tradeflow.web import app
 from tradeflow.web.app import AnalyzeRequest, analyze_endpoint
@@ -28,6 +29,20 @@ class WebApiValidationTests(unittest.TestCase):
 
         self.assertIn("support", body["result"]["execution_plan"]["planned"])
         self.assertTrue(body["result"]["packet_id"].startswith("decision:"))
+
+    def test_a_field_this_endpoint_does_not_know_is_refused_not_dropped(self) -> None:
+        """Pydantic's default is to drop what it does not recognise, and the
+        answer then looks right while resting on inputs the caller did not
+        send: `opening_balances` instead of `opening_balance_usd` came back 200
+        with the balance discarded and nothing on screen saying so.
+
+        A trade description carries the same hazard one level down, so the case
+        model refuses too."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(opening_balances={"USD": "20000"})
+
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(cases=[{"direction": "export", "ammount": "100000"}])
 
     def test_invalid_money_is_rejected_instead_of_treated_as_missing(self) -> None:
         with self.assertRaises(HTTPException) as context:

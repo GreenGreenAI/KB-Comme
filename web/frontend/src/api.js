@@ -35,15 +35,37 @@ export async function analyze(body) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const detail = payload?.detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : detail?.reason ?? `서버가 ${response.status}로 응답했습니다.`;
-    throw new Error(message);
+    throw new Error(refused(await response.json().catch(() => null), response.status));
   }
   return response.json();
+}
+
+/** 서버가 왜 거절했는지, 읽을 수 있는 한 문장으로.
+ *
+ *  서버가 모르는 필드를 거부하기 시작하면서(422) 이 자리가 중요해졌습니다.
+ *  FastAPI의 422 `detail`은 문자열도 `{reason}`도 아닌 목록이라 이전 코드는
+ *  전부 「서버가 422로 응답했습니다」로 접었습니다 — 무엇이 거절됐는지 화면
+ *  어디에도 없었습니다. 거절의 요점은 어느 필드가 문제인지이므로 그것을
+ *  말합니다. */
+function refused(payload, status) {
+  const detail = payload?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail?.reason) return detail.reason;
+  if (Array.isArray(detail)) {
+    // `loc`은 ["body", "cases", 0, "amount"]처럼 옵니다. 사람이 찾을 수 있는
+    // 것은 마지막 조각이고, "body"는 어느 필드인지 말해 주지 않습니다.
+    const fields = [
+      ...new Set(
+        detail
+          .map((item) => (item?.loc ?? []).filter((part) => part !== "body").at(-1))
+          .filter((part) => part !== undefined && part !== null),
+      ),
+    ];
+    if (fields.length > 0) {
+      return `서버가 요청을 거절했습니다 — 알 수 없거나 잘못된 필드: ${fields.join(" · ")}`;
+    }
+  }
+  return `서버가 ${status}로 응답했습니다.`;
 }
 
 /** Who the server says we are. The screen asks rather than remembering — being
