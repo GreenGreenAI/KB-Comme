@@ -626,6 +626,9 @@ def analyze_endpoint(
         # to the same question reads the same and the next one does not
         # inherit its wording.
         seed=f"{result.get('packet_id')}|{_subject_text(request)}",
+        direction=(result.get("market_scenario") or {}).get(
+            "adverse_cashflow_direction"
+        ),
     )
     if written.accepted:
         result["summary"] = written.sentence
@@ -664,6 +667,10 @@ def analyze_endpoint(
         "sources": narration.sources(result),
         "detail": narration.detail(result),
     }
+    # 자금 공백이 언제 열리고 며칠인지. 금액만 있는 공백은 걱정이고, 날짜가
+    # 붙은 공백은 할 일이다 — 8월 25일에 6만 달러가 있느냐 없느냐는 숫자만
+    # 보아서는 알 수 없다. 응답에 이미 있던 타임라인에서 두 번 찾으면 나온다.
+    result["funding_window"] = narration.funding_window(result)
     # 「왜?」 is the one follow-up this product answers well, because the answer
     # was already in the packet: every rule records the conditions it checked.
     # They sat in a fold, which is right until somebody asks — and then the

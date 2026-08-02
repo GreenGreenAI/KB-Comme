@@ -1077,18 +1077,26 @@ function Answer({ result, order, shown, arrive }) {
                 <dd className="alarm">
                   {won(gap)} <small>USD</small>
                 </dd>
+                {/* 금액만 있는 공백은 걱정이고, 날짜가 붙은 공백은 할 일입니다.
+                    8월 25일에 6만 달러가 있느냐 없느냐는 숫자만 보아서는 알 수
+                    없고, 그 날짜는 응답의 타임라인에 이미 있었습니다. */}
+                {result.funding_window?.said && (
+                  <dd className="when">{result.funding_window.said}</dd>
+                )}
               </div>
             )}
-            {/* 「자연헤지」가 아니라 「기간 상쇄」입니다. 이 값은 전체 기간의
-                유입과 유출이 겹치는 몫(`economic_offset`)이고, 결제일까지
-                맞물리는지는 보지 않습니다. 헤지라고 부르면 덮였다는 뜻이 되고,
-                8월 지급을 12월 수취가 덮어 준다고 읽힙니다 — 그 8월에는 돈이
-                없습니다. */}
+            {/* 큰 자리에는 실제로 덮이는 금액이 섭니다.
+                전에는 「기간 상쇄」가 여기 있었는데, 그 값은 전체 기간의 유입과
+                유출이 겹치는 몫일 뿐 결제일까지 맞물리는지는 보지 않습니다.
+                자금 공백 60,000 옆에 기간 상쇄 60,000이 같은 크기로 서면 같은
+                숫자가 두 번 보이고, 하나는 진짜 부담이고 하나는 덮이지 않는
+                착시입니다 — 그리고 「실제로는 0」은 각주에 있었습니다.
+                가장 큰 활자가 가장 오해하기 쉬운 값이었습니다. */}
             {Number(natural) > 0 && (
               <div>
-                <dt>기간 상쇄</dt>
-                <dd>
-                  {won(natural)} <small>USD</small>
+                <dt>실제로 덮이는 금액</dt>
+                <dd className={Number(matched) === 0 ? "faded" : ""}>
+                  {won(matched)} <small>USD</small>
                 </dd>
               </div>
             )}
@@ -1111,18 +1119,17 @@ function Answer({ result, order, shown, arrive }) {
             <p className="answer-note">
               {Number(matched) === 0 ? (
                 <>
-                  상계될 것처럼 보이지만 결제일이 어긋나{" "}
-                  <b>실제로 덮이는 금액은 0</b>입니다.
+                  전 기간으로는 <b>{won(natural)} USD</b>가 상쇄되지만, 결제일이
+                  어긋나 자금으로는 덮이지 않습니다.
                 </>
               ) : Number(matched) < Number(natural) ? (
                 <>
-                  이 중 결제일이 맞물려 <b>실제로 덮이는 금액은 {won(matched)} USD</b>
-                  입니다. 나머지는 시점이 어긋나 자금으로는 덮이지 않습니다.
+                  전 기간 상쇄는 <b>{won(natural)} USD</b>이고, 그중 결제일이
+                  맞물리는 만큼만 자금으로 덮입니다.
                 </>
               ) : (
                 <>
-                  결제일까지 맞물리므로 <b>{won(matched)} USD</b>는 자금으로도
-                  덮입니다.
+                  전 기간 상쇄 <b>{won(natural)} USD</b>가 결제일까지 맞물립니다.
                 </>
               )}
             </p>

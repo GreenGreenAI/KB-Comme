@@ -447,6 +447,40 @@ def check(sentence: str, figures: list[str]) -> str:
 _CLAUSE_BREAK = re.compile(r"(?:이며|이고|하고|지만|,(?!\d)|\.(?!\d)|[!?;。])")
 
 
+#: Which way the money moves, in the words a sentence uses for each direction.
+#:
+#: The figure list already says it — 「그때 덜 받는 원화」 — and the model wrote
+#: the opposite anyway: a company with +40,000 USD coming in was told it had
+#: 「보내야 할 40,000 USD」 and that a falling rate would cost 4,108,400 KRW
+#: 「더」. Every number was quoted exactly, so `check` and `check_bound` both
+#: passed it. They compare atoms; this is a relation between them, and the
+#: relation is what a reader takes away.
+#:
+#: Cheap to catch because the direction is decided upstream: §5.2 picks the end
+#: the trade suffers at and reports which way the cash moves. The sentence only
+#: has to be checked for words that claim the other one.
+_DIRECTION_WORDS = {
+    # Receipts fall. Nothing is being paid, so words about paying are wrong.
+    "decrease": ("더 듭니다", "더 든다", "더 내", "더 지급", "보내야", "지급해야"),
+    # Payments rise. Nothing is being received, so words about receiving are.
+    "increase": ("덜 받", "적게 받", "수취액이 줄", "받는 금액이 줄"),
+}
+
+
+def check_direction(sentence: str, direction: str | None) -> str:
+    """Empty unless the sentence claims the money moves the other way.
+
+    Fail-closed like the rest: an offending sentence is refused and the screen
+    writes the assembled one, which was built from the same figures by code
+    that cannot get the direction wrong.
+    """
+    for wrong in _DIRECTION_WORDS.get(str(direction), ()):
+        if wrong in sentence:
+            said = "덜 받는" if direction == "decrease" else "더 내는"
+            return f"현금 방향이 뒤집혔습니다 — 이 거래는 {said} 쪽입니다"
+    return ""
+
+
 def _label_anchors(label: str) -> tuple[str, ...]:
     shortened = re.sub(r"^(?:그때|현재)\s+", "", label).strip()
     shortened = re.sub(r"\s+(?:금액|차이)$", "", shortened).strip()
@@ -778,6 +812,10 @@ class Synthesizer:
         #: trade does not inherit it. §6.2 asks that an analysis reproduce, not
         #: that every analysis read alike.
         seed: str | None = None,
+        #: Which way this trade's cash moves at the adverse rate, as §5.2
+        #: decided it. Checked rather than trusted to the prompt — the figure
+        #: list already names the direction and the model wrote the opposite.
+        direction: str | None = None,
     ) -> Synthesis:
         """One sentence about these figures, or a refusal with its reason."""
         if not self.available:
@@ -858,6 +896,9 @@ class Synthesizer:
         broken = check_bound(sentence, used)
         if broken:
             return Synthesis(sentence, False, broken)
+        reversed_flow = check_direction(sentence, direction)
+        if reversed_flow:
+            return Synthesis(sentence, False, reversed_flow)
         return Synthesis(sentence, True)
 
     def retell(

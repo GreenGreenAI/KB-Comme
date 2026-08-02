@@ -19,10 +19,77 @@ a sentence about a range is worse than the range.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 #: Statuses that mean the rules reached a verdict rather than ran out of facts.
 _SETTLED = "insufficient_information"
+
+
+def funding_window(result: dict[str, Any]) -> dict[str, Any] | None:
+    """When the money runs short, and for how long.
+
+    The screen showed 「자금 공백 60,000 USD」 and nothing else. An amount with
+    no date is a worry; an amount with a date is a task — the company either
+    has 60,000 dollars on 8월 25일 or it has to arrange them, and which of
+    those it is cannot be read off the figure alone.
+
+    Everything needed was already in the response. `analyze_exposure` walks the
+    trades in settlement order and records the running balance at each one, so
+    the day the balance first goes negative and the day it comes back are two
+    lookups in a list the screen was already receiving and ignoring.
+
+    A gap that never closes inside the described trades keeps its start and
+    says nothing about an end. Inventing one would mean guessing at a trade
+    the company has not mentioned.
+    """
+    events = (result.get("cashflow_analysis") or {}).get("events") or []
+    opened: str | None = None
+    closed: str | None = None
+    for event in events:
+        gap = _amount(event.get("funding_gap"))
+        if gap > 0 and opened is None:
+            opened = event.get("event_date")
+        elif opened is not None and gap == 0:
+            closed = event.get("event_date")
+            break
+    if opened is None:
+        return None
+
+    days = _days_between(opened, closed)
+    said = _day_of(opened)
+    if said is None:
+        return None
+    return {
+        "from": opened,
+        "until": closed,
+        "days": days,
+        # Assembled here rather than on the screen: this is a sentence about a
+        # calculation, and the rest of them are written in this module.
+        "said": f"{said}부터 {days}일" if days else f"{said}부터",
+    }
+
+
+def _amount(raw: Any) -> float:
+    try:
+        return float(str(raw))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _day_of(iso: str | None) -> str | None:
+    try:
+        when = date.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return None
+    return f"{when.month}월 {when.day}일"
+
+
+def _days_between(start: str | None, end: str | None) -> int | None:
+    try:
+        return (date.fromisoformat(str(end)) - date.fromisoformat(str(start))).days
+    except (TypeError, ValueError):
+        return None
 
 
 def _particle(word: str, pair: tuple[str, str]) -> str:

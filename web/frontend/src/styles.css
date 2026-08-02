@@ -761,6 +761,16 @@
   }
   .figrow dd small { font-size: .625rem; color: var(--ink-45); }
   .figrow dd.alarm { color: var(--accent); }
+  /* When the gap opens, under the amount it belongs to. Set as a caption
+     rather than a second figure — it qualifies the number above it, and a
+     date at the same weight would read as a third measurement. */
+  .figrow dd.when {
+    margin-top: .15rem; font-family: var(--sans, inherit); font-size: .6875rem;
+    color: var(--ink-45); letter-spacing: 0;
+  }
+  /* A zero that is the answer. Kept in the grid because its absence is what
+     the sentence beneath is about, and dimmed because nothing is there. */
+  .figrow dd.faded { color: var(--ink-30); }
   .answer-note { margin: .6rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.6; }
   .answer-note b { color: var(--accent); font-weight: 600; }
 
