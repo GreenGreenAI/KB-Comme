@@ -958,7 +958,10 @@ function trailing(result, order) {
     parts.push(`skipped:${section}`);
   }
   if (said.sources?.length > 0) parts.push("sources");
-  parts.push("versions");
+  // 「재현에 필요한 입력」은 화면에 없습니다. §6.2가 요구하는 것은 같은 분석이
+  // 같은 패킷을 내는 것이고, 그 근거는 응답의 `calculation_versions`와
+  // `packet_id`가 계속 싣고 있습니다 — 스냅샷 판 번호를 읽는 사람은 화면이
+  // 아니라 그 응답을 보는 사람입니다.
   return parts;
 }
 
@@ -1092,7 +1095,7 @@ function Answer({ result, order, shown, arrive }) {
           no longer takes the same room as the thing that was asked for. */}
       {/* One part per step, in `trailing`'s order. `here` is how many of them
           have arrived; each renders only once its own step has come. */}
-      {here > 0 && (
+      {parts.length > 0 && here > 0 && (
         <div className="folds">
         {/* The judgements, said. Assembled server-side from what the rules
             decided and the words the rulepack wrote its conditions in — the
@@ -1167,19 +1170,6 @@ function Answer({ result, order, shown, arrive }) {
           </p>
         )}
 
-        {at("versions") && (
-        <details className={`fold aside ${step("versions")}`}>
-          <summary>재현에 필요한 입력</summary>
-          <ul className="versions">
-            {(result.calculation_versions?.snapshots ?? []).map((item) => (
-              <li key={item.source_id}>
-                <span className="vk">{item.source_id}</span>
-                <span className="vv">{item.version}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-        )}
         </div>
       )}
     </div>
