@@ -597,6 +597,17 @@ def analyze_endpoint(
         intent=_subjects(request),
         answered_facts=request.stated_facts,
         declared_structure=request.declared_structure,
+        # The day the analysis is for, not the instant it ran. §6.2 asks that
+        # the same analysis produce the same `packet_id`, and every evidence
+        # descriptor is stamped with this. Left unset it became
+        # `datetime.now()`, so two identical requests a second apart produced
+        # two different packets — the identity said the inputs had changed when
+        # only the clock had.
+        #
+        # The orchestrator had this right and said so (ADR-0007). The web layer
+        # was the one caller that never passed it, so the guarantee held in
+        # every test and in no request.
+        as_of=datetime.combine(as_of, time(0, 0), tzinfo=UTC),
     )
     result = build_response(analysis)
 

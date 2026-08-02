@@ -354,6 +354,53 @@ class AnonymousSupportTests(unittest.TestCase):
         self.assertNotIn("로그인", pointer)
 
 
+class ReproducibilityTests(unittest.TestCase):
+    """§6.2: the same analysis produces the same packet.
+
+    The orchestrator stamps every evidence descriptor with the analysis moment
+    and had this right (ADR-0007). This endpoint was the one caller that never
+    passed one, so the moment became `datetime.now()` and two identical
+    requests a second apart produced two different packets — the identity said
+    the inputs had changed when only the clock had. It held in every test and
+    in no request, because the tests all call `analyze` directly.
+    """
+
+    BODY = dict(
+        cases=[
+            {
+                "direction": "수입",
+                "amount": "60000",
+                "expected_payment_date": "2026-08-25",
+            },
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+            },
+        ],
+        opening_balance_usd="20000",
+        utterance="받을 수 있는 지원제도가 있나요",
+        as_of="2026-08-01",
+        company_size="small",
+        credit_issue_free=True,
+    )
+
+    def _packet(self, **change) -> str:
+        body = {**self.BODY, **change}
+        return analyze_endpoint(AnalyzeRequest(**body))["result"]["packet_id"]
+
+    def test_the_same_request_twice_is_the_same_packet(self) -> None:
+        first = self._packet()
+
+        self.assertTrue(first)
+        self.assertEqual(first, self._packet())
+
+    def test_a_changed_input_is_a_different_packet(self) -> None:
+        """The identity has to be sensitive to what it covers, or matching ids
+        would prove nothing."""
+        self.assertNotEqual(self._packet(), self._packet(opening_balance_usd=None))
+
+
 class SignInClosedTests(unittest.TestCase):
     """Taking the button off the screen is not closing the door.
 
