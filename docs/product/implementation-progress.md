@@ -68,7 +68,7 @@ last-reviewed: 2026-08-02
 | `npm run test:e2e` | 4 passed |
 | `npm run build` | passed |
 | `python scripts/benchmark_user_tasks.py --json` | 17/17 tasks, 58/58 checks |
-| `python scripts/check_docs.py` | 73 files passed |
+| `python scripts/check_docs.py` | 78 files passed |
 
 ## 6. 다음 구현 순서
 
