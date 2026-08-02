@@ -294,15 +294,19 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // The trace is not in here. It is a list of which tools ran, not part of the
   // answer, and staging it made the reader watch a receipt being printed
   // before the answer would start. It is simply there.
+  const tail = trailing(result, order).length;
   const timeline = useMemo(() => {
     const gaps = [];
     for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
-    // card, band, folds, and the line that follows them
-    const blocks = 2 + (result.market_scenario ? 1 : 0) + (asksProfit ? 1 : 0);
+    // The figures, the band when there is one, then each part below them on its
+    // own step — 규칙이 확인한 것, 손익 비교, 건너뛴 이유, 근거, 재현 입력 used
+    // to share one, so the answer was written a word at a time and everything
+    // under it landed on a single frame.
+    const blocks = 1 + (result.market_scenario ? 1 : 0) + tail + (asksProfit ? 1 : 0);
     for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
     return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, asksProfit]);
+  }, [words, asksProfit, tail]);
 
   const [shown, settled] = useCascade(timeline, live);
   // One switch for the whole turn: while it is arriving the parts carry the
@@ -923,6 +927,41 @@ function Calculation({ folded, children, net }) {
   );
 }
 
+/** What comes after the figures, in the order it arrives — one key per part.
+ *
+ *  The parts used to be one block behind one condition, so four unrelated
+ *  things — 규칙이 확인한 것, 손익 비교, 건너뛴 워커의 이유, 근거, 재현 입력 —
+ *  landed on the same frame. The answer above them arrives a word at a time and
+ *  then everything under it appeared at once, which reads as a page that was
+ *  already written rather than one being written.
+ *
+ *  Counted here rather than in either caller: the turn needs the number to size
+ *  its cascade and the answer needs the list to render, and the two drifting
+ *  apart would show as a part that never arrives or a pause with nothing in it. */
+function trailing(result, order) {
+  const said = result.said ?? {};
+  const skipped = result.workers?.skipped ?? {};
+  const folded = result.lead === "pointer";
+  const asked = folded
+    ? order.find((s) => s !== "exposure" && s !== "market_scenario")
+    : null;
+  const rest = order.filter(
+    (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
+  );
+
+  const parts = [];
+  if (said.detail?.length > 0) parts.push("detail");
+  if (result.hedge_analysis) parts.push("payoff");
+  for (const section of rest) {
+    if (!skipped[section]) continue;
+    if (asked || result.asking_for === section) continue;
+    parts.push(`skipped:${section}`);
+  }
+  if (said.sources?.length > 0) parts.push("sources");
+  parts.push("versions");
+  return parts;
+}
+
 function Answer({ result, order, shown, arrive }) {
   // The card arrives with its first figures, not before them. Drawing the grey
   // box first left an empty panel waiting to be filled, which read as
@@ -952,6 +991,15 @@ function Answer({ result, order, shown, arrive }) {
     (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
   );
   const said = result.said ?? {};
+  // The parts below the figures, and how many of them have arrived. The first
+  // step after the figures (and the band, when there is one) brings the first
+  // part; each step after that brings one more.
+  const parts = trailing(result, order);
+  const here = Math.max(0, shown - (market ? 2 : 1));
+  //: A part arrives with the motion the rest of the turn arrives with, and
+  //: only on the step it belongs to. `at` is that test, written once.
+  const at = (key) => parts.indexOf(key) > -1 && parts.indexOf(key) < here;
+  const step = (key) => (parts.indexOf(key) === here - 1 ? arrive.trim() : "");
   // Whether this turn's answer is sentences. When it is, the card is dropped:
   // the box exists to hold a figure grid, and the grid is folded away.
   // The card is the figure grid and the band. Prose never belonged inside it —
@@ -1042,8 +1090,10 @@ function Answer({ result, order, shown, arrive }) {
           so the screen said nothing about which of them was the answer. §2's
           protection is unchanged: everything is still one click away. It just
           no longer takes the same room as the thing that was asked for. */}
-      {shown > (market ? 2 : 1) && (
-        <div className={`folds${arrive}`}>
+      {/* One part per step, in `trailing`'s order. `here` is how many of them
+          have arrived; each renders only once its own step has come. */}
+      {here > 0 && (
+        <div className="folds">
         {/* The judgements, said. Assembled server-side from what the rules
             decided and the words the rulepack wrote its conditions in — the
             same information the folds held, in the shape a person reads.
@@ -1057,8 +1107,8 @@ function Answer({ result, order, shown, arrive }) {
             불필요하다는 판정은 아닙니다」 goes in as a phrase the rewrite must
             carry word for word — it is not that compliance cannot be retold,
             it is that one sentence in it cannot be reworded. */}
-        {said.detail?.length > 0 && (
-          <details className="fold aside">
+        {at("detail") && (
+          <details className={`fold aside ${step("detail")}`}>
             <summary>규칙이 확인한 것과 필요서류</summary>
             {said.detail.map((row) => (
               <div className="verdict" key={row.title}>
@@ -1084,20 +1134,23 @@ function Answer({ result, order, shown, arrive }) {
           </details>
         )}
 
-        {hedge && <Payoff hedge={hedge} />}
+        {at("payoff") && (
+          <div className={step("payoff")}>
+            <Payoff hedge={hedge} />
+          </div>
+        )}
 
         {/* Skipped workers still say why, in one line each. */}
         {rest
-          .filter((section) => skipped[section])
-          .filter((section) => !(asked || result.asking_for === section))
+          .filter((section) => at(`skipped:${section}`))
           .map((section) => (
-            <p className="told quiet" key={section}>
+            <p className={`told quiet ${step(`skipped:${section}`)}`} key={section}>
               {skipped[section]}
             </p>
           ))}
 
-        {said.sources?.length > 0 && (
-          <p className="told quiet">
+        {at("sources") && (
+          <p className={`told quiet ${step("sources")}`}>
             근거:{" "}
             {said.sources.map((source, index) => (
               <span key={source.source_id}>
@@ -1114,7 +1167,8 @@ function Answer({ result, order, shown, arrive }) {
           </p>
         )}
 
-        <details className="fold aside">
+        {at("versions") && (
+        <details className={`fold aside ${step("versions")}`}>
           <summary>재현에 필요한 입력</summary>
           <ul className="versions">
             {(result.calculation_versions?.snapshots ?? []).map((item) => (
@@ -1124,7 +1178,8 @@ function Answer({ result, order, shown, arrive }) {
               </li>
             ))}
           </ul>
-          </details>
+        </details>
+        )}
         </div>
       )}
     </div>

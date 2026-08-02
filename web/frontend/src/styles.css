@@ -733,12 +733,16 @@
   .ask-row > button:disabled { background: var(--rule); color: var(--paper); cursor: default; }
 
   /* ---------- the answer, inside the message ---------- */
-  .answer {
-    margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
-    border-radius: 12px; background: var(--wash-2);
-  }
-  /* The card holds the figure grid and the band. Sentences sit above it, in
-     the message — a reply in a grey box reads as a document handed over. */
+  /* No card. The figures and everything under them sit on the page, in the
+     same column as the sentences above them.
+
+     The grey box was drawn to group what the tools computed, and grouping is
+     what it did — it also separated. A panel with its own ground and its own
+     border reads as a document attached to the reply rather than part of it,
+     and the reader's eye stops at its edge before it reaches the figure. The
+     order already says what belongs to what: these come last because they are
+     read last. */
+  .answer { margin-top: .85rem; }
   .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
   .figrow > div { min-width: 0; }
   .figrow dt { font-size: .6875rem; color: var(--ink-45); }
