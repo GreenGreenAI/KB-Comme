@@ -11,9 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 
 def build_consultation_packet(
@@ -24,6 +24,7 @@ def build_consultation_packet(
     result: Mapping[str, Any],
     requested_by: str,
     target_bank: str = "KB_KOOKMIN_BANK",
+    uploaded_documents: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Project an analysis into the minimum bank-consultation payload."""
     material = {
@@ -49,6 +50,32 @@ def build_consultation_packet(
             for document in action.get("required_documents") or []
         }
     )
+    documents = [dict(document) for document in uploaded_documents]
+    readiness_gaps = [
+        {
+            "field": "financing.requested_amount",
+            "reason": "상담 희망 한도를 아직 수집하지 않았습니다.",
+        },
+        {
+            "field": "company.trade_history",
+            "reason": "은행 확인용 과거 무역 실적이 아직 연결되지 않았습니다.",
+        },
+        {
+            "field": "counterparty.credit_evidence",
+            "reason": "거래상대방 신용 근거가 아직 연결되지 않았습니다.",
+        },
+        {
+            "field": "bank.product_confirmation",
+            "reason": "상품 취급·한도·승인은 은행 상담에서 확인해야 합니다.",
+        },
+    ]
+    if not documents:
+        readiness_gaps.append(
+            {
+                "field": "documents.uploaded_inventory",
+                "reason": "현재 분석에 연결된 업로드 문서가 없습니다.",
+            }
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "packet_type": "decision_passport",
@@ -94,6 +121,14 @@ def build_consultation_packet(
             "decision_delta": result.get("decision_delta"),
         },
         "document_checklist": required_documents,
+        "document_inventory": documents,
+        "consultation_readiness": {
+            "status": "needs_information" if readiness_gaps else "ready",
+            "uploaded_document_count": len(documents),
+            "required_document_count": len(required_documents),
+            "missing_or_unverified": readiness_gaps,
+            "bank_decision_recorded": False,
+        },
         "evidence": result.get("evidence") or [],
         "calculation_versions": result.get("calculation_versions") or {},
         "privacy": {
@@ -116,6 +151,7 @@ class ManualBankConsultationHandoffProvider:
         result: Mapping[str, Any],
         requested_by: str,
         target_bank: str,
+        uploaded_documents: Sequence[Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
         return build_consultation_packet(
             run_id=run_id,
@@ -124,4 +160,5 @@ class ManualBankConsultationHandoffProvider:
             result=result,
             requested_by=requested_by,
             target_bank=target_bank,
+            uploaded_documents=uploaded_documents,
         )

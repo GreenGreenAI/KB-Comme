@@ -18,6 +18,7 @@ last-reviewed: 2026-07-26
 - [고객층 조사 기반 서비스 및 KB 연계 준비도 리뷰](customer-and-kb-service-review.md)
 - [실제 사용자 시나리오 기반 서비스 효용 검증](user-scenario-utility-validation.md)
 - [고객 과업 벤치마크 설계와 운영 가이드](user-task-benchmark.md)
+- [제품 공백 해소 추적 — 2026-08-02](gap-closure-2026-08-02.md)
 - [유저 프로필 분류·정책 라우팅 벤치마크](user-profile-policy-benchmark.md)
 - [답을 바꾸는 조건을 보여주는 TradeFlow 차별화 전략](decision-delta-differentiation.md)
 - [통합 제품·아키텍처 기획서](product-architecture-plan.md)

@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 );
 CREATE INDEX IF NOT EXISTS analysis_runs_tenant_time
     ON analysis_runs(account_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS consultation_events (
+    event_id          TEXT PRIMARY KEY,
+    organization_id   TEXT NOT NULL,
+    analysis_run_id   TEXT NOT NULL REFERENCES analysis_runs(run_id),
+    handoff_id        TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    note              TEXT NOT NULL DEFAULT '',
+    requested_items   JSONB NOT NULL DEFAULT '[]'::jsonb,
+    recorded_by       TEXT NOT NULL,
+    recorded_at       TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS consultation_events_tenant_run_time
+    ON consultation_events(organization_id, analysis_run_id, recorded_at);
 CREATE TABLE IF NOT EXISTS audit_events (
     event_id         TEXT PRIMARY KEY,
     organization_id  TEXT NOT NULL,
@@ -86,6 +99,16 @@ DROP TRIGGER IF EXISTS audit_events_no_update ON audit_events;
 CREATE TRIGGER audit_events_no_update
 BEFORE UPDATE OR DELETE ON audit_events
 FOR EACH ROW EXECUTE FUNCTION reject_audit_mutation();
+CREATE OR REPLACE FUNCTION reject_consultation_mutation()
+RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'consultation events are immutable';
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS consultation_events_no_update ON consultation_events;
+CREATE TRIGGER consultation_events_no_update
+BEFORE UPDATE OR DELETE ON consultation_events
+FOR EACH ROW EXECUTE FUNCTION reject_consultation_mutation();
 """
 
 
@@ -336,6 +359,83 @@ class PostgresAccountStore:
             "result": row["result"],
         }
 
+    def read_consultation(
+        self,
+        account: Account,
+        run_id: str,
+    ) -> dict[str, Any] | None:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT e.* FROM consultation_events e"
+                " JOIN analysis_runs r ON r.run_id = e.analysis_run_id"
+                " JOIN accounts a ON a.account_id = r.account_id"
+                " WHERE e.organization_id = %s AND a.organization_id = %s"
+                " AND e.analysis_run_id = %s"
+                " ORDER BY e.recorded_at, e.event_id",
+                (account.organization_id, account.organization_id, run_id),
+            ).fetchall()
+        if not rows:
+            return None
+        history = [_consultation_event(row) for row in rows]
+        return {**history[-1], "history": history}
+
+    def record_consultation_event(
+        self,
+        account: Account,
+        run_id: str,
+        *,
+        handoff_id: str,
+        status: str,
+        note: str = "",
+        requested_items: tuple[str, ...] = (),
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        from tradeflow.runtime.consultations import (
+            validate_event_details,
+            validate_transition,
+        )
+
+        requested_items = tuple(item.strip() for item in requested_items if item.strip())
+        recorded_at = now or _now()
+        event_id = f"CONSULT-{secrets.token_hex(12)}"
+        with self._connect() as db:
+            owned = db.execute(
+                "SELECT 1 FROM analysis_runs r JOIN accounts a"
+                " ON a.account_id = r.account_id"
+                " WHERE a.organization_id = %s AND r.run_id = %s FOR UPDATE",
+                (account.organization_id, run_id),
+            ).fetchone()
+            if owned is None:
+                raise LookupError("analysis not found")
+            previous = db.execute(
+                "SELECT status FROM consultation_events"
+                " WHERE organization_id = %s AND analysis_run_id = %s"
+                " ORDER BY recorded_at DESC, event_id DESC LIMIT 1",
+                (account.organization_id, run_id),
+            ).fetchone()
+            validate_transition(previous["status"] if previous else None, status)
+            validate_event_details(status, note, requested_items)
+            db.execute(
+                "INSERT INTO consultation_events"
+                " (event_id, organization_id, analysis_run_id, handoff_id,"
+                " status, note, requested_items, recorded_by, recorded_at)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    event_id,
+                    account.organization_id,
+                    run_id,
+                    handoff_id,
+                    status,
+                    note.strip(),
+                    Jsonb(list(requested_items)),
+                    account.email,
+                    recorded_at,
+                ),
+            )
+        consultation = self.read_consultation(account, run_id)
+        assert consultation is not None
+        return consultation
+
     def append_audit(
         self,
         account: Account,
@@ -481,4 +581,18 @@ def _audit_view(row: dict[str, Any]) -> dict[str, Any]:
         **row,
         "occurred_at": row["occurred_at"].isoformat(),
         "details": row["details"],
+    }
+
+
+def _consultation_event(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "event_id": row["event_id"],
+        "analysis_run_id": row["analysis_run_id"],
+        "handoff_id": row["handoff_id"],
+        "status": row["status"],
+        "note": row["note"],
+        "requested_items": row["requested_items"],
+        "recorded_by": row["recorded_by"],
+        "recorded_at": row["recorded_at"].isoformat(),
+        "verification": "user_recorded_not_bank_verified",
     }

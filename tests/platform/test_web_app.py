@@ -10,11 +10,14 @@ from tradeflow.runtime.accounts import AccountStore
 from tradeflow.web import app
 from tradeflow.web.app import (
     AnalyzeRequest,
+    ConsultationEventRequest,
     ConsultationHandoffRequest,
     ProfileFactsRequest,
     analysis_history,
     analyze_endpoint,
     create_consultation_handoff,
+    read_consultation,
+    record_consultation_event,
     saved_analysis,
     update_profile,
 )
@@ -510,7 +513,17 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
                     body["analysis_run_id"],
                     ConsultationHandoffRequest(consent=True),
                     token,
-                )["handoff"]
+                )
+                consultation = handoff["consultation"]
+                handoff = handoff["handoff"]
+                shared = record_consultation_event(
+                    body["analysis_run_id"],
+                    ConsultationEventRequest(status="shared_manually"),
+                    token,
+                )["consultation"]
+                persisted = read_consultation(
+                    body["analysis_run_id"], token
+                )["consultation"]
                 audit = store.list_audit(account)
 
         self.assertEqual("small", updated["account"]["facts"]["company.size"])
@@ -526,6 +539,14 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
         )
         self.assertFalse(handoff["privacy"]["raw_document_content_included"])
         self.assertFalse(handoff["privacy"]["transmission_performed"])
+        self.assertEqual("1.1", handoff["schema_version"])
+        self.assertEqual("ready_for_manual_handoff", consultation["status"])
+        self.assertEqual("shared_manually", shared["status"])
+        self.assertEqual(shared, persisted)
+        self.assertEqual(
+            "needs_information",
+            handoff["consultation_readiness"]["status"],
+        )
         self.assertTrue(
             any(
                 item["action"] == "consultation_handoff.prepare"

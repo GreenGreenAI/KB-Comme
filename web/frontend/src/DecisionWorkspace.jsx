@@ -1,5 +1,9 @@
-import { useState } from "react";
-import { createConsultationHandoff } from "./api.js";
+import { useEffect, useState } from "react";
+import {
+  createConsultationHandoff,
+  readConsultation,
+  recordConsultationEvent,
+} from "./api.js";
 import DocumentPanel from "./DocumentPanel.jsx";
 
 const STATUS = {
@@ -461,14 +465,30 @@ export function ConsultationHandoff({ result, signedIn }) {
   const [consented, setConsented] = useState(false);
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
+  const [consultation, setConsultation] = useState(null);
+  const [note, setNote] = useState("");
   const runId = result.analysis_run_id;
+
+  useEffect(() => {
+    if (!signedIn || !runId) return undefined;
+    let active = true;
+    readConsultation(runId)
+      .then((value) => {
+        if (active) setConsultation(value);
+      })
+      .catch((caught) => {
+        if (active) setError(caught.message);
+      });
+    return () => { active = false; };
+  }, [runId, signedIn]);
 
   async function prepare() {
     if (!consented || !runId) return;
     setState("working");
     setError("");
     try {
-      const packet = await createConsultationHandoff(runId);
+      const payload = await createConsultationHandoff(runId);
+      const packet = payload.handoff;
       const blob = new Blob(
         [JSON.stringify(packet, null, 2)],
         { type: "application/json" },
@@ -479,12 +499,35 @@ export function ConsultationHandoff({ result, signedIn }) {
       link.download = `${packet.handoff_id}.json`;
       link.click();
       URL.revokeObjectURL(url);
+      setConsultation(payload.consultation);
       setState("ready");
     } catch (caught) {
       setError(caught.message);
       setState("idle");
     }
   }
+
+  async function record(status) {
+    setState("working");
+    setError("");
+    try {
+      const updated = await recordConsultationEvent(runId, status, note);
+      setConsultation(updated);
+      setNote("");
+      setState("ready");
+    } catch (caught) {
+      setError(caught.message);
+      setState("ready");
+    }
+  }
+
+  const statusLabel = {
+    ready_for_manual_handoff: "전달 준비",
+    shared_manually: "수동 전달 완료",
+    consultation_in_progress: "상담 진행 중",
+    additional_information_requested: "추가자료 요청",
+    outcome_recorded: "상담 결과 기록",
+  }[consultation?.status];
 
   return (
     <section
@@ -526,6 +569,59 @@ export function ConsultationHandoff({ result, signedIn }) {
             <p role="status">
               수동 인계용 패킷을 준비했습니다. 자동 전송된 정보는 없습니다.
             </p>
+          ) : null}
+          {consultation ? (
+            <div className="consultation-progress">
+              <p>
+                현재 상태: <b>{statusLabel}</b>
+                <small> · 사용자 기록이며 은행 확인 정보가 아닙니다.</small>
+              </p>
+              {consultation.status === "ready_for_manual_handoff" ? (
+                <button type="button" onClick={() => record("shared_manually")}>
+                  담당자에게 전달 완료로 기록
+                </button>
+              ) : null}
+              {consultation.status === "shared_manually" ? (
+                <button type="button" onClick={() => record("consultation_in_progress")}>
+                  상담 시작으로 기록
+                </button>
+              ) : null}
+              {["consultation_in_progress", "additional_information_requested"].includes(consultation.status) ? (
+                <>
+                  <label>
+                    상담 메모 또는 요청자료
+                    <textarea
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      placeholder="예: 최근 1년 수출실적, 희망 한도"
+                    />
+                  </label>
+                  {consultation.status === "consultation_in_progress" ? (
+                    <button
+                      type="button"
+                      disabled={!note.trim() || state === "working"}
+                      onClick={() => record("additional_information_requested")}
+                    >
+                      추가자료 요청으로 기록
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => record("shared_manually")}>
+                      추가자료 전달 완료로 기록
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!note.trim() || state === "working"}
+                    onClick={() => record("outcome_recorded")}
+                  >
+                    상담 결과 기록
+                  </button>
+                </>
+              ) : null}
+              {consultation.status === "outcome_recorded" ? (
+                <p role="status">상담 결과가 사용자 기록으로 보존됐습니다.</p>
+              ) : null}
+            </div>
           ) : null}
           {error ? <p role="alert">{error}</p> : null}
         </>

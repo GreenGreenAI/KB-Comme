@@ -1,8 +1,8 @@
 ---
-status: implemented
+status: accepted
 owner: shared
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-08-01
+last-reviewed: 2026-08-02
 ---
 
 # TradeFlow 차별화 전략: 답을 바꾸는 조건을 보여주는 금융 의사결정 AI
@@ -187,11 +187,12 @@ TradeFlow는 다음을 주장하지 않는다.
 | Next Decisive Question | 자금 공백이 있고 외화잔액이 미입력되면 이를 최우선으로 질문하며, 이후에는 실제로 차단한 판정 수가 많은 질문부터 정렬한다. | 계약 테스트와 브라우저 입력 테스트 |
 | Decision Delta | 로그인한 동일 조직의 이전 저장 분석과 새 분석을 비교해 자금 공백·순노출·자연헤지·만기일치·지원 후보 상태·다음 행동·필요서류와 해결된 질문을 반환한다. 탈락 목록으로 이동한 후보도 실제 상태를 보존한다. | 계약·tenant 경계 통합 테스트와 UT16 |
 | Decision Passport | 사실·계산·규칙·출처에 다음 질문과 Decision Delta를 더해 수동 KB 상담자료로 생성한다. 자동 전송과 원문 문서 포함은 계속 금지한다. | handoff 통합 테스트와 UT16 |
+| Consultation Follow-up | 패킷 전달부터 상담·추가자료·결과까지 허용된 상태 전이로 보존하고 모두 은행 미확인 사용자 기록으로 표시한다. | lifecycle 통합 테스트, UT17과 브라우저 E2E |
 
 대표 시나리오의 실제 측정 결과는 `USD 60,000 → USD 40,000`, 수출신용보증 후보
 `conditionally_eligible → expert_confirmation_required`였으며, 동일 변화 기록이 Decision
-Passport에 보존됐다. 고객 과업 벤치마크는 16/16 과업, 53/53 구조화 검증을 통과했고
-Playwright 브라우저 E2E 3/3을 통과했다.
+Passport에 보존됐다. 고객 과업 벤치마크는 17/17 과업, 58/58 구조화 검증을 통과했고
+Playwright 브라우저 E2E 4/4를 통과했다.
 
 현재 KB 데이터나 API를 사용하지 않는다. 은행 연계는 `bank_consultation.v1` 어댑터 경계 뒤에
 남겨두고, 사용자 동의를 받은 수동 자료 생성까지만 제품 범위로 유지한다.

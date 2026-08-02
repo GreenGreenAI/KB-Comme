@@ -527,6 +527,89 @@ def _evaluate_decision_delta(
     )
 
 
+def _run_consultation_lifecycle(scenario: dict[str, Any]) -> dict[str, Any]:
+    account_spec = scenario["account"]
+    with TemporaryDirectory() as directory:
+        store = AccountStore(Path(directory) / "accounts.db")
+        store.create(
+            account_spec["email"],
+            account_spec["password"],
+            company_name=account_spec["company_name"],
+        )
+        with patch("tradeflow.web.app.accounts", store):
+            with TestClient(web_app.app) as client:
+                client.post("/api/auth/login", json={
+                    "email": account_spec["email"],
+                    "password": account_spec["password"],
+                }).raise_for_status()
+                analysis_response = client.post(
+                    "/api/analyze", json=scenario["request"]
+                )
+                analysis_response.raise_for_status()
+                run_id = analysis_response.json()["analysis_run_id"]
+                handoff_response = client.post(
+                    f"/api/analyses/{run_id}/consultation-handoff",
+                    json={"consent": True},
+                )
+                handoff_response.raise_for_status()
+                handoff = handoff_response.json()
+                invalid = client.post(
+                    f"/api/analyses/{run_id}/consultation-events",
+                    json={"status": "outcome_recorded", "note": "승인"},
+                )
+                for body in (
+                    {"status": "shared_manually"},
+                    {"status": "consultation_in_progress"},
+                    {
+                        "status": "additional_information_requested",
+                        "note": "최근 1년 수출실적",
+                        "requested_items": ["최근 1년 수출실적"],
+                    },
+                    {"status": "shared_manually"},
+                    {"status": "consultation_in_progress"},
+                    {"status": "outcome_recorded", "note": "한도 심사 접수"},
+                ):
+                    response = client.post(
+                        f"/api/analyses/{run_id}/consultation-events",
+                        json=body,
+                    )
+                    response.raise_for_status()
+                persisted = client.get(
+                    f"/api/analyses/{run_id}/consultation"
+                )
+                persisted.raise_for_status()
+    return {
+        "handoff": handoff,
+        "invalid_status": invalid.status_code,
+        "consultation": persisted.json()["consultation"],
+    }
+
+
+def _evaluate_consultation_lifecycle(
+    payload: dict[str, Any],
+    expected: dict[str, Any],
+) -> tuple[Check, ...]:
+    consultation = payload["consultation"]
+    readiness = payload["handoff"]["handoff"]["consultation_readiness"]
+    return (
+        _check("invalid_transition_status", payload["invalid_status"], 422),
+        _check("final_status", consultation["status"], expected["final_status"]),
+        _check(
+            "status_history",
+            [event["status"] for event in consultation["history"]],
+            expected["status_history"],
+        ),
+        _check(
+            "verification",
+            consultation["verification"],
+            "user_recorded_not_bank_verified",
+        ),
+        _check(
+            "readiness_gap_fields",
+            sorted(item["field"] for item in readiness["missing_or_unverified"]),
+            sorted(expected["readiness_gap_fields"]),
+        ),
+    )
 def run_scenario(scenario: dict[str, Any]) -> TaskOutcome:
     started = perf_counter()
     if scenario["kind"] == "analyze":
@@ -544,6 +627,9 @@ def run_scenario(scenario: dict[str, Any]) -> TaskOutcome:
     elif scenario["kind"] == "decision_delta":
         payload = _run_decision_delta(scenario)
         checks = _evaluate_decision_delta(payload, scenario["expect"])
+    elif scenario["kind"] == "consultation_lifecycle":
+        payload = _run_consultation_lifecycle(scenario)
+        checks = _evaluate_consultation_lifecycle(payload, scenario["expect"])
     else:
         raise ValueError(f"unknown benchmark scenario kind: {scenario['kind']}")
     elapsed = (perf_counter() - started) * 1000

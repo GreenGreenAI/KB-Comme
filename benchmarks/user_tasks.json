@@ -630,6 +630,51 @@
           "after": "expert_confirmation_required"
         }
       }
+    },
+    {
+      "id": "UT17",
+      "metric": "consultation_follow_up",
+      "critical": true,
+      "title": "상담자료 전달 이후의 진행상태와 추가자료·결과를 추적한다",
+      "job": "내려받은 상담자료를 담당자에게 전달한 뒤 상담 진행, 추가자료 요청과 사용자 기록 결과를 한 흐름으로 보존한다",
+      "kind": "consultation_lifecycle",
+      "account": {
+        "email": "consultation-benchmark@example.com",
+        "password": "consultation-password",
+        "company_name": "상담흐름무역"
+      },
+      "request": {
+        "as_of": "2026-08-02",
+        "cases": [
+          {
+            "direction": "export",
+            "amount": "100000",
+            "currency": "USD",
+            "payment_method": "TT",
+            "expected_payment_date": "2026-10-24",
+            "country": "US"
+          }
+        ]
+      },
+      "expect": {
+        "final_status": "outcome_recorded",
+        "status_history": [
+          "ready_for_manual_handoff",
+          "shared_manually",
+          "consultation_in_progress",
+          "additional_information_requested",
+          "shared_manually",
+          "consultation_in_progress",
+          "outcome_recorded"
+        ],
+        "readiness_gap_fields": [
+          "bank.product_confirmation",
+          "company.trade_history",
+          "counterparty.credit_evidence",
+          "documents.uploaded_inventory",
+          "financing.requested_amount"
+        ]
+      }
     }
   ]
 }

@@ -87,6 +87,29 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 );
 CREATE INDEX IF NOT EXISTS analysis_runs_tenant_time
     ON analysis_runs(account_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS consultation_events (
+    event_id          TEXT PRIMARY KEY,
+    organization_id   TEXT NOT NULL,
+    analysis_run_id   TEXT NOT NULL REFERENCES analysis_runs(run_id),
+    handoff_id        TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    note              TEXT NOT NULL DEFAULT '',
+    requested_items   TEXT NOT NULL DEFAULT '[]',
+    recorded_by       TEXT NOT NULL,
+    recorded_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS consultation_events_tenant_run_time
+    ON consultation_events(organization_id, analysis_run_id, recorded_at);
+CREATE TRIGGER IF NOT EXISTS consultation_events_no_update
+BEFORE UPDATE ON consultation_events
+BEGIN
+    SELECT RAISE(ABORT, 'consultation events are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS consultation_events_no_delete
+BEFORE DELETE ON consultation_events
+BEGIN
+    SELECT RAISE(ABORT, 'consultation events are immutable');
+END;
 CREATE TABLE IF NOT EXISTS audit_events (
     event_id         TEXT PRIMARY KEY,
     organization_id  TEXT NOT NULL,
@@ -553,6 +576,86 @@ class AccountStore:
             "result": json.loads(row["result"]),
         }
 
+    # ---- tenant-scoped manual consultation lifecycle ----
+
+    def read_consultation(
+        self,
+        account: Account,
+        run_id: str,
+    ) -> dict[str, Any] | None:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT e.* FROM consultation_events e"
+                " JOIN analysis_runs r ON r.run_id = e.analysis_run_id"
+                " JOIN accounts a ON a.account_id = r.account_id"
+                " WHERE e.organization_id = ? AND a.organization_id = ?"
+                " AND e.analysis_run_id = ?"
+                " ORDER BY e.recorded_at, e.event_id",
+                (account.organization_id, account.organization_id, run_id),
+            ).fetchall()
+        if not rows:
+            return None
+        history = [_consultation_event(row) for row in rows]
+        return {**history[-1], "history": history}
+
+    def record_consultation_event(
+        self,
+        account: Account,
+        run_id: str,
+        *,
+        handoff_id: str,
+        status: str,
+        note: str = "",
+        requested_items: tuple[str, ...] = (),
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        from tradeflow.runtime.consultations import (
+            validate_event_details,
+            validate_transition,
+        )
+
+        requested_items = tuple(item.strip() for item in requested_items if item.strip())
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            owned = db.execute(
+                "SELECT 1 FROM analysis_runs r JOIN accounts a"
+                " ON a.account_id = r.account_id"
+                " WHERE a.organization_id = ? AND r.run_id = ?",
+                (account.organization_id, run_id),
+            ).fetchone()
+            if owned is None:
+                raise LookupError("analysis not found")
+            previous = db.execute(
+                "SELECT status FROM consultation_events"
+                " WHERE organization_id = ? AND analysis_run_id = ?"
+                " ORDER BY recorded_at DESC, event_id DESC LIMIT 1",
+                (account.organization_id, run_id),
+            ).fetchone()
+            validate_transition(previous["status"] if previous else None, status)
+            validate_event_details(status, note, requested_items)
+            recorded_at = (now or _now()).isoformat()
+            event_id = f"CONSULT-{secrets.token_hex(12)}"
+            db.execute(
+                "INSERT INTO consultation_events"
+                " (event_id, organization_id, analysis_run_id, handoff_id,"
+                " status, note, requested_items, recorded_by, recorded_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id,
+                    account.organization_id,
+                    run_id,
+                    handoff_id,
+                    status,
+                    note.strip(),
+                    json.dumps(requested_items, ensure_ascii=False),
+                    account.email,
+                    recorded_at,
+                ),
+            )
+        consultation = self.read_consultation(account, run_id)
+        assert consultation is not None
+        return consultation
+
     # ---- append-only audit trail ----
 
     def append_audit(
@@ -727,4 +830,18 @@ def _analysis_summary(row: sqlite3.Row) -> dict[str, Any]:
         "company_name": profile.get("company_name"),
         "trade_count": len(result.get("trade_timeline") or []),
         "review_required": bool(result.get("review_required")),
+    }
+
+
+def _consultation_event(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "event_id": row["event_id"],
+        "analysis_run_id": row["analysis_run_id"],
+        "handoff_id": row["handoff_id"],
+        "status": row["status"],
+        "note": row["note"],
+        "requested_items": json.loads(row["requested_items"]),
+        "recorded_by": row["recorded_by"],
+        "recorded_at": row["recorded_at"],
+        "verification": "user_recorded_not_bank_verified",
     }

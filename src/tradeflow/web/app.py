@@ -253,6 +253,17 @@ class ConsultationHandoffRequest(BaseModel):
     target_bank: Literal["KB_KOOKMIN_BANK"] = "KB_KOOKMIN_BANK"
 
 
+class ConsultationEventRequest(BaseModel):
+    status: Literal[
+        "shared_manually",
+        "consultation_in_progress",
+        "additional_information_requested",
+        "outcome_recorded",
+    ]
+    note: str = Field(default="", max_length=2000)
+    requested_items: list[str] = Field(default_factory=list, max_length=30)
+
+
 class DocumentUploadRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=180)
     content_type: str = Field(min_length=1, max_length=100)
@@ -555,6 +566,30 @@ def create_consultation_handoff(
             status_code=404,
             detail={"reason": "분석을 찾을 수 없습니다"},
         )
+    document_inventory = []
+    for trade in stored["result"].get("trade_timeline") or []:
+        case_id = trade.get("case_id")
+        if not case_id:
+            continue
+        for document in document_store.list_case(
+            account.organization_id,
+            case_id,
+        ):
+            document_inventory.append(
+                {
+                    "document_id": document["document_id"],
+                    "case_id": case_id,
+                    "filename": document["filename"],
+                    "document_type": document["document_type"],
+                    "extraction_state": document["extraction_state"],
+                    "content_hash": document["content_hash"],
+                    "confirmed_fields": sorted(
+                        field["field_name"]
+                        for field in document.get("extraction", {}).get("fields", [])
+                        if field.get("confirmed")
+                    ),
+                }
+            )
     packet = consultation_handoff_provider.prepare(
         run_id=run_id,
         analysis_created_at=stored["created_at"],
@@ -562,7 +597,16 @@ def create_consultation_handoff(
         result=stored["result"],
         requested_by=account.email,
         target_bank=body.target_bank,
+        uploaded_documents=document_inventory,
     )
+    consultation = accounts.read_consultation(account, run_id)
+    if consultation is None:
+        consultation = accounts.record_consultation_event(
+            account,
+            run_id,
+            handoff_id=packet["handoff_id"],
+            status="ready_for_manual_handoff",
+        )
     accounts.append_audit(
         account,
         action="consultation_handoff.prepare",
@@ -575,7 +619,76 @@ def create_consultation_handoff(
             "transmitted": False,
         },
     )
-    return {"handoff": packet}
+    return {"handoff": packet, "consultation": consultation}
+
+
+@app.get("/api/analyses/{run_id}/consultation")
+def read_consultation(
+    run_id: str,
+    session: SessionCookie = None,
+) -> dict[str, Any]:
+    account = _require_account(session)
+    _require_permission(
+        account,
+        "analysis:read",
+        target_type="analysis",
+        target_id=run_id,
+    )
+    if accounts.read_analysis(account, run_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason": "분석을 찾을 수 없습니다."},
+        )
+    return {"consultation": accounts.read_consultation(account, run_id)}
+
+
+@app.post("/api/analyses/{run_id}/consultation-events")
+def record_consultation_event(
+    run_id: str,
+    body: ConsultationEventRequest,
+    session: SessionCookie = None,
+) -> dict[str, Any]:
+    account = _require_account(session)
+    _require_permission(
+        account,
+        "analysis:write",
+        target_type="analysis",
+        target_id=run_id,
+    )
+    current = accounts.read_consultation(account, run_id)
+    if current is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"reason": "먼저 상담 패킷을 준비해 주세요."},
+        )
+    try:
+        consultation = accounts.record_consultation_event(
+            account,
+            run_id,
+            handoff_id=current["handoff_id"],
+            status=body.status,
+            note=body.note,
+            requested_items=tuple(body.requested_items),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": str(exc)},
+        ) from exc
+    accounts.append_audit(
+        account,
+        action="consultation.status_recorded",
+        target_type="consultation_handoff",
+        target_id=current["handoff_id"],
+        details={
+            "analysis_run_id": run_id,
+            "previous_status": current["status"],
+            "status": body.status,
+            "verification": "user_recorded_not_bank_verified",
+            "requested_item_count": len(body.requested_items),
+        },
+    )
+    return {"consultation": consultation}
 
 
 def _document_validation_error(exc: DocumentValidationError) -> HTTPException:

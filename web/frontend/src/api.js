@@ -108,7 +108,38 @@ export async function createConsultationHandoff(runId) {
       payload?.detail?.reason ?? "은행 상담 패킷을 준비하지 못했습니다.",
     );
   }
-  return (await response.json()).handoff;
+  return response.json();
+}
+
+export async function readConsultation(runId) {
+  const response = await ask(
+    `/api/analyses/${encodeURIComponent(runId)}/consultation`,
+  );
+  if (!response.ok) throw new Error("상담 진행상태를 불러오지 못했습니다.");
+  return (await response.json()).consultation;
+}
+
+export async function recordConsultationEvent(runId, status, note = "") {
+  const requestedItems = status === "additional_information_requested"
+    ? note.split(/[,\n]/).map((item) => item.trim()).filter(Boolean)
+    : [];
+  const response = await ask(
+    `/api/analyses/${encodeURIComponent(runId)}/consultation-events`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status,
+        note,
+        requested_items: requestedItems,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail?.reason ?? "상담 진행상태를 기록하지 못했습니다.");
+  }
+  return (await response.json()).consultation;
 }
 
 async function documentRequest(url, init, fallback) {

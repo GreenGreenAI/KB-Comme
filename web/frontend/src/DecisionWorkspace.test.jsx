@@ -251,13 +251,19 @@ describe("DecisionWorkspace", () => {
   it("requires consent and downloads a non-transmitting KB handoff packet", async () => {
     const user = userEvent.setup();
     const click = vi.fn();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({
-        handoff: {
-          handoff_id: "HANDOFF-test",
-          state: "ready_for_manual_handoff",
-        },
-      }),
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => new Response(
+      JSON.stringify(url.endsWith("/consultation")
+        ? { consultation: null }
+        : {
+            handoff: {
+              handoff_id: "HANDOFF-test",
+              state: "ready_for_manual_handoff",
+            },
+            consultation: {
+              status: "ready_for_manual_handoff",
+              verification: "user_recorded_not_bank_verified",
+            },
+          }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     )));
     vi.stubGlobal("URL", {
@@ -287,5 +293,34 @@ describe("DecisionWorkspace", () => {
     );
     expect(click).toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("자동 전송된 정보는 없습니다");
+    expect(screen.getByText("전달 준비")).toBeInTheDocument();
+  });
+
+  it("records the manual handoff after a saved consultation is loaded", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url, init) => {
+      const consultation = init?.method === "POST"
+        ? { status: "shared_manually", verification: "user_recorded_not_bank_verified" }
+        : { status: "ready_for_manual_handoff", verification: "user_recorded_not_bank_verified" };
+      return Promise.resolve(new Response(
+        JSON.stringify({ consultation }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ));
+    }));
+    render(
+      <ConsultationHandoff
+        result={{ ...result, analysis_run_id: "RUN-1" }}
+        signedIn
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "담당자에게 전달 완료로 기록" }));
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/analyses/RUN-1/consultation-events",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(await screen.findByText("수동 전달 완료")).toBeInTheDocument();
+    expect(screen.getByText(/은행 확인 정보가 아닙니다/)).toBeInTheDocument();
   });
 });
