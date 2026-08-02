@@ -82,7 +82,38 @@ SESSION_COOKIE = "tradeflow_session"
 SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 
 app = FastAPI(title="TradeFlow", version="0.1.0")
-accounts = AccountStore(ACCOUNT_DB)
+
+#: 로그인은 닫혀 있습니다. 켜려면 `TRADEFLOW_SIGN_IN`을 세우세요.
+#:
+#: 화면에서 버튼을 내리는 것만으로는 닫힌 것이 아닙니다. `/api/auth/login`은
+#: 그대로 열려 있었고, 주소를 아는 사람은 데모 계정으로 세션을 받을 수
+#: 있었습니다 — 앞문은 잠겼는데 옆문이 열려 있는 상태입니다.
+#:
+#: 기본값이 닫힘인 것도 같은 이유입니다. 스위치를 켜는 것은 결정이지만 끄는
+#: 것을 잊는 것은 사고이고, 인증은 사고 쪽이 훨씬 비쌉니다.
+SIGN_IN_OPEN = bool(os.environ.get("TRADEFLOW_SIGN_IN"))
+
+#: 계정 저장소는 쓸 때 열립니다.
+#:
+#: 모듈을 부르는 것만으로 `AccountStore`가 만들어지던 동안, 로그인을 쓰지 않는
+#: 서버도 시작할 때마다 비밀번호 해시 저장소를 만들었습니다. 쓰지 않는 기능을
+#: 위한 자격 증명 파일은 기능이 아니라 부채입니다.
+_accounts: AccountStore | None = None
+
+
+def accounts_store() -> AccountStore:
+    global _accounts
+    if _accounts is None:
+        _accounts = AccountStore(ACCOUNT_DB)
+    return _accounts
+
+
+def _closed() -> HTTPException:
+    """404, not 403.
+
+    「닫혀 있습니다」는 여기에 문이 있다는 말이고, 그것은 이 배포에서는 사실이
+    아닙니다. 없는 문을 두드린 것과 같은 답을 합니다."""
+    return HTTPException(status_code=404, detail={"reason": "없는 경로입니다"})
 
 #: §4.2[9]. Constructed whether or not a key is present — without one it simply
 #: declines, and the screen writes its own sentence.
@@ -144,7 +175,15 @@ class ForwardQuoteInput(BaseModel):
 
 
 def _signed_in(token: str | None) -> Account | None:
-    return accounts.read_session(token)
+    """Who the cookie says this is, or nobody.
+
+    Closed, this never touches the store — so a leftover cookie cannot make an
+    anonymous screen receive an answer judged on an account's company facts,
+    and the store stays unopened.
+    """
+    if not SIGN_IN_OPEN:
+        return None
+    return accounts_store().read_session(token)
 
 
 @app.post("/api/auth/login")
@@ -155,7 +194,9 @@ def login(body: LoginRequest, response: Response) -> dict[str, Any]:
     question nobody asked — whether a given company banks here — to anyone
     willing to type addresses into the form.
     """
-    account = accounts.authenticate(body.email, body.password)
+    if not SIGN_IN_OPEN:
+        raise _closed()
+    account = accounts_store().authenticate(body.email, body.password)
     if account is None:
         raise HTTPException(
             status_code=401,
@@ -187,7 +228,9 @@ def logout(
     Clearing the cookie alone would leave a token that still works for anyone
     who kept a copy of it.
     """
-    accounts.close_session(session)
+    if not SIGN_IN_OPEN:
+        raise _closed()
+    accounts_store().close_session(session)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"account": None}
 
@@ -199,6 +242,8 @@ def me(session: SessionCookie = None) -> dict[str, Any]:
     The screen asks rather than remembering, so being signed in is something
     the server says and not something the client decides about itself.
     """
+    if not SIGN_IN_OPEN:
+        raise _closed()
     account = _signed_in(session)
     return {"account": _account_view(account) if account else None}
 

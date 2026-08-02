@@ -1,7 +1,7 @@
 import unittest
 from datetime import date, timedelta
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from pydantic import ValidationError
 
 from tradeflow.web import app
@@ -352,6 +352,41 @@ class AnonymousSupportTests(unittest.TestCase):
 
         self.assertIn("기업규모와 신용 상태", pointer)
         self.assertNotIn("로그인", pointer)
+
+
+class SignInClosedTests(unittest.TestCase):
+    """Taking the button off the screen is not closing the door.
+
+    `/api/auth/login` stayed open behind it, and anyone who knew the path could
+    still get a session from the demo account — the front door locked and the
+    side door standing open."""
+
+    def test_the_auth_paths_are_not_there(self) -> None:
+        """404, not 403. 「닫혀 있습니다」 says there is a door here, which is
+        not true of this deployment."""
+        self.assertFalse(app.SIGN_IN_OPEN)
+
+        for call in (
+            lambda: app.login(
+                app.LoginRequest(email="demo@tradeflow.kr", password="x"),
+                Response(),
+            ),
+            lambda: app.logout(Response(), session="anything"),
+            lambda: app.me(session="anything"),
+        ):
+            with self.assertRaises(HTTPException) as refused:
+                call()
+            self.assertEqual(404, refused.exception.status_code)
+
+    def test_a_leftover_cookie_signs_nobody_in(self) -> None:
+        """Otherwise an anonymous screen receives an answer judged on an
+        account's company facts, and nothing on it says so."""
+        self.assertIsNone(app._signed_in("a-token-from-before"))
+
+    def test_the_credential_store_is_not_opened(self) -> None:
+        """A password-hash file created on every start, for a feature nobody
+        can reach, is not a feature — it is a liability."""
+        self.assertIsNone(app._accounts)
 
 
 class AnsweredFactTests(unittest.TestCase):
