@@ -96,7 +96,7 @@ function stepsFor(result) {
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null });
+  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null, stated: {} });
   const [result, setResult] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -250,7 +250,16 @@ export default function App() {
     // server is stateless, so it has to be resent with each turn or the hedge
     // would vanish the moment anything else was said.
     const nextQuote = patch.quote ?? facts.quote ?? null;
-    setFacts({ cases: nextCases, profile: nextProfile, quote: nextQuote });
+    // Answers to the rules' own questions accumulate the same way. The server
+    // is stateless, so a grade stated three turns ago has to travel with every
+    // request or the judgement it opened would close again.
+    const nextStated = { ...facts.stated, ...(patch.facts ?? {}) };
+    setFacts({
+      cases: nextCases,
+      profile: nextProfile,
+      quote: nextQuote,
+      stated: nextStated,
+    });
 
     // What the user said, as the thread should carry it. A typed sentence is
     // its own text. An answer given through the request panel says what was
@@ -285,6 +294,7 @@ export default function App() {
         as_of: today(),
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
+        ...(Object.keys(nextStated).length > 0 ? { stated_facts: nextStated } : {}),
       });
       const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
@@ -439,6 +449,13 @@ export default function App() {
                     result?.asking_for === "support"
                       ? result?.required_inputs?.profile ?? []
                       : []
+                  }
+                  factInputs={
+                    // Not gated on `asking_for`: these exist because a rule
+                    // that already ran named them, and each one says which
+                    // product it opens — so an offer about 지원제도 under a
+                    // question about 신고의무 is legible, not a demand.
+                    result?.required_inputs?.facts ?? []
                   }
                   onSlot={(patch, said) => send(null, patch, null, said)}
                   onPlace={(utterance, placement, said) =>

@@ -596,6 +596,10 @@
     margin: 0; font-size: .875rem; font-weight: 600; color: var(--ink);
     line-height: 1.5;
   }
+  /* What answering opens. Quieter than the question because it is the reason,
+     not the request — and here the quiet is right: this line is a limit on the
+     question above it, which is what the muted style means everywhere else. */
+  .ask-note { margin: .2rem 0 0; font-size: .75rem; color: var(--ink-45); }
   .ask-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 
   /* An amount, shown the way it is read: the currency sits in the field

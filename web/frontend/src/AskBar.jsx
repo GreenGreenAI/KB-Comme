@@ -31,6 +31,7 @@ export default function AskBar({
   requiredInputs,
   quoteInputs,
   profileInputs,
+  factInputs,
   onSlot,
   onPlace,
 }) {
@@ -84,6 +85,21 @@ export default function AskBar({
   // not signed up gets a judgement instead of a list of what it would need.
   if (profileInputs?.length > 0) {
     return <ProfileAsk key="profile" onSlot={onSlot} />;
+  }
+
+  // The facts a rule that already ran is still short of. Nothing here decides
+  // what to ask or how to word it — the server sends the question, the answers
+  // on offer, and which product each one opens, all read from the rules and
+  // the fact catalog. A list of fields written on this side would be a copy of
+  // the rulepack, and it would drift the first time a rule changed.
+  if (factInputs?.length > 0) {
+    return (
+      <FactAsk
+        key={`fact:${factInputs[0].field}`}
+        ask={factInputs[0]}
+        onSlot={onSlot}
+      />
+    );
   }
 
   if (requiredInputs?.length > 0) {
@@ -199,7 +215,7 @@ function QuoteFields({ onSlot }) {
  *  call site keys this on the question, so a new question is a new panel and
  *  arrives rather than silently swapping its contents.
  */
-function Ask({ label, children }) {
+function Ask({ label, note, children }) {
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setEntered(true), ASK_IN_MS);
@@ -213,6 +229,9 @@ function Ask({ label, children }) {
       aria-label={label}
     >
       <p className="ask-label">{label}</p>
+      {/* What answering opens. A question with no stated purpose reads as a
+          form; the same question with one is an offer the reader can decline. */}
+      {note && <p className="ask-note">{note}</p>}
       {children}
     </div>
   );
@@ -395,6 +414,62 @@ const CREDIT_OPTIONS = [
  *  and 신용 상태 is a boolean, and a typed answer would have to be guessed back
  *  into one — which is the guess §1.1 refuses. Both are sent together so the
  *  rules see one company rather than two halves of one. */
+/** One fact a judgement is waiting for, asked in the rules' own words.
+ *
+ *  One at a time and in rule order. A form of six fields is a form; a question
+ *  with three answers is a conversation, and the next question only exists
+ *  because the last answer did not close the judgement.
+ *
+ *  The label says what it opens. 「K-SURE 등급을 아시나요」 with no reason is a
+ *  demand; the same question under 「단기수출보험(선적후·개별)을 판정하려면」 is
+ *  an offer, and the reader can decide it is not worth answering.
+ */
+function FactAsk({ ask, onSlot }) {
+  const answer = (value, label) =>
+    onSlot({ facts: { [ask.field]: value } }, label ?? value);
+
+  if (ask.options?.length > 0) {
+    return (
+      <Ask label={ask.question} note={ask.opens ? `${ask.opens} 판정에 필요합니다` : null}>
+        <ChoiceList
+          options={ask.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onPick={answer}
+        />
+      </Ask>
+    );
+  }
+  return (
+    <Ask label={ask.question} note={ask.opens ? `${ask.opens} 판정에 필요합니다` : null}>
+      <FactField onSubmit={answer} />
+    </Ask>
+  );
+}
+
+function FactField({ onSubmit }) {
+  const [value, setValue] = useState("");
+  const focus = useAutoFocus();
+  const submit = () => value.trim() && onSubmit(value.trim());
+
+  return (
+    <div className="ask-row">
+      <input
+        ref={focus}
+        type="text"
+        value={value}
+        autoComplete="off"
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => event.key === "Enter" && submit()}
+      />
+      <button type="button" onClick={submit} disabled={!value.trim()}>
+        확인
+      </button>
+    </div>
+  );
+}
+
 function ProfileAsk({ onSlot }) {
   const [size, setSize] = useState(null);
 

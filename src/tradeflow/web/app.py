@@ -33,7 +33,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from tradeflow.agent.intake import intake
 from tradeflow.domain.enums import TradeDirection
@@ -44,7 +44,7 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.runtime import introduction, narration, observing, planner
+from tradeflow.runtime import asking, introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
 from tradeflow.runtime.synthesis import Synthesis, Synthesizer, figures, pointer
@@ -269,6 +269,28 @@ class AnalyzeRequest(BaseModel):
     trace: bool = False
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
+    #: What the company answered to the questions §5.4's rules raised, by field
+    #: name. Validated against the fact catalog rather than typed here: the
+    #: fields are the rules', and a second list of them in this module would be
+    #: a copy that drifts the first time a rulepack changes.
+    stated_facts: dict[str, str] | None = None
+
+    @field_validator("stated_facts")
+    @classmethod
+    def _known_facts_only(
+        cls, given: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        """Refuse a field the catalog does not know, or a value it would not
+        accept, naming which — the same reason unknown fields are refused at
+        all. A value that quietly vanishes here would be worse than one that
+        vanishes at the edge, because the rule would then report the fact as
+        missing and the screen would ask for it again."""
+        if not given:
+            return given
+        for field_name, value in given.items():
+            if not asking.accepts(field_name, value):
+                raise ValueError(f"알 수 없거나 허용되지 않는 값입니다: {field_name}")
+        return given
 
 
 FIELD_LABELS = {
@@ -500,6 +522,7 @@ def analyze_endpoint(
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
         intent=_subjects(request),
+        answered_facts=request.stated_facts,
     )
     result = build_response(analysis)
 
@@ -647,6 +670,15 @@ def analyze_endpoint(
         ]
         if account is None and "support" in ((result.get("workers") or {}).get("skipped") or {})
         else []
+    )
+    # And the facts a rule that *did* run is still short of. The two are
+    # different questions: the profile above opens the worker, these close the
+    # judgements it produced. Only the second kind was being reported by the
+    # rules and never asked, so a company could answer everything on screen and
+    # still watch two of three products come back 「아직 판정하지 못했습니다」
+    # listing conditions nobody was going to be asked about.
+    result["required_inputs"]["facts"] = asking.questions(
+        result, already=request.stated_facts
     )
     return {
         "status": "ready",

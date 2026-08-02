@@ -37,6 +37,7 @@ from tradeflow.agent.routing import (
     ExecutionPlan,
     plan_execution,
 )
+from tradeflow.runtime import asking
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 from tradeflow.runtime.provenance import (
     CalculationVersions,
@@ -222,6 +223,11 @@ DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 #: What the company said the money is for. Separate from the company
 #: declaration above because it comes from the sentence, not the account.
 DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
+
+#: What the company answered when §5.4 asked for it. One per evidence role,
+#: because the fact catalog fixes the role per field and a single descriptor
+#: would have to claim one of them for facts the rules read differently.
+ANSWERED_EVIDENCE_PREFIX = "TRADEFLOW_ANSWERED_"
 
 #: The §5.5 declarations the company made in the sentence. Separate from the
 #: structure this module computes: those came from a subtraction over dates,
@@ -531,6 +537,71 @@ def _declared_financing_assertions(
     return assertions, (descriptor,)
 
 
+def _answered_fact_assertions(
+    program: TradeProgram,
+    answered: Mapping[str, str] | None,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest what the company answered when a rule asked for it.
+
+    §5.4 already reported which facts it was short of; nothing carried the
+    answers back. So a company could be asked for its K-SURE grade, type it in,
+    and watch the same product come back 「아직 판정하지 못했습니다」 — the
+    question was real and the answer went nowhere.
+
+    The role is read from the fact catalog, one descriptor per role. Choosing
+    it here would be this module deciding what kind of evidence a company's
+    word is, and the catalog decides that per field precisely so the answer
+    cannot change with the caller: a grade is `support_eligibility`, a purpose
+    is `user_trade`, a bank consultation is `procedure`.
+
+    Anything the catalog does not recognise never arrives — the web layer
+    refuses it at the door — so an unknown field here is a bug rather than an
+    input, and it is dropped rather than guessed at.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    if not answered:
+        return empty, ()
+
+    by_role: dict[str, dict[str, Any]] = {}
+    for field, value in answered.items():
+        role = asking.evidence_role(field)
+        if role is None or not asking.accepts(field, value):
+            continue
+        by_role.setdefault(role, {})[field] = asking.as_stated(field, value)
+    if not by_role:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptors: list[EvidenceDescriptor] = []
+    assertions: dict[str, list[FactAssertion]] = {case_id: [] for case_id in case_ids}
+    for role, facts in sorted(by_role.items()):
+        evidence_id = f"{ANSWERED_EVIDENCE_PREFIX}{role.upper()}"
+        descriptors.append(
+            EvidenceDescriptor(
+                evidence_id,
+                EvidenceRole(role),
+                case_ids,
+                generated_at=as_of,
+                payload={
+                    "facts": dict(sorted(facts.items())),
+                    "declared_by": program.company.company_id,
+                    "basis": "규칙이 물은 사실에 기업이 답한 값",
+                },
+            )
+        )
+        for case_id in case_ids:
+            assertions[case_id].extend(
+                FactAssertion(field, value, (evidence_id,))
+                for field, value in sorted(facts.items())
+            )
+    return (
+        {case_id: tuple(items) for case_id, items in assertions.items()},
+        tuple(descriptors),
+    )
+
+
 def analyze(
     program: TradeProgram,
     *,
@@ -549,6 +620,9 @@ def analyze(
     #: Ordering only. Facts are read from `utterance`, never from this: a
     #: sentence already answered must not declare its trade a second time.
     intent: tuple[str, ...] | None = None,
+    #: What the company answered to the questions §5.4's rules raised. Read
+    #: through the fact catalog — see `_answered_fact_assertions`.
+    answered_facts: Mapping[str, str] | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -626,6 +700,9 @@ def analyze(
             program, utterance, as_of=evaluated_at_utc
         )
         country, country_evidence = _country_policy_assertions(program, snapshot_root)
+        answered, answered_evidence = _answered_fact_assertions(
+            program, answered_facts, as_of=evaluated_at_utc
+        )
         assertions = {
             case_id: (
                 *assertions.get(case_id, ()),
@@ -633,8 +710,11 @@ def analyze(
                 *stated.get(case_id, ()),
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
+                *answered.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *stated, *financing, *country}
+            for case_id in {
+                *assertions, *declared, *stated, *financing, *country, *answered
+            }
         }
         structure_evidence = (
             *structure_evidence,
@@ -642,6 +722,7 @@ def analyze(
             *stated_evidence,
             *financing_evidence,
             *country_evidence,
+            *answered_evidence,
         )
         decision_packet = _isolated(
             report,

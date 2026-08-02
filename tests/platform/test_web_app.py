@@ -354,6 +354,75 @@ class AnonymousSupportTests(unittest.TestCase):
         self.assertNotIn("로그인", pointer)
 
 
+class AnsweredFactTests(unittest.TestCase):
+    """§5.4 reported what it was missing and nothing carried the answers back.
+
+    A company could be asked for its bank consultation, answer it, and watch
+    the same product come back 「아직 판정하지 못했습니다」 — the question was
+    real and the answer went nowhere."""
+
+    CASE = {
+        "direction": "수출",
+        "amount": "100000",
+        "expected_payment_date": "2026-10-24",
+    }
+
+    def _analyze(self, **extra) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[self.CASE],
+                utterance="받을 수 있는 지원제도가 있나요",
+                as_of="2026-08-01",
+                company_size="small",
+                credit_issue_free=True,
+                **extra,
+            )
+        )["result"]
+
+    def test_an_answer_closes_the_judgement_that_asked_for_it(self) -> None:
+        before = self._analyze()
+        after = self._analyze(
+            stated_facts={
+                "financing.purpose": "trade_finance",
+                "financing.has_bank_consultation": "true",
+            }
+        )
+
+        def status(result: dict) -> str:
+            return next(
+                candidate["status"]
+                for candidate in result["support_candidates"]
+                if "수출신용보증" in candidate["title"]
+            )
+
+        self.assertEqual("insufficient_information", status(before))
+        self.assertNotEqual("insufficient_information", status(after))
+
+    def test_what_was_answered_is_not_asked_for_again(self) -> None:
+        asked = self._analyze(
+            stated_facts={"financing.purpose": "trade_finance"}
+        )["required_inputs"]["facts"]
+
+        self.assertNotIn("financing.purpose", [item["field"] for item in asked])
+
+    def test_a_fact_the_catalog_does_not_know_is_refused(self) -> None:
+        """Named rather than dropped. A value that vanished here would leave
+        the rule reporting the fact as missing and the screen asking for it
+        again — the same silence, one layer down."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"company.favourite_colour": "red"})
+
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"company.ksure_exporter_grade": "Z"})
+
+    def test_a_fact_we_look_up_ourselves_is_refused_from_the_caller(self) -> None:
+        """§5.4 asks whether the buyer's country is restricted; K-SURE's policy
+        snapshot answers that. A caller saying so would be supplying our
+        judgement as if it were their fact."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"counterparty.country_restricted": "false"})
+
+
 class StatedProfileTests(unittest.TestCase):
     """The same two facts by hand, for a company that has not signed up."""
 
