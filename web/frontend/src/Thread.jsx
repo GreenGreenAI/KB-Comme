@@ -29,7 +29,7 @@ const DEFAULT_ORDER = [
 ];
 
 const WORKER_LABEL = {
-  exposure: "순노출·자금공백 산출",
+  exposure: "거래 순노출·자금공백 산출",
   source_verification: "공식 출처 검증 확인",
   market_scenario: "변동성 추정 — 최근 60영업일",
   hedge: "헤지비율 산출",
@@ -86,7 +86,7 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
 }
 
 const STEP_LABEL = {
-  exposure: "순노출·자금공백 산출",
+  exposure: "거래 순노출·자금공백 산출",
   source_verification: "공식 출처 검증 확인",
   market_scenario: "변동성 추정",
   support: "지원제도 규칙 판정",
@@ -932,7 +932,7 @@ function Calculation({ folded, children, net }) {
   if (!folded) return children;
   return (
     <details className="fold calc">
-      <summary>환노출 · 순노출 {won(net)} USD</summary>
+      <summary>환노출 · 거래 순노출 {won(net)} USD</summary>
       {children}
     </details>
   );
@@ -1060,7 +1060,12 @@ function Answer({ result, order, shown, arrive }) {
               nothing is repeated at full size. */}
           <dl className="figrow">
             <div>
-              <dt>순노출</dt>
+              {/* 「거래」가 붙는 이유는 이것이 세는 것이 거래뿐이기 때문입니다.
+                  명세 §5.1의 `E`는 보유 외화까지 더하지만, 이 값은
+                  Σ수취 − Σ지급이고 §5.1의 검증값(잔여노출)이 붙어 있는 쪽입니다.
+                  보유 외화를 넣은 사람에게 두 값이 갈리므로, 이름이 무엇을
+                  세었는지 말해야 합니다. */}
+              <dt>거래 순노출</dt>
               <dd>
                 {Number(net) > 0 ? "+" : ""}
                 {won(net)} <small>USD</small>
