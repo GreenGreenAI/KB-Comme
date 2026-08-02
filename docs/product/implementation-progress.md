@@ -77,4 +77,3 @@ last-reviewed: 2026-08-02
 3. `country_risk`와 `buyer_credit`의 provider skeleton
 4. 고객 증거가 확보된 결제수단부터 하나씩 확장
 5. 실제 KB 계약 확보 후에만 live adapter 구현
-
