@@ -18,14 +18,14 @@
 
 ## 요구환경
 
-| | 버전 | 확인된 환경 |
-|---|---|---|
-| Python | 3.11 이상 | 3.14.6 |
-| Node.js | 20 이상 | 24.14.0 |
+| | 버전 | 확인된 환경 | 필요한 때 |
+|---|---|---|---|
+| Python | 3.11 이상 | 3.14.6 | 항상 |
+| Node.js | 20 이상 | 24.14.0 | 화면을 **고칠 때만** |
 
 API 키는 **없어도 됩니다.** 아래 모든 명령이 키 없이 그대로 동작합니다.
 
-## 빠른 시작 — 화면까지 5분
+## 빠른 시작 — Python만 있으면 됩니다
 
 ```bash
 git clone <repository> tradeflow && cd tradeflow
@@ -33,18 +33,19 @@ git clone <repository> tradeflow && cd tradeflow
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[app]"
 
-cd web/frontend && npm ci && npx vite build && cd ../..
-
 PYTHONPATH=src python -m uvicorn tradeflow.web.app:app --port 8000
 ```
 
 브라우저에서 **http://localhost:8000** 을 엽니다. 서버 하나가 API와 화면을 함께
-서빙합니다 — 프런트를 빌드해 두면 별도 프로세스가 필요 없습니다.
+서빙합니다.
 
-프런트를 고치면서 볼 때는 빌드 대신 개발 서버를 씁니다.
+빌드된 화면(`web/frontend/dist`)은 저장소에 함께 들어 있습니다. Node를 설치하고
+번들을 만드는 단계 없이 바로 열리도록 한 것이고, 화면 소스를 고쳤을 때만 다시
+만들면 됩니다.
 
 ```bash
-cd web/frontend && npm run dev      # http://localhost:5173, /api 는 8000으로 프록시
+cd web/frontend && npm ci && npm run build    # 고친 뒤 dist를 다시 만듭니다
+cd web/frontend && npm run dev                # 고치면서 볼 때. localhost:5173
 ```
 
 ## 데모 입력

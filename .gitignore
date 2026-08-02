@@ -12,7 +12,18 @@ build/
 data/runtime/
 
 node_modules/
-web/frontend/dist/
+
+# `web/frontend/dist` is the exception: it is committed on purpose.
+#
+# The server serves it when it is there, so a reviewer with Python and no Node
+# gets the screen from `pip install` and one uvicorn command. Without it the
+# first thing a stranger meets is `npm ci` — a second toolchain, a network
+# fetch and a native-binary build, for a product whose own claim is that it
+# runs from committed snapshots.
+#
+# The cost is that it can fall behind `src/`. `npm run build` regenerates it,
+# and the README says so next to the command that would otherwise be needed.
+!web/frontend/dist/
 
 # Accounts are seeded locally, never committed — the file holds password hashes.
 data/accounts.db
