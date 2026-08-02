@@ -313,6 +313,62 @@ ACTION_NAME = {
 }
 
 
+def because(result: dict[str, Any]) -> list[str]:
+    """What each verdict rested on, by name.
+
+    「왜?」 is the one follow-up this product can answer well, because the answer
+    is already in the packet: every rule records the conditions it checked and
+    the sources it read them from. The screen kept them one fold away — which is
+    right when nobody asked, and wrong the moment somebody does.
+
+    The conditions are named here rather than counted. 「확인한 조건은
+    5가지입니다」 is what the first answer says, and repeating it in reply to
+    「왜?」 would be the product saying the same thing louder.
+
+    Only what reached a verdict. A rule still short of a fact has no reason yet
+    — it has a question, and `support()` already asks it.
+    """
+    said: list[str] = []
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
+        if candidate.get("status") == _SETTLED:
+            continue
+        met = [
+            check["description"]
+            for check in candidate.get("checks") or []
+            if check.get("status") == "passed"
+        ]
+        if not met:
+            continue
+        title = candidate.get("title") or ""
+        listed = _joined(met)
+        said.append(f"{title}{_particle(title, TOPIC)} {listed}을 확인했습니다.")
+
+    for finding in _one_per_rule(
+        (
+            f
+            for f in (result.get("risk_findings") or [])
+            if (f.get("outcome") or {}).get("kind") != "support_candidate"
+        ),
+        prefer=_louder,
+    ):
+        if not finding.get("engaged"):
+            continue
+        conditions = [
+            check["description"]
+            for check in finding.get("checks") or []
+            if check["description"] in SHARED_CONDITION
+        ]
+        if not conditions:
+            continue
+        listed = _joined(conditions)
+        said.append(f"신고 갈래가 열린 것은 {listed}이기 때문입니다.")
+        break
+
+    return said
+
+
 def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
     """The full lists, for the reader who wants them.
 

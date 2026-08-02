@@ -53,14 +53,18 @@ from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
 from tradeflow.tools.utterance_kind import (
     ABOUT,
+    FOLLOW_UP,
     GREETING,
     TRADE,
     TRADE_SLOTS,
+    asks_why,
+    continues,
     read_kind,
 )
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    DECLARABLE_STRUCTURE,
     financing_purpose,
     krw_amount,
     payment_structure,
@@ -319,6 +323,30 @@ class AnalyzeRequest(BaseModel):
     #: fields are the rules', and a second list of them in this module would be
     #: a copy that drifts the first time a rulepack changes.
     stated_facts: dict[str, str] | None = None
+    #: The §5.5 trade structure earlier turns established — 상계, 제3자 지급,
+    #: 상호계산. Held by the client and resent like the trade, because the
+    #: server reads it out of the sentence and a follow-up has no sentence to
+    #: read it from: 「상계로 처리합니다」 then 「왜?」 lost the netting and every
+    #: branch that hung on it.
+    declared_structure: dict[str, bool] | None = None
+
+    @field_validator("declared_structure")
+    @classmethod
+    def _known_structure_only(
+        cls, given: dict[str, bool] | None
+    ) -> dict[str, bool] | None:
+        """Only fields §5.5's reader itself produces.
+
+        This one is not checked against the fact catalog but against what
+        `payment_structure` can say, which is narrower — the catalog holds
+        fields no sentence declares, and a caller must not be able to assert
+        one here just because it exists."""
+        if not given:
+            return given
+        for field_name in given:
+            if field_name not in DECLARABLE_STRUCTURE:
+                raise ValueError(f"선언할 수 없는 거래 구조입니다: {field_name}")
+        return given
 
     @field_validator("stated_facts")
     @classmethod
@@ -568,6 +596,7 @@ def analyze_endpoint(
         utterance=request.utterance,
         intent=_subjects(request),
         answered_facts=request.stated_facts,
+        declared_structure=request.declared_structure,
     )
     result = build_response(analysis)
 
@@ -624,6 +653,31 @@ def analyze_endpoint(
         "sources": narration.sources(result),
         "detail": narration.detail(result),
     }
+    # 「왜?」 is the one follow-up this product answers well, because the answer
+    # was already in the packet: every rule records the conditions it checked.
+    # They sat in a fold, which is right until somebody asks — and then the
+    # thing they asked for is one click away and the answer is not on screen.
+    #
+    # Only when asked. Every judgement carrying its reasons in the first
+    # paragraph is the record this product spent a week turning into sentences.
+    result["because"] = (
+        narration.because(result) if asks_why(request.utterance) else []
+    )
+    # What the server ended up holding about the trade structure — this turn's
+    # sentence merged over what the client sent. Echoed so the next turn can
+    # send it back: the browser is where this conversation is kept, and it can
+    # only keep what it is told. The reading stays the server's; the client
+    # carries it and nothing more.
+    result["declared_structure"] = dict(analysis.declared_structure)
+    # Whether this turn was pointing at the last one rather than describing
+    # anything. The screen says 「그 문장에서는 거래 정보를 읽지 못했습니다」
+    # when a sentence changed nothing, which is right for a sentence that tried
+    # to say something and wrong for 「왜?」 — that one was not trying.
+    result["follows"] = bool(
+        request.utterance
+        and continues(request.utterance)
+        and not read_intent(request.utterance)
+    )
     # §4.2[9] again, on the judgements this time — but only to retell them.
     # The instruction asks it to invent nothing; `check_retold` is what makes
     # that a contract rather than a request. A refusal leaves the assembled
@@ -824,8 +878,21 @@ def _subject_text(request: AnalyzeRequest) -> str:
     This turn's own words when it has any; otherwise the question still on the
     table. Only the subject is taken from the older sentence — the slot reader
     never sees it, so a trade described once is not described again.
+
+    A follow-up counts as having none. 「왜?」 and 「그럼?」 are made of pointing
+    words and nothing else: read alone they name no subject, and the answer came
+    back in the default order as if the conversation had just started. What they
+    are about is what the last sentence was about.
+
+    Ordering only, here as everywhere. The older sentence reaches `read_intent`
+    and stops there.
     """
-    return request.utterance or request.asked_about or ""
+    said = request.utterance or ""
+    if not said.strip():
+        return request.asked_about or ""
+    if request.asked_about and continues(said) and not read_intent(said):
+        return request.asked_about
+    return said
 
 
 def _leads(subjects: tuple[str, ...]) -> bool:

@@ -53,7 +53,11 @@ from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.runtime import observing
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance import financing_purpose, payment_structure
+from tradeflow.tools.utterance import (
+    financing_purpose,
+    payment_structure,
+    withdrawn_structure,
+)
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -673,6 +677,9 @@ def analyze(
     #: What the company answered to the questions §5.4's rules raised. Read
     #: through the fact catalog — see `_answered_fact_assertions`.
     answered_facts: Mapping[str, str] | None = None,
+    #: The §5.5 structure earlier turns established, resent by the client the
+    #: way the trade is. Merged under this turn's sentence, never over it.
+    declared_structure: Mapping[str, bool] | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -693,7 +700,20 @@ def analyze(
     # merged mapping is for routing only — asserting a field from both would be
     # the same fact arriving twice, which the fact assembler refuses.
     derived_structure = derive_structure(program)
-    declared_structure = payment_structure(utterance)
+    # Read from this turn's sentence, and from what earlier turns established.
+    # The sentence alone loses it the moment the conversation moves on: a
+    # company that said 「상계로 처리합니다」 and then asked 「왜?」 had its
+    # netting declaration evaporate, and §5.5's branches closed with it. The
+    # trade survives because the client resends it; so must this.
+    #
+    # This turn's words win. A company correcting itself — 「상계는 아닙니다」 —
+    # must be able to, and the correction is in the sentence.
+    carried = {
+        field: value
+        for field, value in (declared_structure or {}).items()
+        if field not in withdrawn_structure(utterance)
+    }
+    declared_structure = {**carried, **payment_structure(utterance)}
     structure = {**derived_structure, **declared_structure}
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has

@@ -101,7 +101,13 @@ export default function App() {
   const [view, setView] = useState(restored?.view ?? "entry");
   const [turns, setTurns] = useState(restored?.turns ?? []);
   const [facts, setFacts] = useState(
-    restored?.facts ?? { cases: [{}], profile: {}, quote: null, stated: {} },
+    restored?.facts ?? {
+      cases: [{}],
+      profile: {},
+      quote: null,
+      stated: {},
+      structure: {},
+    },
   );
   const [result, setResult] = useState(restored?.result ?? null);
   // The question that was open when the page went away. Restored because it is
@@ -280,6 +286,7 @@ export default function App() {
       profile: nextProfile,
       quote: nextQuote,
       stated: nextStated,
+      structure: facts.structure ?? {},
     });
 
     // What the user said, as the thread should carry it. A typed sentence is
@@ -294,8 +301,14 @@ export default function App() {
     // resumes with every send. Only the reader scrolling during the arrival
     // turns it off again.
     stick.current = true;
-    // The last sentence the user actually wrote. Panel answers ride on it
-    // until they write another one.
+    // The last sentence the user actually wrote, kept as the conversation's
+    // standing subject. A follow-up rides on it — 「왜?」 and 「그럼?」 are made
+    // of pointing words and name nothing on their own.
+    //
+    // Sent with the new sentence rather than instead of it, and the server
+    // decides which to read: whether a sentence stands on its own is a reading
+    // of that sentence, and this side does not do readings.
+    const standing = subject.current;
     if (utterance) subject.current = utterance;
     if (spoken) say({ who: "user", text: spoken });
     setView("work");
@@ -310,12 +323,19 @@ export default function App() {
         // and no words, and the server was reading intent from that blank —
         // so the judgement the user had just supplied a fact for closed
         // itself as it arrived and the funnel started asking again.
-        ...(utterance ? {} : { asked_about: subject.current }),
+        ...(standing ? { asked_about: standing } : {}),
         ...nextProfile,
         as_of: today(),
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
         ...(Object.keys(nextStated).length > 0 ? { stated_facts: nextStated } : {}),
+        // What earlier sentences established about the trade structure. The
+        // server reads 상계 out of the sentence, and a follow-up has no
+        // sentence to read it from — so it travels with the trade, and this
+        // turn's words still win over it.
+        ...(Object.keys(facts.structure ?? {}).length > 0
+          ? { declared_structure: facts.structure }
+          : {}),
       });
       const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
@@ -349,7 +369,13 @@ export default function App() {
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
-        setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
+        setFacts((prev) => ({
+          ...prev,
+          cases: data.result.trade_timeline,
+          // The server is the authority on what has been declared: it read the
+          // sentence, and it merged this turn's reading over what we sent.
+          structure: data.result.declared_structure ?? prev.structure,
+        }));
         setResult(data.result);
         setPending(null);
         setWriting(true);

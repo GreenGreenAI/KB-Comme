@@ -262,8 +262,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   const hedgeIsNew = Boolean(hedge) && !previous?.hedge_analysis;
   // The sentence was sent, nothing was read out of it, and nothing moved.
   // Saying "다시 계산했습니다" here claims work that did not happen.
+  //
+  // Not for a follow-up. 「왜?」 states nothing and was not trying to; telling
+  // its author that no trade information could be read out of it answers a
+  // sentence they did not write.
   const unread =
     turn.spoken &&
+    !result.follows &&
     Object.keys(turn.heard ?? {}).length === 0 &&
     !first &&
     !tradesChanged &&
@@ -1029,6 +1034,16 @@ function Answer({ result, order, shown, arrive }) {
     {/* Said first, and outside the card. When the rewrite landed it already
         carries the figures sentence, so the one above is the same claim twice
         — three lines apart, in the same words. */}
+    {/* Asked for. These are the conditions each rule checked, and they live in
+        a fold until somebody says 「왜?」 — at which point the thing they asked
+        for being one click away is the same as not answering. First, because
+        the question was 「왜」 and this is the answer to it. */}
+    {(result.because ?? []).map((line) => (
+      <p className="told" key={line}>
+        {line}
+      </p>
+    ))}
+
     {spoken.map((line) => (
       <p className="told" key={line}>
         {line}
