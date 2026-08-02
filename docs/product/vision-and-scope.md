@@ -2,13 +2,14 @@
 status: accepted
 owner: shared
 reviewers: knowledge-domain, platform-runtime
-last-reviewed: 2026-07-26
+last-reviewed: 2026-08-02
 ---
 
 # 제품 비전과 범위
 
-TradeFlow는 중소·중견기업과 은행 RM이 수출입 거래의 현금흐름, 환노출, 금융지원
-가능성과 필요한 근거를 하나의 거래 단위에서 검토하도록 돕는 의사결정 지원 기반이다.
+TradeFlow는 환위험과 결제일 자금 공백을 함께 분석하고, 결과를 바꾸는 질문부터 금융기관
+상담 준비까지 연결하는 수출입금융 의사결정 AI다. 중소·중견기업과 은행 RM이 수출입 거래의
+현금흐름, 환노출, 금융지원 가능성과 필요한 근거를 하나의 거래 단위에서 검토하도록 돕는다.
 
 ## 현재 목표
 
