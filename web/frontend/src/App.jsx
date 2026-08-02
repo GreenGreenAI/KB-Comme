@@ -5,7 +5,7 @@ import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
 import Notices from "./Notices.jsx";
-import { analyze, signOut, whoami } from "./api.js";
+import { analyze, signOut, whoami, SIGN_IN_OPEN } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -84,6 +84,15 @@ function stepsFor(result) {
 /** The conversation lives in the client. The server is stateless, so whatever
  *  the user has told us is resent each turn — the client already has to render
  *  it all, which makes it the natural owner. */
+/** 로그인 스위치는 `api.js`에 있습니다 — 화면에서 버튼을 치우는 것과 요청에
+ *  자격 증명을 싣지 않는 것이 함께 움직여야 하고, 둘 중 하나만 꺼지면 화면과
+ *  서버가 서로 다른 사용자를 봅니다.
+ *
+ *  지우지 않고 스위치로 둔 것은 계정이 사라진 게 아니라 아직 쓰지 않는
+ *  것이기 때문입니다. `Login.jsx`와 서버의 세션·계정 저장소는 그대로입니다.
+ *
+ *  §5.4가 읽는 기업 사실은 그동안 계정이 아니라 화면이 직접 묻습니다 —
+ *  기업규모와 신용 상태를 되묻는 그 경로가 원래 비로그인 방문자의 것입니다. */
 export default function App() {
   const [view, setView] = useState("entry");
   const [turns, setTurns] = useState([]);
@@ -118,6 +127,7 @@ export default function App() {
   // Ask once on load. A session that survived a refresh should not have to be
   // proved again by typing.
   useEffect(() => {
+    if (!SIGN_IN_OPEN) return;
     let live = true;
     whoami()
       .then((found) => live && found && setAccount(found))
@@ -353,6 +363,7 @@ export default function App() {
           setView("entry");
         }}
         account={account}
+        signInOpen={SIGN_IN_OPEN}
         signingIn={showSignIn}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={async () => {
@@ -373,7 +384,7 @@ export default function App() {
           setNotices((prev) => prev.filter((notice) => notice.id !== id))
         }
       />
-      {showSignIn && !account ? (
+      {SIGN_IN_OPEN && showSignIn && !account ? (
         <Login
           onSignIn={(who) => {
             setAccount(who);
