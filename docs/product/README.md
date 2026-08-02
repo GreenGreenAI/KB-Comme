@@ -27,6 +27,7 @@ last-reviewed: 2026-07-26
 - [답을 바꾸는 조건을 보여주는 TradeFlow 차별화 전략](decision-delta-differentiation.md)
 - [통합 제품·아키텍처 기획서](product-architecture-plan.md)
 - [대회 제출 기획안 — 결과를 바꾸는 수출입금융 의사결정 AI](competition-proposal.md)
+- [KB AI Challenge 제출 기획안 작성 계획](kb-ai-challenge-submission-plan.md)
 
 통합 기획서는 초기 설계의 원문 기준 문서다. 새 결정은 각 주제 문서와 ADR에 먼저
 반영하고, 통합 기획서는 분기 리뷰에서 동기화한다.
