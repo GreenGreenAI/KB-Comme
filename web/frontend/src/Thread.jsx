@@ -60,7 +60,13 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
           <AgentTurn
             key={index}
             turn={turn}
-            live={index === turns.length - 1 && !busy}
+            live={
+              // `restored` marks a turn that came back from storage rather
+              // than from the server. It has been read once already, and
+              // replaying the write-out on a refresh would make the page look
+              // like it was answering a question nobody asked.
+              index === turns.length - 1 && !busy && !turn.restored
+            }
             onArrived={onArrived}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             previous={

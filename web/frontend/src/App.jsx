@@ -6,6 +6,7 @@ import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
 import Notices from "./Notices.jsx";
 import { analyze, signOut, whoami, SIGN_IN_OPEN } from "./api.js";
+import { load as loadSession, save as saveSession } from "./session.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -94,11 +95,19 @@ function stepsFor(result) {
  *  §5.4가 읽는 기업 사실은 그동안 계정이 아니라 화면이 직접 묻습니다 —
  *  기업규모와 신용 상태를 되묻는 그 경로가 원래 비로그인 방문자의 것입니다. */
 export default function App() {
-  const [view, setView] = useState("entry");
-  const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null, stated: {} });
-  const [result, setResult] = useState(null);
-  const [pending, setPending] = useState(null);
+  // What the last page load left behind, read once before the first render so
+  // the screen never paints an empty thread it is about to replace.
+  const [restored] = useState(loadSession);
+  const [view, setView] = useState(restored?.view ?? "entry");
+  const [turns, setTurns] = useState(restored?.turns ?? []);
+  const [facts, setFacts] = useState(
+    restored?.facts ?? { cases: [{}], profile: {}, quote: null, stated: {} },
+  );
+  const [result, setResult] = useState(restored?.result ?? null);
+  // The question that was open when the page went away. Restored because it is
+  // half of an exchange: dropping it would leave the answer above it asking
+  // for something with nowhere to answer it.
+  const [pending, setPending] = useState(restored?.pending ?? null);
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
   const [writing, setWriting] = useState(false);
@@ -123,6 +132,18 @@ export default function App() {
       prev.some((notice) => notice.text === text) ? prev : [...prev, { id, text }],
     );
   }
+
+  // Written after each change rather than on unload: `beforeunload` does not
+  // fire reliably on mobile, and a tab that is killed rather than closed would
+  // take the whole conversation with it.
+  //
+  // Only what the user told us and what came back. Not `busy`, `thinking` or
+  // `writing` — those describe a request that is no longer in flight, and
+  // restoring them would open the page onto a spinner for work nobody is
+  // doing.
+  useEffect(() => {
+    saveSession({ view, turns, facts, result, pending });
+  }, [view, turns, facts, result, pending]);
 
   // Ask once on load. A session that survived a refresh should not have to be
   // proved again by typing.
