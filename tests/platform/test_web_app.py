@@ -321,9 +321,11 @@ class AskingForTests(unittest.TestCase):
 class AnonymousSupportTests(unittest.TestCase):
     """§5.4's rules read company facts and an anonymous caller has none, so a
     question about 지원제도 is answered by naming two facts rather than a
-    product. Signing in is where those facts already live."""
+    product. One request, not two: the sentence asks for the facts and stops
+    there. Adding 「로그인하시면 계정 사실로 판정합니다」 asked for the same two
+    facts a second way, and what the reader had to do went from one to two."""
 
-    def test_it_says_where_the_facts_already_live(self) -> None:
+    def test_it_asks_for_the_two_facts_and_only_that(self) -> None:
         body = analyze_endpoint(
             AnalyzeRequest(
                 cases=[],
@@ -334,7 +336,7 @@ class AnonymousSupportTests(unittest.TestCase):
         pointer = body["result"]["pointer"]
 
         self.assertIn("기업규모와 신용 상태", pointer)
-        self.assertIn("로그인", pointer)
+        self.assertNotIn("로그인", pointer)
 
 
 class StatedProfileTests(unittest.TestCase):

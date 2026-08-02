@@ -516,17 +516,12 @@ def analyze_endpoint(
     result["cannot"] = (
         CANNOT.get(next(iter(subjects), ""), "") if meaning else ""
     )
+    # 로그인 안내는 붙이지 않습니다. 기업규모와 신용 상태를 물은 문장 뒤에
+    # 「로그인하시면 계정 사실로 판정합니다」를 덧붙이면, 방금 요청한 두 사실을
+    # 다시 요청하는 두 번째 요청이 되어 읽는 사람이 무엇을 해야 하는지가
+    # 하나에서 둘로 늘어납니다. 계정이 그 사실을 들고 있다는 것은 로그인 화면이
+    # 말할 일이지 판정 결과가 말할 일이 아닙니다.
     result["pointer"] = pointer(result, intent=subjects)
-    if account is None:
-        # §5.4's rules read company facts, and an anonymous caller has none —
-        # so a question about 지원제도 is answered by naming two facts rather
-        # than a product. Signing in is where those facts already live, and
-        # not saying so leaves the reader to supply by hand what the account
-        # would have carried. Only the web layer knows there is no session;
-        # routing must not learn about sessions to say this.
-        blocked = (result.get("workers") or {}).get("skipped") or {}
-        if "support" in blocked and result["pointer"] == blocked["support"]:
-            result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
     # The judgements as sentences. Written here rather than by §4.2[9], which
     # may not utter a verdict, and rendered as prose rather than as folds —
     # a record is something you audit, not something you read.
