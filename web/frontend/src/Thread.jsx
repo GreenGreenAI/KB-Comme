@@ -289,16 +289,6 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // §4.2[2] already read. Absent — an older turn, or a trade description with
   // no question in it — keeps the sentence first.
   const leads = result.lead === "pointer";
-  // The server decides whether this turn asks for the hedge inputs. It used
-  // to be "the hedge worker is blocked", which is true on almost every turn —
-  // so a question about 신고의무 was answered with a demand for the operating
-  // profit §5.3 wanted. The reason still shows in the hedge fold either way.
-  const asksProfit =
-    !hedge && hedgeInputs.length > 0 && result.asking_for === "hedge";
-  // §4.2[2]'s own reason. The fold below shows it too, collapsed; this is the
-  // same sentence where a reader with the input bar open will actually see it.
-  const skippedHedge = result.workers?.skipped?.hedge;
-
   // The order the turn arrives in, as a gap before each unit: the sentence a
   // word at a time, then the blocks below it.
   //
@@ -313,11 +303,11 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     // own step — 규칙이 확인한 것, 손익 비교, 건너뛴 이유, 근거, 재현 입력 used
     // to share one, so the answer was written a word at a time and everything
     // under it landed on a single frame.
-    const blocks = 1 + (result.market_scenario ? 1 : 0) + tail + (asksProfit ? 1 : 0);
+    const blocks = 1 + (result.market_scenario ? 1 : 0) + tail;
     for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
     return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, asksProfit, tail]);
+  }, [words, tail]);
 
   const [shown, settled] = useCascade(timeline, live);
   // One switch for the whole turn: while it is arriving the parts carry the
@@ -404,16 +394,10 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
       )}
 
-      {/* Asked once, and only in words. The fields live in the bar above the
-          composer so they stay reachable after the thread scrolls on.
-
-          The words come from §4.2[2], which already decided why the worker did
-          not run. This paragraph used to carry its own, which asked for both
-          values whichever one was missing — and would have kept asking after
-          the routing condition changed, because nothing here is tied to it. */}
-      {asksProfit && shown >= timeline.length && skippedHedge && (
-        <p className={arrive.trim()}>{skippedHedge}</p>
-      )}
+      {/* §4.2[2]의 이유는 여기 다시 쓰지 않습니다. 바로 아래 요청 패널이
+          같은 값을 묻고 있고, 그 위에 「기준 영업이익을 알려주시면 …」이 서면
+          같은 요청이 연달아 두 번입니다 — 오늘 로그인 안내에서 걷어낸 것과
+          같은 모양입니다. 이유는 패널의 부제로 들어갔습니다. */}
     </div>
   );
 }

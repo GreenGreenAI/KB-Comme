@@ -32,6 +32,9 @@ export default function AskBar({
   quoteInputs,
   profileInputs,
   factInputs,
+  //: 지금 열려 있는 요청이 무엇을 여는지. 서버가 워커를 건너뛰며 남긴 이유를
+  //: 그대로 받습니다 — 화면이 다시 쓰면 두 문장이 갈라집니다.
+  askNote,
   onSlot,
   onPlace,
 }) {
@@ -84,7 +87,7 @@ export default function AskBar({
   // never asked again — this is the same two by hand, so a company that has
   // not signed up gets a judgement instead of a list of what it would need.
   if (profileInputs?.length > 0) {
-    return <ProfileAsk key="profile" onSlot={onSlot} />;
+    return <ProfileAsk key="profile" note={askNote} onSlot={onSlot} />;
   }
 
   // The facts a rule that already ran is still short of. Nothing here decides
@@ -104,7 +107,11 @@ export default function AskBar({
 
   if (requiredInputs?.length > 0) {
     return (
-      <Ask key="profit" label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
+      <Ask
+        key="profit"
+        label="기준 영업이익과 지키려는 손익 하한을 알려주세요"
+        note={askNote}
+      >
         <ProfitFields onSlot={onSlot} />
       </Ask>
     );
@@ -112,7 +119,11 @@ export default function AskBar({
 
   if (quoteInputs?.length > 0) {
     return (
-      <Ask key="quote" label="거래 은행이 제시한 선물환 조건을 알려주세요">
+      <Ask
+        key="quote"
+        label="거래 은행이 제시한 선물환 조건을 알려주세요"
+        note={askNote}
+      >
         <QuoteFields onSlot={onSlot} />
       </Ask>
     );
@@ -479,12 +490,12 @@ function FactField({ kind, onSubmit }) {
   );
 }
 
-function ProfileAsk({ onSlot }) {
+function ProfileAsk({ note, onSlot }) {
   const [size, setSize] = useState(null);
 
   if (size === null) {
     return (
-      <Ask label="기업규모가 어떻게 되나요?">
+      <Ask label="기업규모가 어떻게 되나요?" note={note}>
         <ChoiceList options={SIZE_OPTIONS} onPick={(value) => setSize(value)} />
       </Ask>
     );

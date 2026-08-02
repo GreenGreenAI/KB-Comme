@@ -497,6 +497,14 @@ export default function App() {
                       ? result?.required_inputs?.profile ?? []
                       : []
                   }
+                  askNote={
+                    // 왜 묻는지. §4.2[2]가 워커를 건너뛰며 남긴 이유 그대로이고,
+                    // 지금 열려 있는 패널의 것만 가져옵니다 — 패널이 무엇을
+                    // 묻는지는 라벨이 말하고, 답하면 무엇이 열리는지는 이것이
+                    // 말합니다. 전에는 같은 문장이 패널 위에 따로 서 있어서
+                    // 같은 요청이 연달아 두 번이었습니다.
+                    result?.workers?.skipped?.[result?.asking_for] ?? null
+                  }
                   factInputs={
                     // Not gated on `asking_for`: these exist because a rule
                     // that already ran named them, and each one says which
