@@ -1053,9 +1053,14 @@ function Answer({ result, order, shown, arrive }) {
                 </dd>
               </div>
             )}
+            {/* 「자연헤지」가 아니라 「기간 상쇄」입니다. 이 값은 전체 기간의
+                유입과 유출이 겹치는 몫(`economic_offset`)이고, 결제일까지
+                맞물리는지는 보지 않습니다. 헤지라고 부르면 덮였다는 뜻이 되고,
+                8월 지급을 12월 수취가 덮어 준다고 읽힙니다 — 그 8월에는 돈이
+                없습니다. */}
             {Number(natural) > 0 && (
               <div>
-                <dt>자연헤지</dt>
+                <dt>기간 상쇄</dt>
                 <dd>
                   {won(natural)} <small>USD</small>
                 </dd>
@@ -1068,13 +1073,32 @@ function Answer({ result, order, shown, arrive }) {
               {Number(gap) === 0 && "결제일에 모자라는 외화는 없습니다."}
               {Number(gap) === 0 && Number(natural) === 0 && " "}
               {Number(natural) === 0 &&
-                "같은 시기에 상계될 반대 방향 거래도 없습니다."}
+                "상쇄될 반대 방향 거래도 없습니다."}
             </p>
           )}
 
-          {Number(natural) > 0 && Number(matched) === 0 && (
+          {/* 상쇄가 있으면 그중 실제로 덮이는 몫을 늘 말합니다. 전에는 0일
+              때만 각주가 붙어서, 6만이 절반만 덮이는 경우에는 화면에 6만만
+              남았습니다 — 둘 중 하나만 보이면 읽는 사람은 그것을 덮인 금액으로
+              읽습니다. */}
+          {Number(natural) > 0 && (
             <p className="answer-note">
-              상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
+              {Number(matched) === 0 ? (
+                <>
+                  상계될 것처럼 보이지만 결제일이 어긋나{" "}
+                  <b>실제로 덮이는 금액은 0</b>입니다.
+                </>
+              ) : Number(matched) < Number(natural) ? (
+                <>
+                  이 중 결제일이 맞물려 <b>실제로 덮이는 금액은 {won(matched)} USD</b>
+                  입니다. 나머지는 시점이 어긋나 자금으로는 덮이지 않습니다.
+                </>
+              ) : (
+                <>
+                  결제일까지 맞물리므로 <b>{won(matched)} USD</b>는 자금으로도
+                  덮입니다.
+                </>
+              )}
             </p>
           )}
 

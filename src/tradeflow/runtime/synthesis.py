@@ -309,7 +309,7 @@ INSTRUCTION = """\
 - 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
 - 무엇을 하라고 지시하지 마세요. 판단은 아래 규칙 결과가 합니다.
 - 목록을 옮겨 적지 마세요. 가장 중요한 수치 두세 개만 고르세요.
-- 값이 0인 항목은 말하지 마세요. 자연헤지 0, 자금 공백 0을 나열하면 문장이
+- 값이 0인 항목은 말하지 마세요. 기간 상쇄 0, 자금 공백 0을 나열하면 문장이
   카드의 복사본이 됩니다.
 - 두 문장 이내. 짧을수록 좋습니다.
 """
@@ -532,8 +532,12 @@ def figures(result: dict[str, Any]) -> list[str]:
     cash = result.get("cashflow_analysis") or {}
     for key, label in (
         ("net_exposure", "순노출"),
-        ("natural_hedge_amount", "자연헤지 금액"),
-        ("maturity_matched_amount", "만기가 겹치는 금액"),
+        # 「자연헤지」로 건네면 모델이 그 말을 그대로 문장에 씁니다. 이 값은
+        # 전 구간 상쇄일 뿐 결제일까지 맞물리는지를 보지 않으므로, 덮였다는
+        # 뜻을 가진 이름으로 부르면 모델은 검사를 통과하면서 사실이 아닌 것을
+        # 말하게 됩니다 — 수치는 도구의 것이고 그 뜻도 도구의 것입니다.
+        ("natural_hedge_amount", "기간 상쇄 금액(만기 무관)"),
+        ("maturity_matched_amount", "그중 실제로 덮이는 금액"),
     ):
         for entry in cash.get(key) or []:
             written.append(f"{label}: {money(entry.get('amount'))} {entry.get('currency')}")
