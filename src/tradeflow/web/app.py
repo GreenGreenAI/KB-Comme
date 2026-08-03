@@ -329,6 +329,14 @@ class AnalyzeRequest(BaseModel):
     #: read it from: 「상계로 처리합니다」 then 「왜?」 lost the netting and every
     #: branch that hung on it.
     declared_structure: dict[str, bool] | None = None
+    #: 이번 턴에 답한 것이 무엇인지. 나머지 값은 매 턴 누적되어 통째로 오므로
+    #: 서버 혼자서는 무엇이 새로 온 것인지 알 수 없고, 그래서 답할 때마다
+    #: 무엇이 닫혔는지 말해 줄 수가 없었습니다. 화면은 알고 있습니다 — 방금
+    #: 무엇을 눌렀는지가 곧 이 값입니다.
+    #:
+    #: 판정에는 쓰이지 않습니다. 이 값이 틀리거나 없으면 문장 한 줄이 빠질
+    #: 뿐이고, 규칙은 언제나 누적된 사실 전부를 봅니다.
+    just_answered: list[str] | None = None
 
     @field_validator("declared_structure")
     @classmethod
@@ -681,6 +689,11 @@ def analyze_endpoint(
     # 없었습니다 — 문장이 온전히 이해된 회사만 이해됐다는 표시를 못 받고,
     # 답변이 아직 필요한 것으로 시작했습니다.
     result["read_back"] = narration.read_back(heard)
+    # 답할 때마다 무엇이 닫혔는지. 규칙은 매 턴 조건을 지나보내고 있었는데
+    # 화면은 그중 아무것도 말하지 않아서, 답하는 일이 계속 늘어나는 양식을
+    # 채우는 것처럼 느껴졌습니다 — 실제로는 한 번의 답이 이름 있는 제도의
+    # 이름 있는 조건을 닫고 있었습니다.
+    result["closed"] = narration.closed(result, request.just_answered)
     # 자금 공백이 언제 열리고 며칠인지. 금액만 있는 공백은 걱정이고, 날짜가
     # 붙은 공백은 할 일이다 — 8월 25일에 6만 달러가 있느냐 없느냐는 숫자만
     # 보아서는 알 수 없다. 응답에 이미 있던 타임라인에서 두 번 찾으면 나온다.
