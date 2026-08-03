@@ -443,7 +443,11 @@ function FactAsk({ ask, onSlot }) {
   const answer = (value, label) =>
     onSlot(
       ask.answer_as === "case"
-        ? { case: { [ask.field]: value } }
+        ? // `case_id` names the trade the judgement is about. The screen does
+          // not work it out — it is the rule's own subject, and guessing it
+          // from the order the trades were typed in is how the answer used to
+          // land on the wrong one.
+          { case: { [ask.field]: value }, caseId: ask.case_id }
         : { facts: { [ask.field]: value } },
       label ?? value,
     );

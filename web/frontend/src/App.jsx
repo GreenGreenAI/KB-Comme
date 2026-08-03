@@ -306,8 +306,24 @@ export default function App() {
   async function send(utterance, patch = {}, placement = null, said = null) {
     // A slot answer always completes the trade currently being described,
     // which is the last one.
+    // Onto the trade the question was about, and only onto the last one when
+    // nothing said otherwise. A slot answer volunteered mid-intake completes
+    // the trade being described, which is the last; a slot the rules asked for
+    // belongs to the judgement's own trade, and the server names it.
+    //
+    // Without that, a company with an export and an import answered 「언제
+    // 선적하시나요」 onto the import, the export's payment term still did not
+    // derive, and the same question came back every turn after that.
     const nextCases = patch.case
-      ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
+      ? facts.cases.map((trade, index) =>
+          patch.caseId
+            ? trade.case_id === patch.caseId
+              ? { ...trade, ...patch.case }
+              : trade
+            : index === facts.cases.length - 1
+              ? { ...trade, ...patch.case }
+              : trade,
+        )
       : facts.cases;
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
     // The quote is remembered like everything else the user has told us: the

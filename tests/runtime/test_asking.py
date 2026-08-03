@@ -51,6 +51,73 @@ class AskableTests(unittest.TestCase):
             "trade.payment_term_days", [item["field"] for item in asked]
         )
 
+    def test_a_derived_question_names_the_trade_it_is_about(self) -> None:
+        """The judgement names its own subject. Without it the screen wrote
+        every slot answer onto the last trade described — so a company with an
+        export and an import answered 「언제 선적하시나요」 onto the import, the
+        export's term still did not derive, and the same question came back on
+        every turn after that."""
+        result = {
+            "support_candidates": [
+                {
+                    "title": "K-SURE 단기수출보험(선적후·개별)",
+                    "subject_id": "EXPORT-001",
+                    "status": "insufficient_information",
+                    "missing_fields": ["trade.payment_term_days"],
+                }
+            ]
+        }
+
+        asked = asking.questions(result)[0]
+
+        self.assertEqual("EXPORT-001", asked["case_id"])
+        self.assertEqual("expected_shipment_date", asked["field"])
+
+    def test_a_slot_already_given_is_not_asked_for_again(self) -> None:
+        """A derived fact can legitimately fail to derive: a payment landing
+        before shipment is a prepayment, and no term comes out of it. Without
+        this floor the rule keeps reporting the fact missing and the screen
+        keeps asking someone who has already answered."""
+        result = {
+            "support_candidates": [
+                {
+                    "title": "K-SURE 단기수출보험(선적후·개별)",
+                    "subject_id": "EXPORT-001",
+                    "status": "insufficient_information",
+                    "missing_fields": ["trade.payment_term_days"],
+                }
+            ]
+        }
+
+        self.assertEqual(
+            [],
+            asking.questions(
+                result, supplied=frozenset({("EXPORT-001", "expected_shipment_date")})
+            ),
+        )
+
+    def test_another_trades_answer_does_not_count(self) -> None:
+        self.assertEqual(
+            1,
+            len(
+                asking.questions(
+                    {
+                        "support_candidates": [
+                            {
+                                "title": "단기수출보험",
+                                "subject_id": "EXPORT-001",
+                                "status": "insufficient_information",
+                                "missing_fields": ["trade.payment_term_days"],
+                            }
+                        ]
+                    },
+                    supplied=frozenset(
+                        {("IMPORT-002", "expected_shipment_date")}
+                    ),
+                )
+            ),
+        )
+
     def test_a_judgement_that_reached_a_verdict_is_not_asked_about(self) -> None:
         settled = {
             "support_candidates": [

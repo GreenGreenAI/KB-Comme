@@ -795,7 +795,17 @@ def analyze_endpoint(
     # still watch two of three products come back 「아직 판정하지 못했습니다」
     # listing conditions nobody was going to be asked about.
     result["required_inputs"]["facts"] = asking.questions(
-        result, already=request.stated_facts
+        result,
+        already=request.stated_facts,
+        # What each trade already carries. Without it a question the company
+        # has answered comes back every turn, because a slot that was filled
+        # does not always produce the fact the rule wanted.
+        supplied=frozenset(
+            (case.case_id, slot)
+            for case in reading.program.cases
+            for slot in asking.slots_of()
+            if case.attributes.get(slot)
+        ),
     )
     return {
         "status": "ready",

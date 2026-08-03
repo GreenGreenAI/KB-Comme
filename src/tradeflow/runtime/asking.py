@@ -128,8 +128,25 @@ def _options(field: str, entry: dict[str, Any]) -> list[dict[str, str]]:
     return []
 
 
+def slots_of(fields: Any = None) -> frozenset[str]:
+    """The trade slots the derived questions ask for.
+
+    Read from `DERIVED` so the caller that collects what a trade already has
+    does not keep its own copy of the list.
+    """
+    return frozenset(entry["slot"] for entry in DERIVED.values())
+
+
 def questions(
-    result: dict[str, Any], *, already: dict[str, str] | None = None
+    result: dict[str, Any],
+    *,
+    already: dict[str, str] | None = None,
+    #: `(case_id, slot)` for every trade detail the company has already given.
+    #: A derived fact can legitimately fail to derive — a payment that lands
+    #: before shipment is a prepayment, and no term comes out of it — and
+    #: without this the rule keeps reporting the fact missing and the screen
+    #: keeps asking the same question of someone who has already answered it.
+    supplied: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[dict[str, Any]]:
     """One question per fact still blocking a judgement, in rule order.
 
@@ -157,9 +174,21 @@ def questions(
                 # keeps saying so, which is the correct answer rather than a
                 # gap: a term computed from a shipment date nobody gave would
                 # be manufactured out of a blank field.
+                #
+                # And it goes back to *this* trade. The judgement names the one
+                # it is about, and the screen was writing every slot answer onto
+                # the last trade described — so a company with an export and an
+                # import answered 「언제 선적하시나요」 onto the import, the
+                # export's term still did not derive, and the same question came
+                # back on every turn after that.
+                slot = DERIVED[field]["slot"]
+                case_id = candidate.get("subject_id")
+                if (case_id, slot) in supplied:
+                    continue
                 asked[field] = {
-                    "field": DERIVED[field]["slot"],
+                    "field": slot,
                     "answer_as": "case",
+                    "case_id": case_id,
                     "question": DERIVED[field]["question"],
                     "opens": opens,
                     "kind": DERIVED[field]["kind"],
