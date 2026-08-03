@@ -197,6 +197,41 @@ def derive_structure(program: TradeProgram) -> dict[str, int]:
     return derived
 
 
+def derive_payment_terms(program: TradeProgram) -> dict[str, int]:
+    """How long after shipment the money arrives, from the same two dates.
+
+    §5.4's 단기수출보험(선적후·개별) asks whether the payment term is within two
+    years. The company already said when it ships and when it is paid, and the
+    term is the subtraction between them — asking for it would be the product
+    failing to read its own input back, and the two answers could then
+    disagree on screen.
+
+    The mirror of `derive_structure`, which keeps the other sign: a payment
+    landing *before* shipment is a prepayment and §5.5's question; one landing
+    after is a term and §5.4's. Neither is invented from a blank shipment date.
+
+    The longest term decides — it is the one that can cross the limit, and a
+    shorter trade on the same program cannot make it safe.
+    """
+    terms: dict[str, int] = {}
+    for case in program.cases:
+        shipment = case.attributes.get("expected_shipment_date")
+        if not shipment:
+            continue
+        if isinstance(shipment, str):
+            try:
+                shipment = date.fromisoformat(shipment)
+            except ValueError:
+                continue
+        days = (case.expected_payment_date - shipment).days
+        if days <= 0:
+            continue
+        terms["trade.payment_term_days"] = max(
+            terms.get("trade.payment_term_days", 0), days
+        )
+    return terms
+
+
 def _net_exposure(exposures: tuple[CurrencyExposure, ...]) -> Decimal:
     return sum(
         (item.trade_net_exposure for item in exposures), start=Decimal("0")
@@ -303,6 +338,12 @@ def _hedge(
     The remaining conditions are §4.2[5]'s stop conditions rather than routing,
     but they belong in the same list: the reader wants one place that says why
     a section is empty.
+
+    §1.1's promise is carried in the words, not left to the screen. The screen
+    had its own sentence saying the same thing, which asked for both values
+    whichever one was missing and would have gone on asking after a condition
+    here changed — a claim that lives in two places goes stale in the one
+    further from the rule.
     """
     if _net_exposure(exposures) == 0:
         return WorkerDecision(
@@ -315,14 +356,16 @@ def _hedge(
         return WorkerDecision(
             HEDGE,
             False,
-            "기준 영업이익을 입력하면 헤지비율을 계산할 수 있습니다",
+            "기준 영업이익을 알려주시면 헤지비율을 계산합니다. "
+            "입력하지 않은 값을 임의로 만들지 않습니다",
             ("baseline_profit",),
         )
     if profit_floor is None:
         return WorkerDecision(
             HEDGE,
             False,
-            "목표 손익 하한을 입력하면 헤지비율을 계산할 수 있습니다",
+            "회사가 지키려는 목표 손익 하한을 알려주시면 헤지비율을 "
+            "계산합니다. 입력하지 않은 하한을 임의로 만들지 않습니다",
             ("profit_floor",),
         )
     if not has_usable_measure:

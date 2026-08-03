@@ -230,6 +230,35 @@ class HedgeRoutingTests(unittest.TestCase):
 
         self.assertEqual(("profit_floor",), plan.requires())
 
+    def test_the_reason_carries_the_promise_not_to_invent_the_value(self) -> None:
+        """§1.1 in the words §4.2[2] hands to the screen.
+
+        The screen had its own sentence saying this, so the claim lived in two
+        places and only one of them was tied to the rule. A condition change
+        here would have left the screen asking for a value it no longer needed,
+        and promising something about it.
+        """
+        self.assertIn(
+            "임의로 만들지 않습니다",
+            _plan(has_usable_measure=True).skipped()[HEDGE],
+        )
+        self.assertIn(
+            "임의로 만들지 않습니다",
+            _plan(
+                baseline_profit=Decimal("6000000"), has_usable_measure=True
+            ).skipped()[HEDGE],
+        )
+
+    def test_it_asks_only_for_the_value_that_is_missing(self) -> None:
+        """The screen's own sentence asked for both whichever one was absent,
+        so a company that had entered its baseline was told to enter it again."""
+        with_baseline = _plan(
+            baseline_profit=Decimal("6000000"), has_usable_measure=True
+        ).skipped()[HEDGE]
+
+        self.assertIn("목표 손익 하한", with_baseline)
+        self.assertNotIn("기준 영업이익", with_baseline)
+
     def test_no_verified_measure_is_not_an_input_the_user_can_supply(self) -> None:
         """Nothing typed into the screen makes a priced product exist."""
         plan = _plan(

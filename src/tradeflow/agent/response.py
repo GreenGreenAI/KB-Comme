@@ -16,12 +16,30 @@ import json
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.agent.routing import COMPLIANCE, DECLARED_STRUCTURE_FIELDS
 from tradeflow.knowledge.compliance_declarations import DECLARABLE_GATEWAY_FIELDS
 from tradeflow.runtime.analysis_service import decision_packet_document
+from tradeflow.runtime.sources import cite
+
+
+_RULE_SUFFIXES = (" 후보", " 검토")
+
+
+def _product_name(title: str) -> str:
+    for suffix in _RULE_SUFFIXES:
+        if title.endswith(suffix):
+            return title[: -len(suffix)]
+    return title
+
+
+def _engaged(decision: dict[str, Any], declared: Mapping[str, bool]) -> bool:
+    if not declared:
+        return False
+    reasons = " ".join(decision.get("reasons") or ())
+    return any(f"{field}=" in reasons for field in declared)
 
 def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
@@ -61,6 +79,7 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
 
 def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
     packet = analysis.decision_packet
+    declared = analysis.declared_structure
     if packet is None:
         return {
             "decision_packet": None,
@@ -81,12 +100,14 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
         projected = {
             "subject_id": decision["subject_id"],
             "rule_id": decision["rule_id"],
-            "title": decision["title"],
+            "title": _product_name(decision["title"]),
             "status": decision["status"],
             "matched": decision["matched"],
             "reasons": decision["reasons"],
             "missing_fields": decision["missing_fields"],
             "source_ids": decision["source_ids"],
+            "sources": cite(decision["source_ids"]),
+            "checks": decision.get("checks") or [],
             "outcome": outcome,
         }
         if outcome.get("kind") == "support_candidate":
@@ -96,6 +117,7 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
                 else support_candidates
             ).append(projected)
         elif decision["matched"] is not False:
+            projected["engaged"] = _engaged(decision, declared)
             risk_findings.append(projected)
 
     actions = document["actions"]
@@ -443,6 +465,19 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
                 "amount": str(case.amount),
                 "expected_payment_date": case.expected_payment_date.isoformat(),
                 "payment_method": case.payment_method.value,
+                **{
+                    field: (
+                        value.isoformat() if hasattr(value, "isoformat") else value
+                    )
+                    for field, value in case.attributes.items()
+                    if field
+                    in {
+                        "counterparty_id",
+                        "expected_shipment_date",
+                        "advance_payment_ratio",
+                        "contract_date",
+                    }
+                },
             }
             for case in analysis.program.cases
         ],

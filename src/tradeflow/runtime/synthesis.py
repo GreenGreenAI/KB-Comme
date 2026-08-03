@@ -43,6 +43,7 @@ snapshotted and dated. This fetches no facts. It is handed them.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -67,9 +68,17 @@ from typing import Any
 DEFAULT_MODEL = "solar-pro2-251215"
 DEFAULT_BASE_URL = "https://api.upstage.ai/v1"
 
-#: Deterministic decoding. Prose that changes between two identical analyses
-#: would make the answer look recalculated when nothing moved.
-TEMPERATURE = 0.0
+#: Sampled, but seeded — see `write`. Deterministic decoding was chosen so that
+#: two identical analyses would not produce different prose, which would make
+#: the answer look recalculated when nothing moved. It bought that at a price
+#: nobody measured: with one worked example in the prompt and no sampling, the
+#: model returned that example's sentence with the numbers swapped, for every
+#: question. 지원제도를 물어도, 신고의무를 물어도, 같은 문장이었다.
+#:
+#: A seed keeps the property without the cost. The same analysis and the same
+#: question decode the same way; a different trade or a different question
+#: decode differently, because the seed is derived from both.
+TEMPERATURE = 0.6
 
 #: How long an answer may wait on prose. Synthesis decorates figures that are
 #: already decided, so a slow model must cost the sentence and not the answer —
@@ -116,6 +125,142 @@ SCHEMA = {
     },
 }
 
+def _seed(material: str | None) -> int:
+    """A stable integer for one analysis-and-question.
+
+    Hashed rather than hand-picked so it cannot accidentally be the same for
+    two different answers, and stable across processes — `hash()` is salted per
+    interpreter and would give a different sentence on every restart.
+    """
+    if not material:
+        return 0
+    return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:8], 16)
+
+
+SUMMARY_INSTRUCTION = """\
+아래는 규칙 엔진이 내린 판정을 그대로 옮겨 적은 문장들입니다. 당신의 일은
+이것을 사람이 읽기 좋은 두세 문장으로 다시 쓰는 것뿐입니다.
+
+절대 규칙 — 없는 것을 만들지 마세요:
+- 아래에 없는 제도·기관·부서·서류 이름을 쓰지 마세요. 하나도 만들 수 없습니다.
+- 아래에 없는 숫자를 쓰지 마세요. 더하거나 세지 마세요.
+- 아래에 없는 판단을 하지 마세요. 「자격이 됩니다」, 「신청하시면 됩니다」,
+  「신고 대상이 아닙니다」처럼 판정을 새로 내릴 수 없습니다.
+- 연결해 드리겠다거나 알아봐 드리겠다고 하지 마세요. 그럴 수 없습니다.
+
+그리고 아래에 「그대로 옮길 것」으로 표시된 문장이 있으면, 한 글자도 바꾸지 말고
+그대로 포함하세요. 줄이거나 다른 말로 바꾸면 쓰지 않습니다.
+
+당신이 할 수 있는 것:
+- 같은 말을 두 번 하는 문장을 합치기
+- 순서를 읽기 좋게 바꾸기
+- 딱딱한 표현을 자연스럽게 다듬기
+
+길이 규칙 — 이것을 어기면 쓰지 않습니다:
+- 세 문장을 넘기지 마세요.
+- 한 문장에 제도 하나만 담으세요. 「A는 …이며, B는 …」처럼 잇지 마세요.
+- 한 문장을 45자 안에서 끝내세요.
+
+- 나쁨: "환변동보험은 5가지 조건 충족 시 가능하나 공식 확인이 필요하며,
+  단기수출보험은 4가지 정보 제공 시 판정 가능합니다."
+  → 두 제도를 한 문장에 이었고, 길어졌습니다.
+- 좋음: "환변동보험은 조건을 충족합니다. 다만 공식 확인이 필요합니다.
+  나머지 두 제도는 몇 가지를 더 알려주시면 판정합니다."
+"""
+
+SUMMARY_SCHEMA = {
+    "name": "summary",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"sentence": {"type": "string"}},
+        "required": ["sentence"],
+        "additionalProperties": False,
+    },
+}
+
+#: Words that name something in the world — a body, a product, a form. A new
+#: one in the output is an invention, and an invented institution is the most
+#: expensive thing this product could say.
+_NAME_TAIL = re.compile(
+    r"[가-힣A-Za-z0-9()·\-]*?"
+    r"(?:보험|보증|은행|공사|공단|기금|기관|센터|부서|약정서|신청서|계획서|확인서|청약서|현황표|조사표)"
+)
+
+#: Latin runs — K-SURE, ECOS, USD. A model that writes KOTRA where the input
+#: said K-SURE has named a body that had no part in the judgement.
+_LATIN = re.compile(r"[A-Za-z][A-Za-z\-]{1,}")
+
+
+def names(text: str) -> set[str]:
+    """Everything in the text that names an institution, product or form."""
+    return {match.group() for match in _NAME_TAIL.finditer(text)} | {
+        match.group() for match in _LATIN.finditer(text)
+    }
+
+
+def _bare(title: str) -> str:
+    """A title with the parts a rewrite legitimately drops removed.
+
+    「K-SURE 수출신용보증(선적전)」 and 「수출신용보증」 are the same product, and
+    a rewrite that shortens the name has not omitted the judgement. What must
+    survive is the product, not its full registered form.
+    """
+    return re.sub(r"[\s()·]|K-SURE|선적전|선적후|개별|일반형|수출|일반", "", title)
+
+
+def check_retold(
+    sentence: str,
+    source: str,
+    subjects: tuple[str, ...] = (),
+    required: tuple[str, ...] = (),
+) -> str:
+    """Verify a rewrite added nothing to what it was given.
+
+    The user's constraint — combine the results, invent nothing — is a request
+    when it is written in a prompt and a contract when it is checked here. The
+    same model was asked not to instruct and answered 「담당 부서로 연결해
+    드리겠습니다」, and asked not to calculate and answered 「1억 3,610만
+    5,000원」. Both were caught by a check, neither by the instruction.
+
+    Three things must not be new: a number, a name, or a verdict. Everything
+    else — order, joining, phrasing — is what the rewrite is for.
+    """
+    known = set(digit_runs(source))
+    invented = [run for run in digit_runs(sentence) if run not in known]
+    if invented:
+        return "판정에 없던 수치: " + ", ".join(invented)
+
+    unknown = sorted(name for name in names(sentence) if name not in names(source))
+    if unknown:
+        return "판정에 없던 이름: " + ", ".join(unknown)
+
+    # Verdict words are allowed only where the judgement already used them:
+    # 「지원제도」 is in the source, so repeating it is reporting, not deciding.
+    added = [word for word in verdicts(sentence) if word not in source]
+    if added:
+        return "판정에 없던 판단: " + ", ".join(added)
+
+    # And nothing may be dropped. Invention is the loud failure and this is the
+    # quiet one: a rewrite that omits 「수출신용보증은 아직 판정하지 못했습니다」
+    # is shorter, reads well, and leaves the company believing two products
+    # were never considered. §5.5 is built on 「아직 모름」 never being allowed
+    # to read as 「없음」, and a summary that drops it does exactly that.
+    said = _bare(sentence)
+    dropped = [title for title in subjects if _bare(title) and _bare(title) not in said]
+    if dropped:
+        return "재작성에서 빠진 판정: " + ", ".join(dropped)
+
+    # Some sentences may not be paraphrased at all. §5.5 rests on 「신고가
+    # 불필요하다는 판정은 아닙니다」, and a rewrite that shortens it away is
+    # shorter, reads better, and leaves the company believing it has no filing
+    # duty. A subject can be renamed; this cannot be reworded.
+    missing = [phrase for phrase in required if phrase not in sentence]
+    if missing:
+        return "그대로 옮겨야 하는 문장이 빠졌습니다: " + " / ".join(missing)
+    return ""
+
+
 INSTRUCTION = """\
 당신은 수출입 기업의 환위험 분석 결과를 설명합니다. 계산은 이미 끝났습니다.
 당신의 일은 아래 「확정된 수치」를 사람의 문장으로 옮기는 것뿐입니다.
@@ -130,29 +275,41 @@ INSTRUCTION = """\
 금지되는 문장의 예 (전부 위반):
 - "100,000 USD는 1466.3원 기준 146,630,000원입니다" → 곱셈을 했습니다
 - "약 10만 달러의 노출이 있습니다" → 근사했습니다
-- "순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
+- "거래 순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
 - "3억 원 규모 수출이시군요" → 사용자가 쓴 숫자를 되받았습니다. 분석은 확정된
   수치로 돌았으니 목록의 값을 쓰세요
 
 사용자가 걱정하는 것에 답하세요. 수치를 다시 읽어주는 것이 아니라,
 그 수치가 그 사람에게 무엇을 뜻하는지 말하는 것입니다.
 
+아래 예시의 숫자는 예시일 뿐입니다. 이번 분석의 수치가 아니므로 절대
+그대로 쓰지 마세요 — 문장의 모양만 보고, 값은 「확정된 수치」에서 가져오세요.
+
 수출 기업이 "환율이 떨어질까 걱정"이라고 물었을 때:
-- 나쁨: "순노출은 100,000 USD이고 그때 덜 받는 원화는 10,525,000 KRW입니다."
+- 나쁨: "거래 순노출은 87,300 USD이고 그때 덜 받는 원화는 6,214,000 KRW입니다."
   → 카드에 있는 것을 다시 읽었습니다.
-- 좋음: "받을 100,000 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1361.05까지
-  가면 그때 손에 들어오는 원화가 10,525,000 KRW 적어집니다."
+- 좋음: "받을 87,300 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1288.42까지
+  가면 그때 손에 들어오는 원화가 6,214,000 KRW 적어집니다."
 
 수입 기업이 "환율이 오를까 걱정, 지금 환전할까요"라고 물었을 때:
-- 나쁨: "순노출은 -100,000 USD입니다."  → 부호를 읽어줬을 뿐입니다.
-- 좋음: "보내야 할 100,000 USD가 아직 환전되지 않았습니다. 불리한 쪽인
-  1560.48까지 가면 결제에 9,418,000 KRW가 더 듭니다."
+- 나쁨: "거래 순노출은 -87,300 USD입니다."  → 부호를 읽어줬을 뿐입니다.
+- 좋음: "보내야 할 87,300 USD가 아직 환전되지 않았습니다. 불리한 쪽인
+  1611.75까지 가면 결제에 5,903,000 KRW가 더 듭니다."
+
+사용자가 물은 주제에 맞춰 말하되, 지원제도·신고의무를 물었다면 그 주제를
+문장에서 아예 언급하지 마세요. 그 판정은 규칙이 내리고 화면의 다른 곳에서
+이미 보여드립니다. 당신이 할 일은 그 거래가 지금 어떤 상태인지 한 문장으로
+말하는 것뿐입니다.
+
+- 나쁨: "지원제도 관련해서는 담당 부서로 연결해 드리겠습니다."
+  → 판정을 대신했고, 할 수 없는 약속을 했습니다.
+- 좋음: "받을 87,300 USD가 결제일까지 열려 있습니다." → 거래 상태만 말했습니다.
 
 그 밖에:
 - 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
 - 무엇을 하라고 지시하지 마세요. 판단은 아래 규칙 결과가 합니다.
 - 목록을 옮겨 적지 마세요. 가장 중요한 수치 두세 개만 고르세요.
-- 값이 0인 항목은 말하지 마세요. 자연헤지 0, 자금 공백 0을 나열하면 문장이
+- 값이 0인 항목은 말하지 마세요. 기간 상쇄 0, 자금 공백 0을 나열하면 문장이
   카드의 복사본이 됩니다.
 - 두 문장 이내. 짧을수록 좋습니다.
 """
@@ -290,6 +447,40 @@ def check(sentence: str, figures: list[str]) -> str:
 _CLAUSE_BREAK = re.compile(r"(?:이며|이고|하고|지만|,(?!\d)|\.(?!\d)|[!?;。])")
 
 
+#: Which way the money moves, in the words a sentence uses for each direction.
+#:
+#: The figure list already says it — 「그때 덜 받는 원화」 — and the model wrote
+#: the opposite anyway: a company with +40,000 USD coming in was told it had
+#: 「보내야 할 40,000 USD」 and that a falling rate would cost 4,108,400 KRW
+#: 「더」. Every number was quoted exactly, so `check` and `check_bound` both
+#: passed it. They compare atoms; this is a relation between them, and the
+#: relation is what a reader takes away.
+#:
+#: Cheap to catch because the direction is decided upstream: §5.2 picks the end
+#: the trade suffers at and reports which way the cash moves. The sentence only
+#: has to be checked for words that claim the other one.
+_DIRECTION_WORDS = {
+    # Receipts fall. Nothing is being paid, so words about paying are wrong.
+    "decrease": ("더 듭니다", "더 든다", "더 내", "더 지급", "보내야", "지급해야"),
+    # Payments rise. Nothing is being received, so words about receiving are.
+    "increase": ("덜 받", "적게 받", "수취액이 줄", "받는 금액이 줄"),
+}
+
+
+def check_direction(sentence: str, direction: str | None) -> str:
+    """Empty unless the sentence claims the money moves the other way.
+
+    Fail-closed like the rest: an offending sentence is refused and the screen
+    writes the assembled one, which was built from the same figures by code
+    that cannot get the direction wrong.
+    """
+    for wrong in _DIRECTION_WORDS.get(str(direction), ()):
+        if wrong in sentence:
+            said = "덜 받는" if direction == "decrease" else "더 내는"
+            return f"현금 방향이 뒤집혔습니다 — 이 거래는 {said} 쪽입니다"
+    return ""
+
+
 def _label_anchors(label: str) -> tuple[str, ...]:
     shortened = re.sub(r"^(?:그때|현재)\s+", "", label).strip()
     shortened = re.sub(r"\s+(?:금액|차이)$", "", shortened).strip()
@@ -301,36 +492,50 @@ def _number_clauses(text: str) -> list[str]:
 
 
 def check_bound(sentence: str, figures: list[str]) -> str:
-    """Verify that quoted numbers keep both their units and their labels.
+    """Verify that no number is attached to another figure's name.
 
-    A digit-and-unit check alone accepts a semantic swap such as calling a KRW
-    cashflow difference the net exposure. The deterministic label preceding
-    each figure is therefore part of the quotation contract as well.
+    The hazard this guards is a semantic swap: calling a KRW cashflow
+    difference the net exposure. A digits-and-units check alone accepts that,
+    because both are numbers wearing the right unit.
+
+    It used to guard it by requiring the label. Every number had to appear
+    beside the word we labelled it with, which is a different and much stronger
+    demand — it made 「받을 100,000 USD가 결제일까지 열려 있습니다」 a rejection,
+    a sentence that is correct, natural, and says nothing we did not compute.
+    Every synthesised sentence failed it, so the screen fell back to its own
+    fixed prose and every answer opened the same way. The check meant to keep
+    the model honest had quietly removed it from the product.
+
+    So the demand is inverted. The model may name a figure however Korean
+    names it; what it may not do is put our word for one figure beside another
+    figure's number. Whether it said our word is not the question — whether it
+    said the wrong one is.
     """
     broken = check(sentence, figures)
     if broken:
         return broken
 
-    bindings: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
+    #: Full labels only. The shortened forms overlap — 「현재 환율」 shortens to
+    #: 「환율」, which then appears inside any sentence mentioning the adverse
+    #: rate, and a shared word is not a claim about which figure is meant.
+    labelled: list[tuple[str, str, tuple[str, ...]]] = []
     for figure in figures:
         label, separator, _ = figure.partition(":")
-        if not separator:
-            continue
-        for run in digit_runs(figure):
-            bindings.setdefault(run, []).append((figure, _label_anchors(label)))
+        if separator and label.strip():
+            labelled.append((figure, label.strip(), digit_runs(figure)))
 
     referenced: set[str] = set()
     for clause in _number_clauses(sentence):
-        for run in digit_runs(clause):
-            candidates = bindings.get(run, [])
-            matched = [
-                figure
-                for figure, anchors in candidates
-                if any(anchor in clause for anchor in anchors)
-            ]
-            if not matched:
-                return f"의미가 바뀌거나 라벨이 누락된 수치: {run}"
-            referenced.update(matched)
+        runs = digit_runs(clause)
+        for figure, label, figure_runs in labelled:
+            if label not in clause:
+                continue
+            stolen = [run for run in runs if run not in figure_runs]
+            if stolen:
+                return f"「{label}」에 붙지 않는 수치: {', '.join(stolen)}"
+        for figure, _, figure_runs in labelled:
+            if any(run in figure_runs for run in runs):
+                referenced.add(figure)
 
     unused = [figure for figure in figures if figure not in referenced]
     if unused:
@@ -360,9 +565,16 @@ def figures(result: dict[str, Any]) -> list[str]:
 
     cash = result.get("cashflow_analysis") or {}
     for key, label in (
-        ("net_exposure", "순노출"),
-        ("natural_hedge_amount", "자연헤지 금액"),
-        ("maturity_matched_amount", "만기가 겹치는 금액"),
+        # 「거래」를 붙여 건넵니다. 계약의 필드 이름은 `net_exposure` 그대로지만,
+        # 이 값이 세는 것은 거래뿐입니다 — 명세 §5.1의 `E`와 달리 보유 외화가
+        # 들어 있지 않습니다. 이름 없이 건네면 모델이 더 넓은 뜻으로 씁니다.
+        ("net_exposure", "거래 순노출"),
+        # 「자연헤지」로 건네면 모델이 그 말을 그대로 문장에 씁니다. 이 값은
+        # 전 구간 상쇄일 뿐 결제일까지 맞물리는지를 보지 않으므로, 덮였다는
+        # 뜻을 가진 이름으로 부르면 모델은 검사를 통과하면서 사실이 아닌 것을
+        # 말하게 됩니다 — 수치는 도구의 것이고 그 뜻도 도구의 것입니다.
+        ("natural_hedge_amount", "기간 상쇄 금액(만기 무관)"),
+        ("maturity_matched_amount", "그중 실제로 덮이는 금액"),
     ):
         for entry in cash.get(key) or []:
             written.append(f"{label}: {money(entry.get('amount'))} {entry.get('currency')}")
@@ -405,14 +617,47 @@ def figures(result: dict[str, Any]) -> list[str]:
     return written
 
 
-def deterministic_summary(result: dict[str, Any]) -> str:
-    """A non-empty, non-judgemental answer assembled from tool output.
+#: Which worker answers which subject. Only the ones that can be skipped are
+#: here — exposure and the band run whenever a trade exists.
+WORKER_FOR_SUBJECT = {"support": "support", "compliance": "compliance", "hedge": "hedge"}
 
-    LLM synthesis is optional decoration. API clients must still receive an
-    answer when the key is absent, the network fails, or the generated prose
-    is rejected. Values are copied from the response contract and only given
-    thousands separators; no eligibility verdict or new arithmetic is added.
+
+def _named_support(result: dict[str, Any], skipped: dict[str, Any]) -> str:
+    """The support verdict as a sentence naming the products, or nothing.
+
+    Written here rather than by §4.2[9] for the reason the whole pointer is:
+    a model that can say 「환변동보험이 있습니다」 can also say 「자격이
+    됩니다」, and the division rests on it not being able to. So this names
+    what the rules named and counts what they could not decide — it does not
+    conclude anything they did not.
     """
+    if "support" in skipped:
+        return ""
+    candidates = result.get("support_candidates") or []
+    settled = [
+        item["title"]
+        for item in candidates
+        if item.get("status") != "insufficient_information" and item.get("title")
+    ]
+    short = len(candidates) - len(settled)
+    if not settled:
+        return ""
+    said = f"{' · '.join(settled)}{_particle(settled[-1])} 조건을 충족합니다."
+    if short:
+        said += f" {short}개는 몇 가지를 더 알려주시면 판정합니다."
+    return said
+
+
+def _particle(word: str) -> str:
+    """은 or 는, chosen the way Korean chooses it. The product named last
+    changes with the trade, so `은(는)` would be visible on most answers."""
+    last = ord(word.strip()[-1])
+    syllable = 0xAC00 <= last <= 0xD7A3
+    return "은" if syllable and (last - 0xAC00) % 28 else "는"
+
+
+def deterministic_summary(result: dict[str, Any]) -> str:
+    """Assemble a non-empty fallback solely from deterministic tool output."""
 
     def money(value: Any) -> str:
         try:
@@ -427,8 +672,7 @@ def deterministic_summary(result: dict[str, Any]) -> str:
     if gaps:
         gap = gaps[0]
         parts.append(
-            f"최대 자금 공백은 {money(gap.get('peak_amount'))} "
-            f"{gap.get('currency')}입니다."
+            f"최대 자금 공백은 {money(gap.get('peak_amount'))} {gap.get('currency')}입니다."
         )
     if exposures:
         exposure = exposures[0]
@@ -436,12 +680,10 @@ def deterministic_summary(result: dict[str, Any]) -> str:
             f"결제일을 반영한 순노출은 {money(exposure.get('amount'))} "
             f"{exposure.get('currency')}입니다."
         )
-    if not parts:
-        return "분석 결과를 아래 항목별로 확인해 주세요."
-    return " ".join(parts)
+    return " ".join(parts) or "분석 결과를 아래 항목별로 확인해 주세요."
 
 
-def pointer(result: dict[str, Any]) -> str:
+def pointer(result: dict[str, Any], *, intent: tuple[str, ...] = ()) -> str:
     """What else this answer holds, counted rather than judged.
 
     §4.2[9]'s sentence is given `figures()` and nothing else, so it cannot
@@ -457,6 +699,24 @@ def pointer(result: dict[str, Any]) -> str:
     about exchange rates and left the judgement folded away underneath.
     """
     skipped = (result.get("workers") or {}).get("skipped") or {}
+
+    # A worker that did not run has no counts, so the pointer had nothing to
+    # say and the answer opened on the exchange rate instead — to a company
+    # that had asked about 지원제도 and whose reason for not getting one was
+    # sitting in a fold two blocks down. The reason is the answer here: it is
+    # the shortest true statement about the thing they asked about.
+    for subject in intent:
+        reason = skipped.get(WORKER_FOR_SUBJECT.get(subject, ""))
+        if reason:
+            return reason
+
+    # A count is our bookkeeping, not an answer. 「받을 수 있는 지원제도가
+    # 있나요」 is answered by a name — and when the subject asked about has one,
+    # that name is the first thing the reader should meet.
+    named = _named_support(result, skipped) if "support" in intent else ""
+    if named:
+        return named
+
     parts: list[str] = []
 
     candidates = result.get("support_candidates") or []
@@ -567,7 +827,23 @@ class Synthesizer:
             self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return self._client
 
-    def write(self, figures: list[str], *, question: str | None = None) -> Synthesis:
+    def write(
+        self,
+        figures: list[str],
+        *,
+        question: str | None = None,
+        subjects: list[str] | None = None,
+        #: What makes this answer this answer. Passed through to the sampler so
+        #: decoding is reproducible per analysis rather than globally frozen:
+        #: re-running the same analysis re-reads the same sentence, and the next
+        #: trade does not inherit it. §6.2 asks that an analysis reproduce, not
+        #: that every analysis read alike.
+        seed: str | None = None,
+        #: Which way this trade's cash moves at the adverse rate, as §5.2
+        #: decided it. Checked rather than trusted to the prompt — the figure
+        #: list already names the direction and the model wrote the opposite.
+        direction: str | None = None,
+    ) -> Synthesis:
         """One sentence about these figures, or a refusal with its reason."""
         if not self.available:
             return Synthesis("", False, "UPSTAGE_API_KEY가 없습니다")
@@ -584,9 +860,19 @@ class Synthesizer:
         # `ask_for` keeps the digits. Asking may repeat what the user said;
         # answering must report what the tools produced.
         asked = f"\n\n사용자가 물은 내용: {redact(question)}" if question else ""
+        # The subject §4.2[2] read, by name. Without it the model saw the same
+        # eight figures whatever had been asked and, at temperature 0, wrote
+        # the same sentence every time — three different questions, one answer.
+        topic = (
+            "\n\n사용자가 물은 주제: "
+            + " · ".join(SUBJECT_NAME.get(s, s) for s in subjects)
+            if subjects
+            else ""
+        )
         prompt = (
             f"{INSTRUCTION}\n확정된 수치:\n"
             + "\n".join(f"- {figure}" for figure in figures)
+            + topic
             + asked
         )
         schema = json.loads(json.dumps(SCHEMA))
@@ -597,6 +883,7 @@ class Synthesizer:
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_schema", "json_schema": schema},
                 temperature=TEMPERATURE,
+                seed=_seed(seed),
                 max_tokens=400,
                 timeout=TIMEOUT_S,
             )
@@ -634,6 +921,62 @@ class Synthesizer:
             return Synthesis(sentence, False, "사용 수치 목록이 허용된 값과 일치하지 않습니다")
 
         broken = check_bound(sentence, used)
+        if broken:
+            return Synthesis(sentence, False, broken)
+        reversed_flow = check_direction(sentence, direction)
+        if reversed_flow:
+            return Synthesis(sentence, False, reversed_flow)
+        return Synthesis(sentence, True)
+
+    def retell(
+        self,
+        lines: list[str],
+        *,
+        subjects: tuple[str, ...] = (),
+        required: tuple[str, ...] = (),
+        seed: str | None = None,
+    ) -> Synthesis:
+        """The judgements, rewritten shorter — or the judgements, unchanged.
+
+        The rewrite may reorder, join and smooth. It may not introduce a
+        number, a name or a verdict, and `check_retold` decides that rather
+        than the instruction that asked for it. A refusal costs the phrasing
+        and nothing else: the caller keeps the assembled sentences, which are
+        already true and already complete.
+        """
+        source = " ".join(lines)
+        if not self.available or not source.strip():
+            return Synthesis("", False, "재작성할 판정이 없습니다")
+        try:
+            completion = self._open().chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"{SUMMARY_INSTRUCTION}\n판정:\n"
+                        + "\n".join(f"- {line}" for line in lines)
+                        + (
+                            "\n\n그대로 옮길 것:\n"
+                            + "\n".join(f"- {phrase}" for phrase in required)
+                            if required
+                            else ""
+                        ),
+                    }
+                ],
+                response_format={"type": "json_schema", "json_schema": SUMMARY_SCHEMA},
+                temperature=TEMPERATURE,
+                seed=_seed(seed),
+                max_tokens=400,
+                timeout=TIMEOUT_S,
+            )
+            written = json.loads(completion.choices[0].message.content or "{}")
+        except Exception as failure:  # noqa: BLE001 — any failure is the same failure
+            return Synthesis("", False, f"재작성 호출 실패: {type(failure).__name__}")
+
+        sentence = str(written.get("sentence", "")).strip()
+        if not sentence:
+            return Synthesis("", False, "빈 문장")
+        broken = check_retold(sentence, source, subjects, required)
         if broken:
             return Synthesis(sentence, False, broken)
         return Synthesis(sentence, True)

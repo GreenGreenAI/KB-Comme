@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,11 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import Account
 from tradeflow.runtime.documents import inspect_and_extract
+from tradeflow.domain.snapshot_file import (
+    SnapshotNotFoundError,
+    latest_snapshot_path,
+    read_snapshot,
+)
 
 from .capabilities import BY_NAME
 
@@ -54,7 +59,17 @@ DEMO = Account(
     },
 )
 
-AS_OF = date(2026, 7, 28)
+def _market_instant() -> datetime:
+    """Pin replay time to the first instant the selected snapshot was knowable."""
+    try:
+        ref, _ = read_snapshot(latest_snapshot_path(SNAPSHOT_ROOT, "ECOS_USD_KRW"))
+    except (SnapshotNotFoundError, OSError, ValueError):
+        return datetime(2026, 7, 28, 12, tzinfo=UTC)
+    return max(ref.observed_at, ref.retrieved_at).astimezone(UTC)
+
+
+MARKET_AS_OF = _market_instant()
+AS_OF = MARKET_AS_OF.date()
 LC_DRAFT = b"""Letter of Credit
 L/C No: LC-2026-001
 Issue Date: 2026-07-20
@@ -90,7 +105,7 @@ def _measures(scenario: dict[str, Any], program: Any) -> tuple[Any, ...]:
     quote = scenario.get("forward_quote")
     if not quote:
         return ()
-    evaluated_at = datetime.combine(AS_OF, time(0, 0), tzinfo=UTC)
+    evaluated_at = MARKET_AS_OF
     net = sum(
         case.amount if case.direction is TradeDirection.EXPORT else -case.amount
         for case in program.cases
@@ -108,7 +123,9 @@ def _measures(scenario: dict[str, Any], program: Any) -> tuple[Any, ...]:
         cost_rate=Decimal(quote["cost_rate"]),
         settlement_date=max(case.expected_payment_date for case in program.cases),
         quoted_at=evaluated_at,
-        valid_until=datetime.fromisoformat(quote["valid_until"] + "T23:59:00+00:00"),
+        valid_until=datetime.fromisoformat(
+            quote.get("valid_until", AS_OF.isoformat()) + "T23:59:00+00:00"
+        ),
         confirmed=bool(quote["confirmed"]),
     )
     return UserQuoteHedgeAvailabilityService(
@@ -140,7 +157,7 @@ def run(scenario: dict[str, Any]) -> Outcome:
                 # clock makes their market snapshot and confirmed quote expire
                 # as the calendar advances, lowering the score without a code
                 # regression.
-                as_of=datetime.combine(AS_OF, time(0, 0), tzinfo=UTC),
+                as_of=MARKET_AS_OF,
             )
         )
         if scenario["id"] == "S3":

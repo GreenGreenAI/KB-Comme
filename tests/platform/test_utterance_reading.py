@@ -5,6 +5,7 @@ from decimal import Decimal
 from tradeflow.tools.utterance import (
     financing_purpose,
     krw_amount,
+    payment_structure,
     read_utterance,
     split_trade_candidates,
 )
@@ -215,6 +216,37 @@ class MultipleTradeTests(unittest.TestCase):
                 as_of=AS_OF,
             ),
         )
+
+
+class PaymentStructureTests(unittest.TestCase):
+    def test_it_reads_declared_payment_structures(self) -> None:
+        self.assertEqual(
+            {"payment.is_netting": True},
+            payment_structure("8월 25일 수입 6만 달러를 상계로 처리합니다"),
+        )
+        self.assertEqual(
+            {"payment.is_third_party": True},
+            payment_structure("제3자에게 대신 지급합니다"),
+        )
+        self.assertEqual(
+            {"payment.uses_mutual_account": True},
+            payment_structure("상호계산 계정을 쓰고 있어요"),
+        )
+
+    def test_negation_does_not_become_a_positive_declaration(self) -> None:
+        for said in ("상계는 아닙니다", "상계로 처리하지 않습니다", "상계 없습니다"):
+            with self.subTest(said=said):
+                self.assertEqual({}, payment_structure(said))
+
+    def test_mutual_account_is_kept_apart_from_netting(self) -> None:
+        self.assertEqual(
+            {"payment.uses_mutual_account": True},
+            payment_structure("상계가 아니라 상호계산입니다"),
+        )
+
+    def test_plain_trade_declares_nothing(self) -> None:
+        self.assertEqual({}, payment_structure("10월 24일 수출대금 10만 달러를 받습니다"))
+        self.assertEqual({}, payment_structure(None))
 
     def test_sentence_boundary_keeps_leading_date_and_amount_with_trade(self) -> None:
         candidates = split_trade_candidates(

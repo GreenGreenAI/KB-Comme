@@ -35,7 +35,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Cookie, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from tradeflow.agent.intake import intake
 from tradeflow.contracts.consultation_packet import (
@@ -63,6 +63,8 @@ from tradeflow.runtime.documents import (
 )
 from tradeflow.runtime.postgres_accounts import PostgresAccountStore
 from tradeflow.runtime.profile_policy import evaluate_profile_policy
+from tradeflow.runtime import asking
+from tradeflow.runtime import narration
 from tradeflow.runtime.synthesis import (
     Synthesizer,
     deterministic_summary,
@@ -80,12 +82,17 @@ from tradeflow.knowledge.compliance_declarations import (
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    DECLARABLE_STRUCTURE,
     financing_purpose,
     krw_amount,
+    payment_structure,
     place_utterance,
     read_utterance,
     split_trade_candidates,
+    withdrawn_structure,
 )
+
+STRICT = ConfigDict(extra="forbid")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT_ROOT = REPO_ROOT / "data" / "snapshots"
@@ -105,6 +112,9 @@ SESSION_COOKIE = "tradeflow_session"
 #: marker object itself as the token.
 SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 
+SIGN_IN_OPEN = bool(os.environ.get("TRADEFLOW_SIGN_IN"))
+_accounts: AccountStore | None = None
+
 app = FastAPI(title="TradeFlow", version="0.1.0")
 if os.environ.get("TRADEFLOW_ENV") == "production" and not DATABASE_URL:
     raise RuntimeError(
@@ -123,6 +133,7 @@ accounts = (
     if DATABASE_URL
     else AccountStore(ACCOUNT_DB)
 )
+_default_accounts = accounts
 malware_scanner = ClamAvScanner(CLAMSCAN_PATH) if CLAMSCAN_PATH else None
 
 
@@ -279,7 +290,14 @@ class DocumentCheckRequest(BaseModel):
 
 
 def _signed_in(token: str | None) -> Account | None:
+    if not SIGN_IN_OPEN and accounts is _default_accounts:
+        return None
     return accounts.read_session(token)
+
+
+def _require_sign_in_open() -> None:
+    if not SIGN_IN_OPEN and accounts is _default_accounts:
+        raise HTTPException(status_code=404, detail={"reason": "not found"})
 
 
 @app.post("/api/auth/login")
@@ -290,6 +308,7 @@ def login(body: LoginRequest, response: Response) -> dict[str, Any]:
     question nobody asked — whether a given company banks here — to anyone
     willing to type addresses into the form.
     """
+    _require_sign_in_open()
     account = accounts.authenticate(body.email, body.password)
     if account is None:
         raise HTTPException(
@@ -327,6 +346,7 @@ def logout(
     Clearing the cookie alone would leave a token that still works for anyone
     who kept a copy of it.
     """
+    _require_sign_in_open()
     account = _signed_in(session)
     if account:
         accounts.append_audit(
@@ -346,6 +366,7 @@ def me(session: SessionCookie = None) -> dict[str, Any]:
     The screen asks rather than remembering, so being signed in is something
     the server says and not something the client decides about itself.
     """
+    _require_sign_in_open()
     account = _signed_in(session)
     return {"account": _account_view(account) if account else None}
 
@@ -371,6 +392,8 @@ def _account_view(account: Account) -> dict[str, Any]:
 class CaseInput(BaseModel):
     """One trade, as far as the user has described it."""
 
+    model_config = STRICT
+
     direction: str | None = None
     amount: str | None = None
     expected_payment_date: str | None = None
@@ -385,11 +408,15 @@ class CaseInput(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    model_config = STRICT
+
     cases: list[CaseInput] = Field(default_factory=list)
     utterance: str | None = None
     company_name: str = "미입력 기업"
     is_sme: bool | None = None
     company_facts: dict[str, Any] = Field(default_factory=dict)
+    company_size: Literal["small", "mid_sized", "large"] | None = None
+    credit_issue_free: bool | None = None
     compliance_declarations: list["ComplianceGatewayInput"] = Field(
         default_factory=list
     )
@@ -397,6 +424,10 @@ class AnalyzeRequest(BaseModel):
     baseline_profit: str | None = None
     profit_floor: str | None = None
     as_of: str | None = None
+    asked_about: str | None = None
+    trace: bool = False
+    stated_facts: dict[str, str] | None = None
+    declared_structure: dict[str, bool] | None = None
     #: Set only when the user has already answered "새 거래인가, 수정인가".
     #: Left unset, an ambiguous sentence comes back as a question instead of
     #: being resolved by a guess.
@@ -410,6 +441,30 @@ class AnalyzeRequest(BaseModel):
         min_length=5,
         max_length=80,
     )
+
+    @field_validator("declared_structure")
+    @classmethod
+    def _known_structure_only(
+        cls, given: dict[str, bool] | None
+    ) -> dict[str, bool] | None:
+        if not given:
+            return given
+        unknown = set(given) - set(DECLARABLE_STRUCTURE)
+        if unknown:
+            raise ValueError("선언할 수 없는 거래 구조입니다: " + ", ".join(sorted(unknown)))
+        return given
+
+    @field_validator("stated_facts")
+    @classmethod
+    def _known_facts_only(
+        cls, given: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        if not given:
+            return given
+        for field_name, value in given.items():
+            if not asking.accepts(field_name, value):
+                raise ValueError(f"알 수 없거나 허용되지 않는 값입니다: {field_name}")
+        return given
 
 
 class ComplianceGatewayInput(BaseModel):
@@ -428,7 +483,7 @@ AnalyzeRequest.model_rebuild()
 
 
 ANONYMOUS_COMPANY_FACTS = frozenset(
-    (*DECLARED_COMPANY_FIELDS, "company.is_domestic")
+    (*DECLARED_COMPANY_FIELDS, "company.is_domestic", "company.is_sme")
 )
 CASE_FACT_INPUT_FIELDS = frozenset(
     {
@@ -881,12 +936,24 @@ def audit_events(
 
 
 def _anonymous_profile(request: AnalyzeRequest) -> CompanyProfile:
-    _validate_company_facts(request.company_facts)
+    stated_company = dict(request.company_facts)
+    for field_name, value in (request.stated_facts or {}).items():
+        if field_name.startswith("company."):
+            stated_company[field_name] = asking.as_stated(field_name, value)
+    if request.company_size is not None:
+        stated_company["company.size"] = request.company_size
+    if request.credit_issue_free is not None:
+        stated_company["company.credit_issue_free"] = request.credit_issue_free
+    _validate_company_facts(stated_company)
     return CompanyProfile(
         company_id="COMPANY-ANONYMOUS",
         name=request.company_name,
-        is_sme=request.is_sme,
-        attributes=dict(request.company_facts),
+        is_sme=(
+            request.company_size == "small"
+            if request.company_size is not None
+            else request.is_sme
+        ),
+        attributes=stated_company,
     )
 
 
@@ -982,6 +1049,29 @@ def _declarations(
                 is_third_party=item.is_third_party,
                 uses_mutual_account=item.uses_mutual_account,
                 uses_foreign_exchange_bank=item.uses_foreign_exchange_bank,
+            )
+        )
+    carried = {
+        field: value
+        for field, value in (request.declared_structure or {}).items()
+        if field not in withdrawn_structure(request.utterance)
+    }
+    declared = {**carried, **payment_structure(request.utterance)}
+    if declared and not declarations and case_ids:
+        declarations.append(
+            ComplianceGatewayDeclaration(
+                declaration_id=f"WEB-{case_ids[0]}-CARRIED",
+                company_id=company_id,
+                case_id=case_ids[0],
+                declared_at=declared_at,
+                declared_by_role="company_user",
+                confirmed=True,
+                is_netting=declared.get("payment.is_netting"),
+                is_third_party=declared.get("payment.is_third_party"),
+                uses_mutual_account=declared.get("payment.uses_mutual_account"),
+                uses_foreign_exchange_bank=declared.get(
+                    "payment.uses_foreign_exchange_bank"
+                ),
             )
         )
     return tuple(declarations)
@@ -1265,6 +1355,19 @@ def analyze_endpoint(
     )
 
     supplied = [case.model_dump() for case in request.cases]
+    case_answers = {
+        field_name: asking.as_stated(field_name, value)
+        for field_name, value in (request.stated_facts or {}).items()
+        if not field_name.startswith("company.")
+    }
+    if case_answers:
+        if not supplied:
+            supplied = [{"case_facts": case_answers}]
+        else:
+            supplied[-1]["case_facts"] = {
+                **(supplied[-1].get("case_facts") or {}),
+                **case_answers,
+            }
     heard: dict[str, Any] = {}
     if request.utterance:
         split = split_trade_candidates(request.utterance, as_of=as_of)
@@ -1377,6 +1480,9 @@ def analyze_endpoint(
         case_ids=[case.case_id for case in reading.program.cases],
         declared_at=evaluated_at,
     )
+    subject = request.utterance
+    if request.asked_about and not read_intent(request.utterance or ""):
+        subject = request.asked_about
     analysis = analyze(
         reading.program,
         snapshot_root=SNAPSHOT_ROOT,
@@ -1384,7 +1490,7 @@ def analyze_endpoint(
         profit_floor=profit_floor,
         compliance_declarations=declarations,
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
-        utterance=request.utterance,
+        utterance=subject,
         as_of=evaluated_at,
     )
     result = build_response(analysis)
@@ -1419,17 +1525,64 @@ def analyze_endpoint(
     # network, or a sentence that invented a number — leaves `summary` empty
     # and the screen assembles its own sentence, so prose is the only thing
     # that can be lost here.
-    written = synthesizer.write(figures(result), question=request.utterance)
+    written = synthesizer.write(figures(result), question=subject)
     if written.accepted:
         result["summary"] = written.sentence
     elif written.reason:
         logger.info("합성 미채택: %s | %s", written.reason, written.sentence[:120])
 
     # Code-owned, and true whether or not the model answered.
-    result["pointer"] = pointer(result)
-    result["holds"] = _holds(request.utterance)
-    result["coverage"] = _coverage(request.utterance)
-    result["lead"] = "pointer" if _pointer_leads(request.utterance) else "summary"
+    subjects = read_intent(subject or "")
+    result["pointer"] = pointer(result, intent=subjects)
+    result["holds"] = _holds(subject)
+    result["coverage"] = _coverage(subject)
+    result["lead"] = "pointer" if _pointer_leads(subject) else "summary"
+    result["cannot"] = (
+        "제도 자체를 설명하는 것은 아직 다루지 않습니다. 거래 적격성은 판정할 수 있습니다."
+        if subject and any(word in subject for word in ("뭐야", "무엇", "설명해"))
+        else ""
+    )
+    result["asking_for"] = None if result["cannot"] else _asking_for(subjects, result)
+    result["said"] = {
+        "support": narration.support(result),
+        "compliance": narration.compliance(result),
+    }
+    result["because"] = narration.because(result)
+    required_inputs = result.setdefault("required_inputs", {})
+    required_inputs["profile"] = (
+        ["company_size", "credit_issue_free"]
+        if "support" in (result.get("workers") or {}).get("skipped", {})
+        and request.company_size is None
+        and request.credit_issue_free is None
+        else []
+    )
+    required_inputs["facts"] = asking.questions(
+        result,
+        already=request.stated_facts,
+    )
+    result["declared_structure"] = dict(analysis.declared_structure)
+    if request.trace:
+        result["trace"] = {
+            "utterance": {
+                "intent": list(subjects),
+                "slots": read_utterance(request.utterance or "", as_of=as_of),
+                "financing_purpose": financing_purpose(request.utterance),
+                "payment_structure": payment_structure(request.utterance),
+            },
+            "intake": {
+                "ready": reading.ready,
+                "missing": list(reading.missing),
+                "cases": len(reading.program.cases),
+                "company_facts": sorted(reading.program.company.facts()),
+            },
+            "plan": analysis.plan.as_dict(),
+            "workers": {
+                "completed": list(analysis.report.completed),
+                "failed": analysis.report.failed,
+                "skipped": sorted(analysis.report.skipped),
+                "took_seconds": analysis.report.took,
+            },
+        }
 
     run_id = accounts.save_analysis(account, result) if account else None
     if account and run_id:
@@ -1455,6 +1608,18 @@ def analyze_endpoint(
 #: Subjects the synthesised sentence can be about. A question about anything
 #: else is answered by the pointer, so the pointer goes first.
 _SENTENCE_SUBJECTS = frozenset({"exposure", "market_scenario", "hedge"})
+_UNBLOCKS = {"hedge": "hedge", "exposure": "hedge", "support": "support"}
+
+
+def _asking_for(topics: tuple[str, ...], result: dict[str, Any]) -> str | None:
+    skipped = (result.get("workers") or {}).get("skipped") or {}
+    if not topics:
+        return "hedge" if "hedge" in skipped else None
+    for topic in topics:
+        worker = _UNBLOCKS.get(topic)
+        if worker and worker in skipped:
+            return worker
+    return None
 
 
 def _pointer_leads(utterance: str | None) -> bool:
@@ -1462,6 +1627,12 @@ def _pointer_leads(utterance: str | None) -> bool:
     summary can say. Silence — a trade description with no question — keeps
     the default order."""
     lead = next(iter(read_intent(utterance or "")), None)
+    return lead is not None and lead not in _SENTENCE_SUBJECTS
+
+
+def _leads(subjects: tuple[str, ...]) -> bool:
+    """Compatibility helper for callers that have already read the subjects."""
+    lead = next(iter(subjects), None)
     return lead is not None and lead not in _SENTENCE_SUBJECTS
 
 
@@ -1619,3 +1790,4 @@ if FRONTEND_DIST.is_dir():
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(FRONTEND_DIST / "index.html")
+    payment_structure,

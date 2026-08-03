@@ -40,8 +40,8 @@
         "provider": "하나은행",
         "contract_rate": "1489.50",
         "cost_rate": "0.0025",
-        "valid_until": "2026-07-30",
-        "confirmed": true
+        "confirmed": true,
+        "valid_days": 2
       }
     },
     {
