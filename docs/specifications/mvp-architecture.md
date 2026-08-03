@@ -5,10 +5,10 @@ reviewers: knowledge-domain, platform-runtime
 last-reviewed: 2026-07-26
 ---
 
-# TradeFlow MVP 아키텍처 설계
+# KB Comme MVP 아키텍처 설계
 
 > 문서 상태: MVP Implementation Spec v1.0
-> 상위 문서: TradeFlow 통합 수출입 금융 플랫폼 기획서 (Product/Architecture Draft v0.1)
+> 상위 문서: KB Comme 통합 수출입 금융 플랫폼 기획서 (Product/Architecture Draft v0.1)
 > 범위: 대회 제출용 프로토타입
 
 ---

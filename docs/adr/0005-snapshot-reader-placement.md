@@ -88,7 +88,7 @@ ADR-0003이 택한 "런타임 의존이 아니라 데이터 의존"이 바로 �
 
 - `tests/architecture/test_module_boundaries.py`가 변경 없이 통과한다. 경계를 완화하지
   않고 문제를 해결했다는 증거다.
-- `domain/snapshot_file.py`는 `domain.snapshot` 외에 어떤 TradeFlow 계층도 참조하지
+- `domain/snapshot_file.py`는 `domain.snapshot` 외에 어떤 KB Comme 계층도 참조하지
   않으므로, `domain`이 아무것도 import하지 않는다는 ADR-0001 제약이 유지된다.
 - `tests/platform/test_snapshot_store.py`의 읽기·해시 검사가 이동 후에도 그대로
   통과한다. 동작이 아니라 위치만 바뀌었다.

@@ -122,10 +122,19 @@
     cursor: pointer; color: inherit; transition: opacity .12s ease;
   }
   .brand:active { opacity: .6; }
+  /* The circle is unchanged; only what is inside it. Two letters in a mark
+     sized for one need a step down and the tracking closed up — at 12px
+     monospace 「KB」 runs 14px wide inside 23px of usable circle and sits
+     against the stroke on both sides, which reads as a mark that was drawn
+     for a different word. */
   .brand i {
     width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
     border: 1.5px solid var(--accent); color: var(--accent);
-    font-family: var(--mono); font-size: .75rem; font-style: normal;
+    font-family: var(--mono); font-size: .6875rem; font-style: normal;
+    font-weight: 700; letter-spacing: -.04em;
+    /* Monospace centres on its advance width, and the trailing side bearing
+       of the last glyph pushes the pair a hair to the left of the circle. */
+    text-indent: .04em;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
   .nav-link { color: inherit; transition: color .15s ease; }

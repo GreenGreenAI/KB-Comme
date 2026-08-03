@@ -5,7 +5,7 @@ reviewers: knowledge-domain, platform-runtime
 last-reviewed: 2026-07-26
 ---
 
-# TradeFlow 통합 수출입 금융 플랫폼 기획서
+# KB Comme 통합 수출입 금융 플랫폼 기획서
 
 > 작성 기준일: 2026-07-26  
 > 문서 상태: Product/Architecture Draft v0.1  
@@ -30,7 +30,7 @@ last-reviewed: 2026-07-26
 
 ### 2.1 제품명
 
-**TradeFlow**
+**KB Comme**
 
 ### 2.2 한 문장 정의
 
@@ -357,7 +357,7 @@ flowchart TB
     RMWEB["RM Console"]
     ADMINWEB["Admin Console"]
 
-    CORE["TradeFlow Platform"]
+    CORE["KB Comme Platform"]
 
     COMPANY --> WEB --> CORE
     RM --> RMWEB --> CORE
@@ -1019,7 +1019,7 @@ Trade Program
 
 ### 데모의 핵심 메시지
 
-> TradeFlow는 환율을 맞히는 서비스가 아니라, 수출입 거래에서 발생하는 자금·위험·금융·서류 업무를 하나의 거래 흐름으로 연결하는 실행 플랫폼이다.
+> KB Comme는 환율을 맞히는 서비스가 아니라, 수출입 거래에서 발생하는 자금·위험·금융·서류 업무를 하나의 거래 흐름으로 연결하는 실행 플랫폼이다.
 
 ## 24. 공식 참고 출처
 

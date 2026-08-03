@@ -1,4 +1,4 @@
-<title>TradeFlow — 대화형 분석 (디자인 초안)</title>
+<title>KB Comme — 대화형 분석 (디자인 초안)</title>
 <style>
   /* Palette is four values only: #5f5449, #9b6a6c, #b09398 and white.
      Softer tones are those same values mixed with white, never new hues.
@@ -63,7 +63,8 @@
   .brand i {
     width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
     border: 1.5px solid var(--accent); color: var(--accent);
-    font-family: var(--mono); font-size: .75rem; font-style: normal;
+    font-family: var(--mono); font-size: .6875rem; font-style: normal;
+    font-weight: 700; letter-spacing: -.04em; text-indent: .04em;
   }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
   .nav nav a { text-decoration: none; color: inherit; }
@@ -282,7 +283,7 @@
 </style>
 
 <header class="nav">
-  <div class="brand"><i>T</i> TradeFlow</div>
+  <div class="brand"><i>KB</i> KB Comme</div>
   <nav>
     <a href="#" class="on">분석</a>
     <a href="#">지원제도</a>
@@ -369,7 +370,7 @@
           </div>
 
           <div class="turn agent">
-            <span class="who">TradeFlow</span>
+            <span class="who">KB Comme</span>
             <p>수출 10만 달러로 이해했습니다. 10월 중 며칠에 받기로 하셨나요?</p>
             <div class="slotline">
               <input type="date" value="2026-10-24" aria-label="결제 예정일">
@@ -383,7 +384,7 @@
           </div>
 
           <div class="turn agent">
-            <span class="who">TradeFlow</span>
+            <span class="who">KB Comme</span>
             <div class="trace">
               <span class="ok">환율 스냅샷 확인 — ECOS_USD_KRW 2026-07-24</span>
               <span class="ok">순노출·자금공백 산출</span>
@@ -498,7 +499,7 @@
   </div>
 </div>
 
-<footer>TradeFlow MVP · 의사결정 지원 도구이며 투자 권유가 아닙니다 · 최종 판단과 책임은 이용자에게 있습니다</footer>
+<footer>KB Comme MVP · 의사결정 지원 도구이며 투자 권유가 아닙니다 · 최종 판단과 책임은 이용자에게 있습니다</footer>
 
 <script>
   const menu = document.getElementById("account-menu");

@@ -13,7 +13,7 @@ last-reviewed: 2026-07-28
 
 ## Context
 
-TradeFlow must recommend a hedge ratio without delegating arithmetic or model
+KB Comme must recommend a hedge ratio without delegating arithmetic or model
 selection to an LLM. The existing calculation uses a zero-drift rolling
 volatility estimate, an adverse normal quantile and the minimum ratio that
 protects a profit floor. More responsive or fat-tail-aware models may improve

@@ -34,7 +34,7 @@ describe("새 대화", () => {
     const startOver = vi.fn();
     render(<Nav signInOpen={false} onHome={onHome} onStartOver={startOver} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /TradeFlow/ }));
+    await userEvent.click(screen.getByRole("button", { name: /KB Comme/ }));
 
     expect(onHome).toHaveBeenCalledTimes(1);
     expect(startOver).not.toHaveBeenCalled();
