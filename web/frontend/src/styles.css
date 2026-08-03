@@ -489,15 +489,21 @@
   .composer { flex: none; }
   .turn { display: flex; flex-direction: column; gap: .35rem; }
 
-  /* Prose gets a measure; data does not.
-     The chat matches the nav at 1180px, which is right for the figure row and
-     the rate band — they use the width to separate values. Running text does
-     not: at that width the eye loses the start of the next line. Hangul
-     syllables are full-width, so 1em is about one character and this reads as
-     "roughly 40 characters".
-     Only direct children are capped. The band's scale labels and the figure
-     row are also <p>/<dl>, and they must keep the full width. */
-  .turn.agent > p, .answer-note, .fold-note { max-width: 40em; }
+  /* The answer uses the width it is given.
+     Prose was held to 40em — about forty Hangul syllables — on the classic
+     argument that a long line loses the eye on its way back to the left. That
+     is true of a page. It was not true of this screen: the figure row, the
+     rate band, the separators, the folds and the source list all span the full
+     1130px, so the only thing stopping short was the sentence, and the answer
+     read as though it had been cut off with the right third of the card empty
+     beside it.
+     Alignment beats measure here. What softens the long line is leading rather
+     than width: the return sweep is easier to land when the next line sits
+     further down, so running text gets a taller line-height than the interface
+     around it.
+     Data was never capped and still is not — the band's scale labels and the
+     figure row are <p>/<dl> too, and they use width to separate values. */
+  .turn.agent > p, .answer-note, .fold-note { line-height: 1.75; }
   .who { font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-45); }
   .turn.agent p { margin: 0; }
   .turn.agent p + p { margin-top: .65rem; }
