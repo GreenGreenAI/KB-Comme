@@ -13,6 +13,7 @@ last-reviewed: 2026-07-26
 - [사용자 흐름](user-flows.md)
 - [로드맵](roadmap.md)
 - [Decision Workspace 프론트엔드 보완 요구사항](decision-workspace-frontend-requirements.md)
+- [Trade Deal Decision Twin UI/UX 구현 인계](decision-twin-role-b-ui-ux-handoff.md)
 - [Decision Workspace 구현 상태](decision-workspace-implementation.md)
 - [API 제외 구현 완료 감사](implementation-completion-audit.md)
 - [고객층 조사 기반 서비스 및 KB 연계 준비도 리뷰](customer-and-kb-service-review.md)
