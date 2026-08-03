@@ -112,6 +112,13 @@
     box-shadow: var(--lift);
   }
   .nav-cta:hover { border-color: var(--accent); color: var(--accent); }
+  /* Available, not advertised. Starting over is something you do to your own
+     work, so it says so plainly and does not compete with the answer for
+     attention — it only firms up when the pointer is on it. */
+  .nav-cta.quiet {
+    box-shadow: none; font-weight: 500; color: var(--ink-70);
+    padding: .42rem .95rem;
+  }
 
   /* ---------- account ---------- */
   .account { position: relative; }

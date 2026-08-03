@@ -39,6 +39,9 @@ function described(facts) {
 export default function Nav({
   onHome,
   account,
+  //: 대화를 내려놓고 다시 시작합니다. 브랜드 클릭과 다른 의도라 다른 버튼을
+  //: 씁니다 — 하나는 처음 화면으로 가고 대화는 그대로 두는 것입니다.
+  onStartOver,
   onSignIn,
   signingIn,
   onSignOut,
@@ -115,6 +118,11 @@ export default function Nav({
       )}
 
       <div className="account" ref={box}>
+        {onStartOver && (
+          <button className="nav-cta quiet" type="button" onClick={onStartOver}>
+            새 대화
+          </button>
+        )}
         {!signInOpen ? null : !signedIn ? (
           signingIn ? (
             /* On the sign-in screen itself, a 로그인 button would point at

@@ -6,7 +6,11 @@ import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
 import Notices from "./Notices.jsx";
 import { analyze, signOut, whoami, SIGN_IN_OPEN } from "./api.js";
-import { load as loadSession, save as saveSession } from "./session.js";
+import {
+  forget as forgetSession,
+  load as loadSession,
+  save as saveSession,
+} from "./session.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -172,6 +176,39 @@ export default function App() {
   //: The last sentence the user wrote. Panel answers carry values and no
   //: words, and the answer has to stay about what was asked.
   const subject = useRef(null);
+
+  /** Put the conversation down and start again.
+   *
+   *  Distinct from clicking the wordmark, which goes to the opening screen and
+   *  keeps everything — a company that scrolled up to read the first answer
+   *  must not lose the fourth. This is the other intention, and it needs its
+   *  own control rather than being a longer press on the same one.
+   *
+   *  Everything the user told us goes: the trades, the company facts, the
+   *  quote, the structure they declared, and the answers the rules asked for.
+   *  Keeping any of it would make the next answer rest on something the reader
+   *  can no longer see, which is the one thing a reset must not leave behind.
+   *
+   *  No confirmation step. What is lost is a conversation the user can retype
+   *  in a sentence, and this is the control a demo reaches for between runs —
+   *  a dialog there costs more than the mistake it prevents. It sits in the
+   *  bar rather than beside the composer so it is not next to what is clicked
+   *  every turn.
+   */
+  function startOver() {
+    forgetSession();
+    setTurns([]);
+    setFacts({ cases: [{}], profile: {}, quote: null, stated: {}, structure: {} });
+    setResult(null);
+    setPending(null);
+    setThinking(null);
+    setWriting(false);
+    setBusy(false);
+    setNotices([]);
+    subject.current = null;
+    stick.current = true;
+    setView("entry");
+  }
 
   /** The conversation continues where it left off, at the bottom.
    *
@@ -420,6 +457,10 @@ export default function App() {
           setView("entry");
         }}
         account={account}
+        //: 지울 대화가 있을 때만 보입니다. 빈 화면에서 「새 대화」는 아무것도
+        //: 하지 않는 버튼이고, 아무것도 하지 않는 버튼은 눌러 본 사람에게
+        //: 제품이 고장 난 것처럼 보입니다.
+        onStartOver={turns.length > 0 ? startOver : null}
         signInOpen={SIGN_IN_OPEN}
         signingIn={showSignIn}
         onSignIn={() => setShowSignIn(true)}
