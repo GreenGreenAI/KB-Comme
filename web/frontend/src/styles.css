@@ -735,6 +735,11 @@
 
   .turn.agent p.prose { white-space: pre-line; }
 
+  /* Confirmation, not a finding. Set at body weight because being read back
+     correctly is what the reader checks first, and quieter than the answer
+     because it is the one line here that tells them nothing new. */
+  .read-back { margin: 0 0 .5rem; color: var(--ink-70); }
+
   /* ---------- a claim with its grounds ---------- */
   /* The claims used to run together as one paragraph with every ground in a
      fold beneath all of them. Separating them is the whole point, so the

@@ -70,6 +70,23 @@ _COUNTRIES = {
     "사우디": "SA", "아랍에미리트": "AE", "대만": "TW", "홍콩": "HK",
 }
 
+#: The same table read backwards, for saying a code back in the word it was
+#: written as. Built here rather than beside the reader that needs it: this
+#: module owns the mapping, and a second table elsewhere would be a second
+#: thing to keep in step.
+#:
+#: 터키 and 튀르키예 both give TR, so the reverse cannot be one-to-one. The
+#: later spelling wins — a reader who typed the older one is not corrected by
+#: it, and a reader who typed neither should see the name in use today.
+_COUNTRY_NAMES = {code: name for name, code in _COUNTRIES.items()}
+_COUNTRY_NAMES["TR"] = "튀르키예"
+
+
+def country_name(code: str | None) -> str | None:
+    """The country a code stands for, or nothing if it stands for none."""
+    return _COUNTRY_NAMES.get(code) if code else None
+
+
 _YMD = re.compile(r"(\d{4})\s*[-/.년]\s*(\d{1,2})\s*[-/.월]\s*(\d{1,2})")
 #: A day must not be the first digits of an amount. `내년 3월 10만 달러` was
 #: read as March 10th — the amount was eaten by the date and then reported as

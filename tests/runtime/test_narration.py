@@ -239,6 +239,57 @@ class GroundedTests(unittest.TestCase):
         self.assertEqual(sorted(narration.support(self.RESULT)), sorted(claims))
 
 
+class ReadBackTests(unittest.TestCase):
+    HEARD = {
+        "direction": "수출",
+        "amount": "100000",
+        "currency": "USD",
+        "expected_shipment_date": "2026-09-12",
+        "expected_payment_date": "2026-10-24",
+        "country": "VN",
+    }
+
+    def test_it_says_back_everything_it_read(self) -> None:
+        """The older line carried three of six fields. The shipment date is
+        what settles 「결제기간 2년 이내」 and the country is what 국별인수방침
+        is read against — a company that mentioned them and saw them left out
+        cannot tell whether they were ignored or merely unsaid."""
+        said = narration.read_back(self.HEARD)
+
+        self.assertIn("수출 100,000 USD", said)
+        self.assertIn("베트남", said)
+        self.assertIn("9월 12일 선적", said)
+        self.assertIn("10월 24일 결제", said)
+
+    def test_it_says_the_term_it_worked_out(self) -> None:
+        """Not a seventh thing that was heard — the first thing the product
+        worked out, and the difference between a form that echoes and a tool
+        that read."""
+        self.assertIn("사이는 42일입니다", narration.read_back(self.HEARD))
+
+    def test_a_sentence_that_read_nothing_says_nothing(self) -> None:
+        """A turn that answered 「왜?」 read no trade out of it. 「로
+        읽었습니다」 with nothing before it is the product talking to itself."""
+        self.assertIsNone(narration.read_back({}))
+        self.assertIsNone(narration.read_back(None))
+
+    def test_one_date_alone_states_no_term(self) -> None:
+        """A term is the gap between two days. With one of them missing there
+        is no gap to state, and a zero would read as same-day settlement."""
+        said = narration.read_back(
+            {k: v for k, v in self.HEARD.items() if k != "expected_shipment_date"}
+        )
+
+        self.assertIn("10월 24일 결제", said)
+        self.assertNotIn("사이는", said)
+
+    def test_an_unlisted_country_is_left_out_rather_than_guessed(self) -> None:
+        said = narration.read_back({**self.HEARD, "country": "ZZ"})
+
+        self.assertNotIn("ZZ", said)
+        self.assertIn("수출 100,000 USD", said)
+
+
 class BasisTests(unittest.TestCase):
     RESULT = {
         "cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "100000"}]},

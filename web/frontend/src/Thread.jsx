@@ -365,6 +365,14 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
           exchange-rate exposure first, every time, because the synthesised
           sentence may only quote figures and every figure is an exposure. The
           server decides which; nothing here re-reads the question. */}
+      {/* What was heard, before anything about what is still wanted. A company
+          that described its trade fully and completely met 「기업규모와 신용
+          상태를 알려주시면」 as the first thing on screen — the answer opened
+          on a gap, and nothing said the sentence had landed. */}
+      {shown > 0 && result.read_back && (
+        <p className={`read-back${arrive}`}>{result.read_back}</p>
+      )}
+
       {leads && shown > 0 && result.pointer && (
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}

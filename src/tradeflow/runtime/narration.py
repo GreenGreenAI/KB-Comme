@@ -422,6 +422,60 @@ def because(result: dict[str, Any]) -> list[str]:
     return said
 
 
+def read_back(heard: dict[str, Any] | None) -> str | None:
+    """What was read out of the sentence, said back.
+
+    The screen had this for the turns that could not answer — 「수출 · 100,000
+    USD · 2026-10-24로 이해했습니다」 — and not for the turns that could. So a
+    company whose sentence was understood completely got no sign that it was,
+    and the answer opened on what it still needed. The one turn where being
+    heard is worth confirming is the one where something was heard.
+
+    Three of the six fields were missing from that older line as well. The
+    shipment date is what settles 「결제기간 2년 이내」 and the country is what
+    국별인수방침 is read against — a company that mentioned them and saw them
+    left out has no way to tell whether they were ignored or merely unsaid.
+
+    Built from `heard` and not from the trade on file. `heard` is what this
+    sentence produced; the trade is everything ever said about it, and 「읽었
+    습니다」 about a value the reader typed three turns ago is a claim about
+    the wrong sentence.
+    """
+    if not heard:
+        return None
+
+    from tradeflow.tools.utterance import country_name
+
+    said: list[str] = []
+    direction, amount = heard.get("direction"), heard.get("amount")
+    if amount:
+        money = f"{_amount(amount):,.0f} {heard.get('currency') or 'USD'}"
+        said.append(f"{direction} {money}" if direction else money)
+    elif direction:
+        said.append(str(direction))
+
+    country = country_name(heard.get("country"))
+    if country:
+        said.append(country)
+    for field, label in (("expected_shipment_date", "선적"), ("expected_payment_date", "결제")):
+        day = _day_of(heard.get(field))
+        if day:
+            said.append(f"{day} {label}")
+    if not said:
+        return None
+
+    line = f"{' · '.join(said)}로 읽었습니다."
+    # The term is not a seventh thing that was heard — it is the first thing
+    # this product worked out, and saying it here is what shows the difference
+    # between a form that echoes and a tool that read.
+    days = _days_between(
+        heard.get("expected_shipment_date"), heard.get("expected_payment_date")
+    )
+    if days is not None and days > 0:
+        line += f" 선적일과 결제일 사이는 {days}일입니다."
+    return line
+
+
 def basis(result: dict[str, Any]) -> str | None:
     """What the loss figure is computed from, in one line.
 
