@@ -537,10 +537,16 @@ def closed(result: dict[str, Any], answered: list[str] | None) -> str | None:
     # directly below list every one of them beside the conditions it holds.
     # This line's work is momentum, not the record.
     where = products[0] if len(products) == 1 else f"제도 {len(products)}건"
-    return (
-        f"방금 답해 주신 것으로 {conditions}{_particle(conditions, SUBJECT)}"
-        f" 지나갔습니다 — {where}."
-    )
+    # 「확인했습니다」, and not 「지나갔습니다」. A condition does not go past
+    # anyone — the person on this side checked it, and saying so is what makes
+    # the sentence sound like somebody handling the case rather than a system
+    # reporting its own state transitions.
+    #
+    # 확인 is also the word already in use: it labels the passed conditions in
+    # the block below and counts them in 「확인한 조건은 5가지입니다」. 충족 was
+    # the other candidate and belongs to the product's verdict, so spending it
+    # on one condition would make a single check read as the whole judgement.
+    return f"답변해 주신 내용으로 {where}의 {conditions}{_particle(conditions, OBJECT)} 확인했습니다."
 
 
 def basis(result: dict[str, Any]) -> str | None:

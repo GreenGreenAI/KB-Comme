@@ -329,6 +329,18 @@ class ClosedTests(unittest.TestCase):
         self.assertIn("「중소·중견기업」", said)
         self.assertIn("제도 2건", said)
 
+    def test_somebody_checked_it_rather_than_it_having_gone_past(self) -> None:
+        """「지나갔습니다」 described a state transition. A condition does not
+        go past anyone — the person on this side checked it, and 확인 is the
+        word already labelling passed conditions in the block below."""
+        said = narration.closed(self.RESULT, ["company_size"])
+
+        self.assertIn("확인했습니다", said)
+        self.assertNotIn("지나갔", said)
+        # 충족 belongs to the product's verdict. Spending it on one condition
+        # makes a single check read as the whole judgement.
+        self.assertNotIn("충족", said)
+
     def test_one_product_is_named_rather_than_counted(self) -> None:
         """「제도 1건」 withholds the one thing it could have said."""
         said = narration.closed(
