@@ -401,6 +401,49 @@ class ReproducibilityTests(unittest.TestCase):
         self.assertNotEqual(self._packet(), self._packet(opening_balance_usd=None))
 
 
+class TradeEchoTests(unittest.TestCase):
+    """The client resends what this list says the trades are.
+
+    It stopped at the six fields the figures need, so the shipment date the
+    company had just supplied was dropped on the next turn — the rule reported
+    the payment term missing again and 「언제 선적하시나요」 came back, every
+    turn, for anyone who kept talking.
+    """
+
+    def _timeline(self, case: dict) -> dict:
+        body = analyze_endpoint(
+            AnalyzeRequest(cases=[case], as_of="2026-08-02", utterance="지원제도")
+        )
+        return body["result"]["trade_timeline"][0]
+
+    def test_an_optional_detail_survives_the_round_trip(self) -> None:
+        echoed = self._timeline(
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+                "expected_shipment_date": "2026-09-15",
+            }
+        )
+
+        self.assertEqual("2026-09-15", echoed["expected_shipment_date"])
+
+        # And what comes back is a request this endpoint accepts. An echo the
+        # caller cannot resend is the same as no echo.
+        AnalyzeRequest(cases=[{k: v for k, v in echoed.items() if k != "case_id"}])
+
+    def test_what_was_not_given_is_not_invented(self) -> None:
+        echoed = self._timeline(
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+            }
+        )
+
+        self.assertNotIn("expected_shipment_date", echoed)
+
+
 class SignInClosedTests(unittest.TestCase):
     """Taking the button off the screen is not closing the door.
 

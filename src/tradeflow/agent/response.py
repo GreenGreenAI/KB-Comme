@@ -215,6 +215,28 @@ def _evidence(analysis: Analysis) -> list[dict[str, Any]]:
     return records
 
 
+#: The optional trade details a request may carry, so the echo can carry them
+#: back. Named rather than "everything in `attributes`" — that mapping also
+#: holds facts this product derived, and echoing those would invite a client to
+#: send back a calculation as if the company had stated it.
+ECHOED_ATTRIBUTES = frozenset(
+    {
+        "expected_shipment_date",
+        "contract_date",
+        "advance_payment_ratio",
+        "counterparty_id",
+    }
+)
+
+
+def _as_text(value: Any) -> str:
+    """As the request wrote it. The slot reader parses dates and ratios on the
+    way in, so echoing the parsed object would hand the client a shape its own
+    request model does not accept — an echo the caller cannot resend is the
+    same as no echo."""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def build_response(analysis: Analysis) -> dict[str, Any]:
     """Project the analysis onto the response contract, summary left blank."""
     knowledge = _knowledge_projection(analysis)
@@ -225,6 +247,19 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             if analysis.decision_packet is not None
             else None
         ),
+        # Everything the caller told us about each trade, echoed whole.
+        #
+        # The client holds the conversation and resends it, and it takes this
+        # list as the authority on what the trades are — so a detail missing
+        # here is a detail the next request cannot carry. It used to stop at
+        # the six fields the figures need, which silently dropped the shipment
+        # date on every turn: the company answered 「언제 선적하시나요」, the
+        # answer reached the rules once, and the turn after that it was gone
+        # and the same question came back. Forever, for anyone who kept
+        # talking.
+        #
+        # `country` rather than `counterparty_country`: this is echoed back
+        # into a request, and the request calls it `country`.
         "trade_timeline": [
             {
                 "case_id": case.case_id,
@@ -233,6 +268,12 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
                 "amount": str(case.amount),
                 "expected_payment_date": case.expected_payment_date.isoformat(),
                 "payment_method": case.payment_method.value,
+                **({"country": case.counterparty_country} if case.counterparty_country else {}),
+                **{
+                    field: _as_text(value)
+                    for field, value in (case.attributes or {}).items()
+                    if field in ECHOED_ATTRIBUTES and value not in (None, "")
+                },
             }
             for case in analysis.program.cases
         ],
