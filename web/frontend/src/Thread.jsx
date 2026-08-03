@@ -278,8 +278,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // every number in it came from a tool. When it is empty — no key, no network,
   // or a sentence that invented a figure — the turn assembles its own, which is
   // why that assembly stays here rather than being deleted as dead code.
-  const line = result.summary
-    ? [{ text: recap(result.summary) }]
+  // What closes the answer. The rewrite when there is one — it is the version
+  // that has read every judgement — and §4.2[9]'s own sentence otherwise.
+  // Both are paragraphs and both get cut to the sentence carrying the figure;
+  // everything after it has already been said above, beside its evidence.
+  const summary = result.said?.retold || result.summary;
+  const line = summary
+    ? [{ text: recap(summary) }]
     : sentence({
         first, market, swing, net: result.cashflow_analysis?.net_exposure?.[0]?.amount,
         hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread,
@@ -403,7 +408,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
           Now the blocks above have said each of those things beside its own
           evidence, so what is left for this line to do is be the one sentence
           somebody repeats afterwards. `recap` keeps it to that. */}
-      {shown > blocks && !result.said?.retold && !result.cannot && (
+      {shown > blocks && !result.cannot && (
         <div className="recap">
           <Written segments={line} shown={shown - blocks} settled={settled} />
           {/* The largest number in the answer was the only claim with nothing
@@ -845,13 +850,34 @@ const SECTION_LABEL = {
  *  the first sentence, which is where §4.2[9] puts the figure.
  */
 function recap(summary) {
-  const text = String(summary).trim();
-  // The full stop has to be followed by something for the sentence to have
-  // ended: 「100,000 USD」 and 「1,441.1원」 carry stops of their own, and
-  // cutting at the first one leaves 「최대 10,188」.
-  const end = text.search(/[.。](?=\s|$)/u);
-  return end === -1 ? text : text.slice(0, end + 1);
+  // The stop has to be followed by something for the sentence to have ended:
+  // 「100,000 USD」 and 「1,441.1원」 carry stops of their own, and splitting on
+  // every one of them leaves 「최대 10,188」.
+  const sentences = String(summary).trim().split(/(?<=[.。])\s+/u);
+  const kept = [];
+  for (const line of sentences) {
+    // Cutting at the first sentence was wrong and it lost the figure. §4.2[9]
+    // writes the calculation first and the verdicts after, but how many
+    // sentences the calculation takes is the model's to decide — one turn
+    // opened 「100,000 USD 결제가 결제일까지 열려 있습니다」 and put the
+    // 10,188,000 in the sentence after it. So the cut is made where the
+    // subject changes rather than after a fixed count.
+    if (JUDGEMENT.test(line)) break;
+    kept.push(line);
+    if (kept.length === RECAP_MAX) break;
+  }
+  // A summary that names a scheme in its first sentence still has to say
+  // something. One sentence of overlap beats an empty close.
+  return (kept.length > 0 ? kept : sentences.slice(0, 1)).join(" ");
 }
+
+/** A sentence that has moved on to the verdicts — which the blocks above have
+ *  already given, each beside the conditions it rests on. */
+const JUDGEMENT = /K-SURE|보험|보증|신고|서류|상담|제도/u;
+
+/** Two at the outside. The recap is what somebody repeats afterwards, and
+ *  nobody repeats a paragraph. */
+const RECAP_MAX = 2;
 
 /** The agent's line for this turn, as segments. */
 function sentence({ first, market, swing, net, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
@@ -1089,18 +1115,28 @@ function Answer({ result, order, shown, arrive }) {
   // The card is the figure grid and the band. Prose never belonged inside it —
   // sentences in a grey box read as a document handed over, not an answer
   // given, which is the impression the folds were removed to stop.
-  const spoken = said.retold
-    ? [said.retold]
-    : [
-        ...(said.support ?? []),
-        ...(said.compliance ?? []),
-        ...(said.actions ?? []),
-      ];
   // The same judgements with their grounds attached. `spoken` remains the
   // fallback for a turn the server answered before this field existed — a
   // restored session carries whatever the response held at the time, and a
   // blank block is worse than an ungrounded sentence.
-  const grounded = said.retold ? [] : said.grounded ?? [];
+  //
+  // `retold` does not disable this, and briefly it did. The rewrite is the
+  // one path that only runs when there is a key, so switching the blocks off
+  // for it meant the whole change was invisible in the only build anyone was
+  // looking at — and what it renders instead is precisely the paragraph the
+  // blocks exist to break up: every judgement merged into one, none of them
+  // near its evidence. It belongs in the recap, not above the answer.
+  const grounded = said.grounded ?? [];
+  const spoken =
+    grounded.length > 0
+      ? []
+      : said.retold
+        ? [said.retold]
+        : [
+            ...(said.support ?? []),
+            ...(said.compliance ?? []),
+            ...(said.actions ?? []),
+          ];
 
   return (
     // The figures ride inside the card's own arrival — a second animation on

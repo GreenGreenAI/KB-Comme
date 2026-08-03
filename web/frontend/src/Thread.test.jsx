@@ -105,6 +105,41 @@ describe("판정과 근거", () => {
     );
   });
 
+  it("재작성이 있어도 근거 블록은 그대로 나온다", () => {
+    // 재작성은 키가 있을 때만 도는 유일한 경로입니다. 여기서 블록을 끄면
+    // 아무도 보고 있는 화면에서만 이 변경이 통째로 사라집니다 — 실제로 한 번
+    // 그렇게 냈습니다. 게다가 재작성이 내놓는 것이 바로 이 블록들이 쪼개려던
+    // 그 문단입니다: 판정 전부를 하나로 합치고, 어느 것도 자기 근거 옆에
+    // 두지 않습니다.
+    const retold = {
+      ...RESULT,
+      said: { ...RESULT.said, retold: "판정 다섯 개를 한 문단으로 합친 문장입니다." },
+    };
+    render(<Thread turns={turnsFor(retold)} busy={false} />);
+
+    expect(document.querySelectorAll(".ground")).toHaveLength(2);
+  });
+
+  it("요약은 금액이 둘째 문장에 와도 금액을 지킨다", () => {
+    // 첫 문장에서 자르는 규칙은 이 재작성에서 금액을 통째로 버렸습니다.
+    // 계산이 몇 문장을 쓰는지는 모델이 정합니다.
+    const late = {
+      ...RESULT,
+      said: {
+        ...RESULT.said,
+        retold:
+          "100,000 USD 결제가 결제일까지 열려 있습니다. " +
+          "환율이 1339.22까지 오르면 10,188,000 KRW 손실입니다. " +
+          "K-SURE 일반형 수출 환변동보험은 조건 충족입니다.",
+      },
+    };
+    render(<Thread turns={turnsFor(late)} busy={false} />);
+
+    const recap = document.querySelector(".recap");
+    expect(recap).toHaveTextContent("10,188,000 KRW 손실입니다.");
+    expect(recap).not.toHaveTextContent("환변동보험");
+  });
+
   it("근거가 없는 옛 응답은 문장이라도 보여준다", () => {
     // 복원된 대화는 그때의 응답을 그대로 들고 옵니다. `grounded`가 없다고
     // 빈 자리를 보여주면, 고치기 전보다 나빠집니다.
