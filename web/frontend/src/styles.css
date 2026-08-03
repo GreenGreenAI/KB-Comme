@@ -718,6 +718,53 @@
 
   .turn.agent p.prose { white-space: pre-line; }
 
+  /* ---------- a claim with its grounds ---------- */
+  /* The claims used to run together as one paragraph with every ground in a
+     fold beneath all of them. Separating them is the whole point, so the
+     separation has to be structural — a gap and a rule, not just a line break,
+     because a paragraph break is what the sentences already had. */
+  .ground {
+    margin: 0 0 .35rem; padding: 0 0 .75rem;
+    border-bottom: 1px solid var(--rule-faint);
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+  .ground:last-of-type { border-bottom: 0; }
+  .ground-claim { margin: 0; line-height: 1.7; }
+  /* A judgement still short of a fact is not a weaker yes, and the difference
+     has to survive being scanned rather than read. Carried by an edge, since
+     the palette keeps its one chromatic value for the figures. */
+  .ground.open { border-left: 2px solid var(--rule); padding-left: .8rem; }
+  .ground.action .ground-claim { color: var(--ink-70); }
+
+  /* The grounds are a line, not a list. Five conditions set as five bullets is
+     the record this screen spent its time turning into sentences, arriving
+     back in a different shape. */
+  .ground-row {
+    margin: 0; font-size: .8125rem; line-height: 1.65; color: var(--ink-45);
+  }
+  .ground-label {
+    display: inline-block; min-width: 2.2rem; margin-right: .5rem;
+    font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
+    color: var(--ink-70);
+  }
+  /* What is still missing reads at the weight of the claim it is holding up.
+     Set at the same hush as 확인 it looked like more of the same evidence,
+     when it is the reason the judgement has not closed. */
+  .ground-row.wanted { color: var(--ink-70); }
+  /* Waiting on us, not on them. Nothing for the reader to do, so it does not
+     take the weight that 「필요」 does — but it is still named, because a
+     condition nobody mentions reads as a condition that passed. */
+  .ground-row.ours { color: var(--ink-45); }
+
+  /* ---------- the closing summary ---------- */
+  /* Separated by space and a rule rather than by a heading. It is the same
+     answer said shorter, and a label above it would announce a new section
+     where there is only a second reading of the one above. */
+  .recap {
+    margin: 1rem 0 0; padding-top: .85rem; border-top: 1px solid var(--rule);
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+
   .pointer.lead {
     /* Answering first, not annotating. The same line reads as a footnote at
        the size it has under the sentence. */

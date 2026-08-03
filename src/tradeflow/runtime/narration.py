@@ -213,37 +213,23 @@ def support(result: dict[str, Any]) -> list[str]:
     settled = [c for c in candidates if c.get("status") != _SETTLED]
     open_ones = [c for c in candidates if c.get("status") == _SETTLED]
 
-    for candidate in settled:
-        title = candidate.get("title") or ""
-        met = [
-            check["description"]
-            for check in candidate.get("checks") or []
-            if check.get("status") == "passed"
-        ]
-        line = f"{title}{_particle(title, TOPIC)} 조건을 충족합니다."
-        if met:
-            line += f" 확인한 조건은 {len(met)}가지입니다."
-        if candidate.get("status") == "expert_confirmation_required":
-            line += " 초안 규칙이라 공식 확인을 받으셔야 합니다."
-        said.append(line)
-
-    # One sentence per product. Joined into a single paragraph they ran to four
-    # lines and the reader had to hold two lists at once to tell which
-    # requirement belonged to which product.
-    for candidate in open_ones:
-        title = candidate.get("title") or ""
-        wants = [
-            check["description"]
-            for check in candidate.get("checks") or []
-            if check.get("status") == "uncertain"
-        ]
-        if not wants:
-            continue
-        listed = _some(wants)
-        said.append(
-            f"{title}{_particle(title, TOPIC)} 아직 판정하지 못했습니다. "
-            f"{listed}{_particle(listed, OBJECT)} 알려주시면 판정합니다."
+    # One sentence per product, from the same writer `grounded` uses. Joined
+    # into a single paragraph they ran to four lines and the reader had to hold
+    # two lists at once to tell which requirement belonged to which product.
+    #
+    # Two copies of this wording existed for about an hour and that was long
+    # enough to see the problem: the block under a claim and the summary above
+    # it are the same assertion, and a reader who finds them differently worded
+    # has to work out whether they are also differently meant.
+    for candidate in settled + open_ones:
+        checks = candidate.get("checks") or []
+        line = _support_claim(
+            candidate,
+            [c["description"] for c in checks if c.get("status") == "passed"],
+            [c["description"] for c in checks if c.get("status") == "uncertain"],
         )
+        if line:
+            said.append(line)
 
     return said
 
@@ -434,6 +420,204 @@ def because(result: dict[str, Any]) -> list[str]:
         break
 
     return said
+
+
+def basis(result: dict[str, Any]) -> str | None:
+    """What the loss figure is computed from, in one line.
+
+    The summary sentence names an amount of won the company could lose, and it
+    was the only claim on the screen with nothing under it. Every rule
+    judgement could at least be opened; the largest number in the answer could
+    not, so the one figure most likely to be repeated to a bank was the one
+    least able to say where it came from.
+
+    Three things produce it and all three are already in the response: the
+    exposure it is measured on, the rate the scenario reached, and the window
+    the volatility was estimated over. None of them is a new computation —
+    this is a sentence about numbers that already exist, which is why it can be
+    written here rather than by a worker.
+    """
+    market = result.get("market_scenario") or {}
+    if not market.get("adverse_rate"):
+        return None
+
+    parts: list[str] = []
+    net = ((result.get("cashflow_analysis") or {}).get("net_exposure") or [{}])[0]
+    if net.get("amount") is not None:
+        amount = _amount(net.get("amount"))
+        parts.append(
+            f"거래 순노출 {abs(amount):,.0f} {net.get('currency', 'USD')}"
+            " = Σ수취 − Σ지급"
+        )
+
+    spot = market.get("spot_rate")
+    adverse = market.get("adverse_rate")
+    confidence = market.get("confidence_level")
+    rate = f"불리 환율 {_amount(adverse):,.2f}원"
+    if spot:
+        rate += f" (현재 {_amount(spot):,.2f}원"
+        # The interval is what makes the adverse rate a bound rather than a
+        # prediction, and §5.2 refuses to produce one without it.
+        if confidence:
+            rate += f", 신뢰수준 {_amount(confidence) * 100:.0f}%"
+        rate += ")"
+    parts.append(rate)
+
+    observed_from, observed_to = market.get("observed_from"), market.get("observed_to")
+    if observed_from and observed_to:
+        days = market.get("observation_days")
+        window = f"관측 {observed_from} ~ {observed_to}"
+        if days:
+            window += f" ({days}영업일)"
+        parts.append(window)
+
+    return " · ".join(parts)
+
+
+def grounded(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every claim the answer makes, each carrying the evidence for itself.
+
+    `support`, `compliance` and `actions` write the claims; `detail` writes the
+    lists behind them. Both are correct and the screen could not join them: the
+    sentences come out settled-first while the rows come out in rule order, so
+    the third sentence and the third row were about different products. What
+    the screen did instead was print all the sentences as one paragraph and put
+    all the rows in a fold underneath — five assertions in a block, and the
+    grounds for any one of them behind a click and a search.
+
+    Reading it meant holding a claim in your head, opening the fold, finding
+    which row belonged to it, and coming back. The evidence was present and
+    unusable, which is a worse failure than absent: the product looks like it
+    is showing its work while making the work unreadable.
+
+    So the pairing is made here, where both halves are built from the same
+    candidate in the same pass. There is no key to join on and nothing to keep
+    in step — a claim without its grounds cannot be constructed.
+
+    The claims are not re-worded. This is the same text `support` and the rest
+    already produce, so a reader comparing the summary against these blocks
+    sees the same sentences, and the synthesis guard keeps checking the same
+    strings it always has.
+    """
+    blocks: list[dict[str, Any]] = []
+
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
+        checks = candidate.get("checks") or []
+        met = [c["description"] for c in checks if c.get("status") == "passed"]
+        wanted = [c["description"] for c in checks if c.get("status") == "uncertain"]
+        claim = _support_claim(candidate, met, wanted)
+        if not claim:
+            continue
+        theirs, ours = _split_wanted(checks)
+        blocks.append(
+            {
+                "kind": "support",
+                "claim": claim,
+                # `settled` is what the chip and the ordering both read. A
+                # product still short of a fact is not a weaker yes.
+                "settled": candidate.get("status") != _SETTLED,
+                "met": met,
+                # Kept apart on the screen too. Under one 「필요」 label they
+                # read as one list of things the reader has to go and find out,
+                # and one of them is ours.
+                "wanted": theirs,
+                "ours": ours,
+            }
+        )
+
+    # Ordered the way `support` orders its sentences — decided first, open
+    # after. The reader's question is 「받을 수 있나요」 and an answer that
+    # opens with what is still unknown answers a different one.
+    blocks.sort(key=lambda block: not block["settled"])
+
+    for line in compliance(result):
+        # §5.5's paragraph is already one claim per sentence and its grounds
+        # are inside the sentence — the branch condition *is* the evidence.
+        # Splitting it into met/wanted would be inventing a structure the
+        # rulepack does not have.
+        blocks.append({"kind": "compliance", "claim": line, "met": [], "wanted": []})
+
+    for action in _one_per_errand(result):
+        authority = AUTHORITY_NAME.get(action.get("authority"), action.get("authority"))
+        documents = action.get("required_documents") or []
+        blocks.append(
+            {
+                "kind": "action",
+                "claim": (
+                    f"다음은 {authority} "
+                    f"{ACTION_NAME.get(action.get('action'), '상담 및 신청')}입니다."
+                ),
+                "met": [],
+                # The documents are the grounds for 「필요서류는 6건입니다」.
+                # A count with the list one click away is the shape this whole
+                # function exists to undo.
+                "wanted": documents,
+            }
+        )
+
+    return blocks
+
+
+def _split_wanted(checks: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """The open conditions, split by who is supposed to close them.
+
+    `asking.ASKABLE` decides which facts this product puts to a company, and
+    the set is deliberately small — 국별인수방침 인수제한국 여부 is not in it,
+    because asking a company whether its buyer's country is restricted is
+    asking them to make our judgement and their answer would be evidence of
+    nothing.
+
+    That decision was being contradicted one screen later. The sentence said
+    「국별인수방침 인수제한국 소재가 아님을 알려주시면 판정합니다」 — demanding
+    the very fact the intake refuses to ask for, and leaving the reader waiting
+    on a question that never arrives.
+    """
+    from tradeflow.runtime.asking import ASKABLE
+
+    # A check has to *name* a field before this can say the field is not one we
+    # ask about. Routing an unnamed condition to our side would tell the reader
+    # to sit and wait for a lookup nobody is doing — the failure that is
+    # hardest to notice, because the screen looks like it is working on it.
+    theirs, ours = [], []
+    for check in checks:
+        if check.get("status") != "uncertain":
+            continue
+        field = check.get("field")
+        (ours if field and field not in ASKABLE else theirs).append(
+            check["description"]
+        )
+    return theirs, ours
+
+
+def _support_claim(candidate: dict[str, Any], met: list[str], wanted: list[str]) -> str:
+    """One product's verdict, worded exactly as `support` words it."""
+    title = candidate.get("title") or ""
+    if candidate.get("status") != _SETTLED:
+        line = f"{title}{_particle(title, TOPIC)} 조건을 충족합니다."
+        if met:
+            line += f" 확인한 조건은 {len(met)}가지입니다."
+        if candidate.get("status") == "expert_confirmation_required":
+            line += " 초안 규칙이라 공식 확인을 받으셔야 합니다."
+        return line
+    if not wanted:
+        return ""
+    theirs, ours = _split_wanted(candidate.get("checks") or [])
+    line = f"{title}{_particle(title, TOPIC)} 아직 판정하지 못했습니다."
+    if theirs:
+        listed = _some(theirs)
+        line += f" {listed}{_particle(listed, OBJECT)} 알려주시면 판정합니다."
+    if ours:
+        listed = _some(ours)
+        # Named, not hidden. A condition nobody is going to be asked about is
+        # still a condition the judgement is waiting on, and a reader who is
+        # not told will read the silence as the rule having passed.
+        line += (
+            f" {listed}{_particle(listed, SUBJECT)} 남아 있는데, 이건 여쭙지 않고"
+            " 저희가 확인할 항목입니다."
+        )
+    return line
 
 
 def detail(result: dict[str, Any]) -> list[dict[str, Any]]:

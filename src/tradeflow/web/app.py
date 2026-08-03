@@ -666,7 +666,17 @@ def analyze_endpoint(
         "actions": narration.actions(result),
         "sources": narration.sources(result),
         "detail": narration.detail(result),
+        # 같은 판정을, 근거를 달고. `support`·`compliance`·`actions`가 쓴
+        # 문장들을 문단으로 이어 붙이고 그 근거를 접힘 하나에 모아 두면,
+        # 읽는 사람은 주장 하나를 머리에 넣고 접힘을 열어 해당하는 줄을 찾아
+        # 돌아와야 한다. 근거가 있는데 쓸 수 없는 상태이고, 그건 없는 것보다
+        # 나쁘다 — 화면은 일을 보여주는 척하면서 그 일을 읽을 수 없게 만든다.
+        "grounded": narration.grounded(result),
     }
+    # 답변에서 가장 큰 숫자가 유일하게 근거 없이 서 있었다. 규칙 판정은
+    # 적어도 펼쳐 볼 수 있었는데, 은행에 그대로 옮겨 적을 가능성이 가장 높은
+    # 손실 금액은 어디서 왔는지 말하지 못했다.
+    result["basis"] = narration.basis(result)
     # 자금 공백이 언제 열리고 며칠인지. 금액만 있는 공백은 걱정이고, 날짜가
     # 붙은 공백은 할 일이다 — 8월 25일에 6만 달러가 있느냐 없느냐는 숫자만
     # 보아서는 알 수 없다. 응답에 이미 있던 타임라인에서 두 번 찾으면 나온다.
