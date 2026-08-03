@@ -1,4 +1,4 @@
-"""Deterministic contracts for TradeFlow's decision-changing experience.
+"""Deterministic contracts for KB Comme's decision-changing experience.
 
 The language model may explain these records, but it does not choose the next
 question or calculate a change.  Both projections are derived from the

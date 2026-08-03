@@ -1,4 +1,4 @@
-"""Stable interfaces shared by independently owned TradeFlow modules."""
+"""Stable interfaces shared by independently owned KB Comme modules."""
 
 from tradeflow.contracts.decision_packet import (
     DecisionPacket,

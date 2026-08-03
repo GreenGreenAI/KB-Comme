@@ -83,7 +83,7 @@ export default function Nav({
   return (
     <header className="nav">
       <button className="brand" type="button" onClick={onHome}>
-        <i>T</i> TradeFlow
+        <i>C</i> KB Comme
       </button>
       {/* The three areas beyond 분석 have no page behind them yet. They are
           shown so the shape of the product is legible, and they respond to the

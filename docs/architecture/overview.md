@@ -7,7 +7,7 @@ last-reviewed: 2026-07-26
 
 # 시스템 아키텍처 개요
 
-TradeFlow는 도메인 모델을 중심으로 공유 계약, 지식 판정, 계산 도구와 실행
+KB Comme는 도메인 모델을 중심으로 공유 계약, 지식 판정, 계산 도구와 실행
 파이프라인을 분리한다.
 
 ```text
@@ -23,7 +23,7 @@ integration ─→ 공개/비공개 snapshot store ─→ tools, knowledge
    (리프)              (파일)
 ```
 
-- `domain`: 다른 TradeFlow 계층에 의존하지 않는 핵심 모델과 계층 공통 값객체
+- `domain`: 다른 KB Comme 계층에 의존하지 않는 핵심 모델과 계층 공통 값객체
 - `contracts`: 계층 간 공유되는 좁은 인터페이스
 - `knowledge`: 출처, 조건과 근거 기반 판정
 - `tools`: 결정론적 계산과 분석

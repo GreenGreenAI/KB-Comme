@@ -1,9 +1,9 @@
-"""Normalize LSEG FXall Cash RFQ FIX quotes into Tradeflow's private contract.
+"""Normalize LSEG FXall Cash RFQ FIX quotes into KB Comme's private contract.
 
 This module deliberately does not implement a FIX session. Session onboarding,
 counterparty permissions and credentials remain in the tenant connector. Only
 the economic fields of an already authenticated Quote (S) message cross into
-Tradeflow.
+KB Comme.
 """
 
 from __future__ import annotations

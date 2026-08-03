@@ -19,7 +19,7 @@ try {
     python scripts/check_rulepacks.py
     if ($LASTEXITCODE -ne 0) { throw "Rulepack readiness checks failed." }
 
-    Write-Host "TradeFlow checks passed."
+    Write-Host "KB Comme checks passed."
 }
 finally {
     Pop-Location

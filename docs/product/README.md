@@ -25,7 +25,7 @@ last-reviewed: 2026-07-26
 - [설계 프로그레스](design-progress.md)
 - [구현 프로그레스](implementation-progress.md)
 - [유저 프로필 분류·정책 라우팅 벤치마크](user-profile-policy-benchmark.md)
-- [답을 바꾸는 조건을 보여주는 TradeFlow 차별화 전략](decision-delta-differentiation.md)
+- [답을 바꾸는 조건을 보여주는 KB Comme 차별화 전략](decision-delta-differentiation.md)
 - [통합 제품·아키텍처 기획서](product-architecture-plan.md)
 - [대회 제출 기획안 — 결과를 바꾸는 수출입금융 의사결정 AI](competition-proposal.md)
 - [KB AI Challenge 제출 기획안 작성 계획](kb-ai-challenge-submission-plan.md)

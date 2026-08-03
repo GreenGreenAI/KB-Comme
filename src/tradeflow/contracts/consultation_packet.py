@@ -1,6 +1,6 @@
 """A bank-neutral handoff contract built from a verified analysis result.
 
-The packet is the boundary between TradeFlow and a bank channel.  It contains
+The packet is the boundary between KB Comme and a bank channel.  It contains
 the decision facts an RM needs, but never raw uploaded document bytes.  A bank
 adapter may later transmit this exact contract; the demo deliberately stops at
 an auditable manual download.

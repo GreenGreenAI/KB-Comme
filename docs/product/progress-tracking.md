@@ -5,11 +5,11 @@ reviewers: knowledge-domain, platform-runtime, bank-integration
 last-reviewed: 2026-08-02
 ---
 
-# TradeFlow 통합 프로그레스 트래킹
+# KB Comme 통합 프로그레스 트래킹
 
 ## 1. 목적
 
-이 문서는 TradeFlow의 기획, 설계와 구현 진척을 한 화면에서 확인하는 기준 대시보드다.
+이 문서는 KB Comme의 기획, 설계와 구현 진척을 한 화면에서 확인하는 기준 대시보드다.
 상세 판단과 근거는 아래 세 문서에서 관리한다.
 
 - [기획 프로그레스](planning-progress.md)

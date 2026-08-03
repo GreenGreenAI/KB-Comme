@@ -50,7 +50,7 @@
     },
     {
       "claim_id": "KOREAEXIM_REFERENCE_NOT_EXECUTION_PRICE",
-      "locator": "TradeFlow source-role policy",
+      "locator": "KB Comme source-role policy",
       "topic": "reference_fx",
       "normalized_summary": "공식 API 환율은 기준·분석용이며 기업별 체결 가능 가격, 수수료와 호가 유효시간을 증명하지 않는다.",
       "automation_level": "deterministic_reference_only"

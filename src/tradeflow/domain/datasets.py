@@ -431,7 +431,7 @@ def parse_trade_feed_payload(payload: Any) -> TradeFeedData:
 
 
 def parse_ecos_usd_krw_payload(payload: Any) -> FxSeries:
-    """Validate and normalize the exact ECOS series used by TradeFlow."""
+    """Validate and normalize the exact ECOS series used by KB Comme."""
     if not isinstance(payload, dict):
         raise DatasetContractError("ECOS payload must be a JSON object")
     rows = payload.get("row")

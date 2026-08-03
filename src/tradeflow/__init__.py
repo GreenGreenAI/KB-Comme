@@ -1,4 +1,4 @@
-"""TradeFlow evidence-first trade finance decision support."""
+"""KB Comme evidence-first trade finance decision support."""
 
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 

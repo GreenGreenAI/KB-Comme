@@ -1,4 +1,4 @@
-"""HTTP surface for the TradeFlow web application.
+"""HTTP surface for the KB Comme web application.
 
 The conversation is deliberately stateless: the browser holds what has been said
 so far and resends it. Keeping it on the server would add expiry, eviction and a
@@ -115,7 +115,7 @@ SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 SIGN_IN_OPEN = bool(os.environ.get("TRADEFLOW_SIGN_IN"))
 _accounts: AccountStore | None = None
 
-app = FastAPI(title="TradeFlow", version="0.1.0")
+app = FastAPI(title="KB Comme", version="0.1.0")
 if os.environ.get("TRADEFLOW_ENV") == "production" and not DATABASE_URL:
     raise RuntimeError(
         "TRADEFLOW_DATABASE_URL is required in production; "

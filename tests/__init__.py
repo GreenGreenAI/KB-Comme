@@ -1,2 +1,2 @@
-"""TradeFlow tests grouped by module ownership."""
+"""KB Comme tests grouped by module ownership."""
 

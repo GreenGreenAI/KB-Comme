@@ -23,7 +23,7 @@ python -m pip install -e .
 
 ## 금지 사항
 
-- 외부 원본 저장소 코드를 TradeFlow로 직접 import
+- 외부 원본 저장소 코드를 KB Comme로 직접 import
 - 출처 없는 규정·지원 요건을 production-ready로 지정
 - Knowledge Layer에서 계산 도구나 Runtime을 역참조
 - Runtime에서 문장 키워드만으로 자격을 확정
