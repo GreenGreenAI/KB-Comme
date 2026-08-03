@@ -432,9 +432,14 @@
     padding: clamp(3.5rem, 11vh, 8rem) 0 5rem; text-align: center;
     display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
   }
+  /* Sized to the words in it. 「짐작하지 말고 / 계산하세요」 was nine syllables
+     and could take 67px; this line is nearly three times that, and at the old
+     size both halves wrapped — four lines of display type before the reader
+     reaches anything they can do. The type is smaller and the opening is
+     shorter to look at, which is the trade a longer sentence asks for. */
   h1.hero {
-    margin: .3rem 0 0; font-size: clamp(2.6rem, 5.6vw, 4.2rem); font-weight: 300;
-    letter-spacing: -.045em; line-height: 1.08; text-wrap: balance;
+    margin: .3rem 0 0; font-size: clamp(1.75rem, 3.4vw, 2.5rem); font-weight: 300;
+    letter-spacing: -.03em; line-height: 1.24; text-wrap: balance;
   }
   /* The two lines are separate elements now, one per beat of the reveal, so
      each needs its own line rather than the <br> that used to divide them. */
@@ -451,7 +456,13 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: none; }
   }
-  .standfirst { margin: 0; max-width: 34rem; color: var(--ink-70); font-size: 1.0625rem; }
+  /* Wider than it was, because the sentence under the headline is now two of
+     them. At 34rem this ran to five lines and the input dropped below the
+     fold on a laptop — the one thing the page exists to put in front of
+     someone. */
+  .standfirst {
+    margin: 0; max-width: 38rem; color: var(--ink-70); font-size: 1.0625rem;
+  }
 
   .prompt {
     width: 100%; margin-top: 1.4rem; background: var(--paper);
@@ -491,7 +502,6 @@
     padding: .45rem 1rem; font-size: .875rem; color: var(--ink-70); box-shadow: var(--lift);
   }
   .chip:hover { color: var(--accent); border-color: var(--accent); }
-  .assurance { margin: 1.6rem 0 0; font-size: .8125rem; color: var(--ink-45); max-width: 33rem; }
 
   /* ================= WORK ================= */
   /* 14px nav offset + nav height + the gap under it. Kept as one value so the

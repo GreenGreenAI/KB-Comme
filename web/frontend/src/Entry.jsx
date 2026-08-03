@@ -35,16 +35,16 @@ export default function Entry({ onSend, busy }) {
           control that fades in is a control the hand has to wait for. */}
       <h1 className="hero">
         <span className="reveal" style={{ animationDelay: "60ms" }}>
-          짐작하지 말고
+          감으로 챙기는 수출입 실무?
         </span>
         <b className="reveal" style={{ animationDelay: "220ms" }}>
-          계산하세요
+          이젠 거래내역 하나로 끝내세요.
         </b>
       </h1>
       <p className="standfirst reveal" style={{ animationDelay: "430ms" }}>
-        수출입 거래의 환노출을 한국은행 환율로 계산하고, 지원제도 자격과
-        신고의무를 규칙으로 판정합니다. 출처와 기준일을 함께 보여드리고,
-        환율을 예측하지는 않습니다.
+        K-SURE 지원제도, 헷갈리는 신고 의무... 언제 다 찾아보나요? 거래 내역만
+        편하게 툭 적어주시면, 시스템이 알아서 판정하고 필요한 서류까지 싹 다
+        챙겨드립니다.
       </p>
 
       <div className="prompt">
@@ -104,11 +104,6 @@ export default function Entry({ onSend, busy }) {
           </button>
         ))}
       </div>
-
-      <p className="assurance">
-        금액 계산과 규정 판정은 모두 결정론적 코드가 수행합니다. AI는 묻고 설명할
-        뿐, 수치를 만들지 않습니다.
-      </p>
     </div>
   );
 }
