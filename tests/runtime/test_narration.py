@@ -290,6 +290,107 @@ class ReadBackTests(unittest.TestCase):
         self.assertIn("수출 100,000 USD", said)
 
 
+class ClosedTests(unittest.TestCase):
+    """Five questions arrived in a row with no sign that any of them had done
+    anything. The rules were closing conditions on every turn and the screen
+    reported none of it, so answering read as filling a form that kept
+    growing."""
+
+    RESULT = {
+        "support_candidates": [
+            {
+                "rule_id": "KSURE_FX",
+                "title": "K-SURE 환변동보험",
+                "status": "expert_confirmation_required",
+                "checks": [
+                    {"field": "company.size", "description": "중소·중견기업", "status": "passed"},
+                    {"field": "trade.direction", "description": "수출 거래", "status": "passed"},
+                ],
+            },
+            {
+                "rule_id": "KSURE_GUARANTEE",
+                "title": "K-SURE 수출신용보증(선적전)",
+                "status": "insufficient_information",
+                "checks": [
+                    {"field": "company.size", "description": "중소·중견기업", "status": "passed"},
+                    {
+                        "field": "financing.has_bank_consultation",
+                        "description": "취급 금융기관 사전 상담",
+                        "status": "uncertain",
+                    },
+                ],
+            },
+        ]
+    }
+
+    def test_it_names_the_condition_and_where_it_was(self) -> None:
+        said = narration.closed(self.RESULT, ["company_size"])
+
+        self.assertIn("「중소·중견기업」", said)
+        self.assertIn("제도 2건", said)
+
+    def test_one_product_is_named_rather_than_counted(self) -> None:
+        """「제도 1건」 withholds the one thing it could have said."""
+        said = narration.closed(
+            {"support_candidates": [self.RESULT["support_candidates"][1]]}, ["company_size"]
+        )
+
+        self.assertIn("K-SURE 수출신용보증(선적전)", said)
+        self.assertNotIn("1건", said)
+
+    def test_a_request_field_reaches_the_fact_a_rule_reads(self) -> None:
+        """The screen sends what it set; a check names the fact a rule wanted.
+        Nobody is asked for a payment term — they are asked when they ship."""
+        derived = {
+            "support_candidates": [
+                {
+                    "rule_id": "KSURE_POSTSHIP",
+                    "title": "K-SURE 단기수출보험(선적후·개별)",
+                    "status": "insufficient_information",
+                    "checks": [
+                        {
+                            "field": "trade.payment_term_days",
+                            "description": "개별보험 결제기간 2년 이내",
+                            "status": "passed",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        self.assertIn(
+            "개별보험 결제기간 2년 이내",
+            narration.closed(derived, ["expected_shipment_date"]),
+        )
+
+    def test_a_condition_still_open_is_not_reported_as_closed(self) -> None:
+        """Answering does not make a rule pass, and this line must never be the
+        reason somebody believes it did."""
+        said = narration.closed(self.RESULT, ["financing.has_bank_consultation"])
+
+        self.assertIsNone(said)
+
+    def test_nothing_answered_says_nothing(self) -> None:
+        """A typed sentence answers no question. 「방금 답해 주신 것으로」 after
+        a sentence nobody was asked for is the product mishearing the turn."""
+        self.assertIsNone(narration.closed(self.RESULT, []))
+        self.assertIsNone(narration.closed(self.RESULT, None))
+
+    def test_a_condition_is_said_once_however_many_trades_it_ran_against(self) -> None:
+        two_trades = {
+            "support_candidates": [
+                {**candidate, "subject_id": f"CASE-{n}"}
+                for n in (1, 2)
+                for candidate in self.RESULT["support_candidates"]
+            ]
+        }
+
+        said = narration.closed(two_trades, ["company_size"])
+
+        self.assertEqual(1, said.count("중소·중견기업"))
+        self.assertIn("제도 2건", said)
+
+
 class BasisTests(unittest.TestCase):
     RESULT = {
         "cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "100000"}]},

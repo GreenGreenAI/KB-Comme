@@ -373,6 +373,14 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`read-back${arrive}`}>{result.read_back}</p>
       )}
 
+      {/* What the last answer settled, before what the next one is for. Five
+          questions arrived in a row with no sign that any of them had done
+          anything — so answering read as filling a form that kept growing,
+          when each answer was closing named conditions on named products. */}
+      {shown > 0 && result.closed && (
+        <p className={`read-back closed${arrive}`}>{result.closed}</p>
+      )}
+
       {leads && shown > 0 && result.pointer && (
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}

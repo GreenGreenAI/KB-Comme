@@ -334,6 +334,18 @@ export default function App() {
     // is stateless, so a grade stated three turns ago has to travel with every
     // request or the judgement it opened would close again.
     const nextStated = { ...facts.stated, ...(patch.facts ?? {}) };
+    // What this turn answered, as distinct from everything answered so far.
+    // The server is stateless and gets the accumulated facts whole, so it
+    // cannot tell what is new — and could not say what an answer had just
+    // settled. This side knows: what was pressed a moment ago is this list.
+    //
+    // Nothing is judged from it. A wrong or missing entry costs one sentence;
+    // the rules always read the accumulated facts.
+    const justAnswered = [
+      ...Object.keys(patch.facts ?? {}),
+      ...Object.keys(patch.profile ?? {}),
+      ...Object.keys(patch.case ?? {}),
+    ];
     setFacts({
       cases: nextCases,
       profile: nextProfile,
@@ -382,6 +394,7 @@ export default function App() {
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
         ...(Object.keys(nextStated).length > 0 ? { stated_facts: nextStated } : {}),
+        ...(justAnswered.length > 0 ? { just_answered: justAnswered } : {}),
         // What earlier sentences established about the trade structure. The
         // server reads 상계 out of the sentence, and a follow-up has no
         // sentence to read it from — so it travels with the trade, and this

@@ -476,6 +476,73 @@ def read_back(heard: dict[str, Any] | None) -> str | None:
     return line
 
 
+#: What a request field is called once a rule is reading it.
+#:
+#: The screen sends what it set — `company_size`, or the trade slot a question
+#: asked for — and a check names the fact a rule wanted. Mostly the two are the
+#: same word; where they are not, it is because the answer is an input to the
+#: fact rather than the fact itself. 선적일 is the clear case: nobody is asked
+#: for a payment term, they are asked when they ship, and the term is worked
+#: out from that and the settlement date.
+_ANSWER_CLOSES = {
+    "company_size": "company.size",
+    "credit_issue_free": "company.credit_issue_free",
+    "expected_shipment_date": "trade.payment_term_days",
+}
+
+
+def closed(result: dict[str, Any], answered: list[str] | None) -> str | None:
+    """Which conditions the answer just given got past.
+
+    Five questions in a row, each arriving with no sign that the last one did
+    anything. The rules were closing conditions on every turn and the screen
+    reported none of it — so answering felt like filling a form that kept
+    growing, when in fact each answer was settling named conditions on named
+    products.
+
+    Causality is not observable here and is not claimed. What is said is that
+    a condition the reader was asked about is now passed, which is true and is
+    the part they cannot see for themselves. A condition that came back failed
+    is left to the judgement below to report; announcing it here would put the
+    bad news in the sentence about progress.
+    """
+    wanted = {_ANSWER_CLOSES.get(field, field) for field in answered or []}
+    if not wanted:
+        return None
+
+    # By condition rather than by product: one answer clears the same condition
+    # on several products at once, and naming the condition three times is the
+    # duplication `_one_per_rule` exists to stop, arriving from a new direction.
+    by_condition: dict[str, list[str]] = {}
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
+        title = candidate.get("title") or ""
+        for check in candidate.get("checks") or []:
+            if check.get("field") not in wanted or check.get("status") != "passed":
+                continue
+            titles = by_condition.setdefault(check["description"], [])
+            if title and title not in titles:
+                titles.append(title)
+    if not by_condition:
+        return None
+
+    # Conditions first, then where they were. Naming the products beside each
+    # condition put `·` to work as both separators at once — 「중소·중견기업」 —
+    # K-SURE 일반형 수출 환변동보험 · K-SURE 수출신용보증(선적전) · 「공식 안내
+    # …」 — and nothing in the line said which dot meant which.
+    conditions = _joined([f"「{name}」" for name in by_condition])
+    products = list(dict.fromkeys(title for titles in by_condition.values() for title in titles))
+    # One product is worth naming; several are a count, because the blocks
+    # directly below list every one of them beside the conditions it holds.
+    # This line's work is momentum, not the record.
+    where = products[0] if len(products) == 1 else f"제도 {len(products)}건"
+    return (
+        f"방금 답해 주신 것으로 {conditions}{_particle(conditions, SUBJECT)}"
+        f" 지나갔습니다 — {where}."
+    )
+
+
 def basis(result: dict[str, Any]) -> str | None:
     """What the loss figure is computed from, in one line.
 
