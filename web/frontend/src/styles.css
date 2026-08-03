@@ -1,19 +1,44 @@
-/* Palette is four values only: #5f5449, #9b6a6c, #b09398 and white.
+/* Palette is four values only: #5f5449, #93605f, #b09398 and white.
      Softer tones are those same values mixed with white, never new hues.
      With no green/amber/red to lean on, state is carried by form — filled vs
      outlined vs dashed — and the most chromatic value is reserved for the one
      thing that should pull the eye. */
   :root {
     --ink: #5f5449;
-    --accent: #9b6a6c;
+    --accent: #93605f;
     --soft: #b09398;
     --paper: #ffffff;
 
-    --ink-70: color-mix(in srgb, var(--ink) 70%, #fff);
-    --ink-45: color-mix(in srgb, var(--ink) 45%, #fff);
-    --ink-30: color-mix(in srgb, var(--ink) 30%, #fff);
-    --rule: color-mix(in srgb, var(--soft) 42%, #fff);
-    --rule-faint: color-mix(in srgb, var(--soft) 22%, #fff);
+    /* How far each step is mixed toward white is the whole legibility budget of
+       the product: `--ink-45` alone dresses 45 rules, and every limit sentence,
+       every source line and every fold label is one of them.
+
+       Measured against white, the steps used to land at 3.53 / 2.10 / 1.60 —
+       so the two lines that carry the most caution, 「근거」 and 「한계」, were
+       the least readable things on the screen. They were legible on the laptop
+       they were designed on and gone on a projector in a lit room, which is
+       where this gets shown.
+
+       There is no arrangement of this scale that keeps three readable tiers.
+       AA for text this small starts at 4.58:1, which is 81% of the way to full
+       ink; a tier above it that is visibly different is at 90%, and body is
+       100%. Three steps do not fit in that gap — so the lightness scale carries
+       two tiers and size and weight carry the rest, which is what the captions
+       were already doing at 11 and 12px. The hues are untouched: this palette
+       is three values and white, and buying contrast with a new colour would
+       have got the same ratios at the cost of the one thing the design is. */
+    --ink-70: color-mix(in srgb, var(--ink) 90%, #fff);
+    --ink-45: color-mix(in srgb, var(--ink) 81%, #fff);
+    /* Not held to the text bar: a placeholder, a fold's hinge, and a figure
+       that is zero — all of them saying「없음」, where being quiet is the
+       message rather than an oversight. Lifted enough to be seen at all. */
+    --ink-30: color-mix(in srgb, var(--ink) 60%, #fff);
+    /* Hairlines are what the eye uses to find the edge of a fold or a row.
+       They cannot reach the 3:1 asked of controls without `--soft` becoming a
+       different colour, so they are lifted as far as the hue allows and the
+       controls carry their state in fill and label as well as in the line. */
+    --rule: color-mix(in srgb, var(--soft) 60%, #fff);
+    --rule-faint: color-mix(in srgb, var(--soft) 34%, #fff);
     --tint: color-mix(in srgb, var(--soft) 14%, #fff);
     --tint-strong: color-mix(in srgb, var(--soft) 26%, #fff);
     --accent-tint: color-mix(in srgb, var(--accent) 12%, #fff);
@@ -64,7 +89,10 @@
   html, body { height: 100%; overflow: hidden; }
   body {
     margin: 0; height: 100%; color: var(--ink);
-    font-family: var(--sans); font-size: 15px; line-height: 1.62;
+    /* 16px, not 15. The sizes set in `rem` are measured against the root and do
+       not move with this, so raising it lifts exactly the running text of an
+       answer and leaves every label and chip where the layout put them. */
+    font-family: var(--sans); font-size: 16px; line-height: 1.62;
     background:
       radial-gradient(1150px 540px at 20% -10%, var(--wash), transparent 60%),
       radial-gradient(880px 460px at 90% 2%, var(--wash-2), transparent 55%),
@@ -1038,8 +1066,11 @@
     margin: .2rem 0 .3rem; padding-left: .9rem;
     font-family: var(--mono); font-size: .6875rem; line-height: 1.7; color: var(--ink-70);
   }
+  /* 10px monospace was the smallest thing in the product, and it is the line
+     that says which authority a judgement came from — the part a reader is
+     most likely to want to check and least able to read across a room. */
   .sources {
-    margin: 0; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
+    margin: 0; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
   }
   /* The marker turns rather than swapping glyphs: the rotation is what says
      the row did something. Kept dimmer than the label so it reads as a hinge
