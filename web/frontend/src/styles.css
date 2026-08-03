@@ -776,15 +776,44 @@
   /* Stacked, keyboard-first. Each option is a different thing to do, so they
      are read rather than scanned; side-by-side pills invite a click before
      the second one has been read. */
-  .choices { display: grid; gap: 2px; outline: none; }
+  /* A row's height is written down rather than left to the text, because the
+     cap below counts rows. Inherited line-height would make 「3줄」 mean one
+     thing for 「A」 and another for 「모릅니다 · 등급이 없습니다」, and the list
+     would stop at three and a half. */
+  .choices {
+    display: grid; gap: var(--choice-gap); outline: none;
+    --choice-pad: .38rem;
+    --choice-line: 1.35rem;
+    --choice-gap: 2px;
+    --choice-row: calc(var(--choice-line) + 2 * var(--choice-pad));
+  }
+  /* Three rows and the two gaps between them. Exactly — a fourth row peeking
+     would read as a rendering accident rather than as an invitation, and the
+     line underneath already says how many there are. */
+  .choices.scrolls {
+    max-height: calc(3 * var(--choice-row) + 2 * var(--choice-gap));
+    overflow-y: auto; scrollbar-width: thin;
+    /* The scrollbar sits inside the box; without this the rows reflow the
+       moment the list becomes scrollable. */
+    scrollbar-gutter: stable;
+  }
+  .choices-more {
+    margin: .4rem 0 0; font-size: .6875rem; color: var(--ink-45);
+  }
   .choice {
+    /* `min-height`, not `height`. The cap counts rows, so a row has to have a
+       known height — but a label that wraps must grow rather than be cut, and
+       an option the reader cannot finish reading is worse than a list that
+       shows two and a half. */
+    line-height: var(--choice-line); min-height: var(--choice-row);
     /* Four tracks, because ::before is a grid item too. Giving it its own
        column keeps the hint out of the 1.1rem caret track, where it wrapped
        one character per line. */
     display: grid; grid-template-columns: .8rem auto auto 1fr;
     align-items: baseline; gap: .5rem;
     width: 100%; text-align: left; cursor: pointer;
-    padding: .38rem .6rem .38rem .3rem; border: none; border-radius: 8px;
+    padding: var(--choice-pad) .6rem var(--choice-pad) .3rem;
+    border: none; border-radius: 8px;
     background: none; color: var(--ink); font-size: .8125rem;
     transition: background .12s ease, color .12s ease;
   }
@@ -804,6 +833,10 @@
   .choice-key {
     font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
     border: 1px solid var(--rule); border-radius: 4px; padding: .05rem .3rem;
+    /* Its own line box, or the badge's border and padding are added to the
+       inherited line-height and every row comes out taller than the row height
+       the cap is counting in. */
+    line-height: 1;
   }
   .choice.on .choice-key { border-color: var(--accent); color: var(--accent-deep); }
   .choice-label { font-weight: 600; }

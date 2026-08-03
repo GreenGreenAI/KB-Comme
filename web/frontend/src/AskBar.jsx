@@ -263,6 +263,24 @@ function ChoiceList({ options, onPick }) {
     box.current?.focus();
   }, []);
 
+  // The list scrolls once it is longer than it should be tall, and a selection
+  // that moves out of view is a selection nobody can see they are making. The
+  // caret and the tint are the only thing saying which option Enter will take.
+  //
+  // `nearest` rather than `center`: moving from the first option to the second
+  // should not scroll a list that is already showing both.
+  useEffect(() => {
+    box.current
+      ?.querySelector(`#choice-${active}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  // Nine grades is 200px of column for a question whose answer is one
+  // keystroke. Three rows is enough to show that this is a list and what kind
+  // of thing is in it; the rest is a scroll away, and the number keys reach
+  // every one of them without scrolling at all.
+  const scrolls = options.length > VISIBLE_CHOICES;
+
   function onKeyDown(event) {
     const index = Number(event.key) - 1;
     if (index >= 0 && index < options.length) {
@@ -283,8 +301,9 @@ function ChoiceList({ options, onPick }) {
   }
 
   return (
+    <>
     <div
-      className="choices"
+      className={`choices${scrolls ? " scrolls" : ""}`}
       ref={box}
       tabIndex={0}
       role="listbox"
@@ -309,8 +328,21 @@ function ChoiceList({ options, onPick }) {
         </button>
       ))}
     </div>
+    {/* macOS hides scrollbars until something scrolls, so a cut list looks
+        like a short list — a company that never saw 「모릅니다」 would answer a
+        grade it does not have. Said rather than hinted at, because the count
+        is also what tells them the keys go past 3. */}
+    {scrolls && (
+      <p className="choices-more">
+        {options.length}개 중 3개 · 스크롤하거나 숫자키로 고르실 수 있습니다
+      </p>
+    )}
+    </>
   );
 }
+
+/** How many rows stand before the list starts scrolling. */
+const VISIBLE_CHOICES = 3;
 
 /** Focus moves here when the request opens: the agent asked, so this is where
  *  the answer goes. The composer is still there for anything else. */
