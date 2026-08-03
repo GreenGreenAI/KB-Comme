@@ -61,11 +61,10 @@
   }
   .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.02em; }
   .brand i {
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    border: 1.5px solid var(--accent); color: var(--accent);
-    font-family: var(--mono); font-size: .6875rem; font-style: normal;
-    font-weight: 700; letter-spacing: -.04em; text-indent: .04em;
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    border: 1.5px solid var(--accent); color: var(--accent); flex: none;
   }
+  .brand i svg { display: block; width: 20px; height: 20px; }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
   .nav nav a { text-decoration: none; color: inherit; }
   .nav nav a.on { color: var(--accent); font-weight: 600; }
@@ -283,7 +282,7 @@
 </style>
 
 <header class="nav">
-  <div class="brand"><i>KB</i> KB Comme</div>
+  <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M8.6 4.6V17.4M3.1 7.8l11 6.4M3.1 14.2l11-6.4"/><path d="M17.4 3.6v12.2"/><circle cx="18.4" cy="15.4" r="3.4"/></svg></i> KB Comme</div>
   <nav>
     <a href="#" class="on">분석</a>
     <a href="#">지원제도</a>

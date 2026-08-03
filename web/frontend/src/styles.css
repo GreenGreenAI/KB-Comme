@@ -122,20 +122,18 @@
     cursor: pointer; color: inherit; transition: opacity .12s ease;
   }
   .brand:active { opacity: .6; }
-  /* The circle is unchanged; only what is inside it. Two letters in a mark
-     sized for one need a step down and the tracking closed up — at 12px
-     monospace 「KB」 runs 14px wide inside 23px of usable circle and sits
-     against the stroke on both sides, which reads as a mark that was drawn
-     for a different word. */
+  /* 30px, not the 26 this ring held a letter at. Six rays and a bowl inside a
+     26px ring leave 20px of usable circle, and at that size the mark has to be
+     enlarged to check whether it was drawn well — a mark you have to zoom to
+     read is a mark that does not work at the only size it is ever used. Four
+     pixels of ring is the whole difference; the nav's height does not move. */
   .brand i {
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    border: 1.5px solid var(--accent); color: var(--accent);
-    font-family: var(--mono); font-size: .6875rem; font-style: normal;
-    font-weight: 700; letter-spacing: -.04em;
-    /* Monospace centres on its advance width, and the trailing side bearing
-       of the last glyph pushes the pair a hair to the left of the circle. */
-    text-indent: .04em;
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    border: 1.5px solid var(--accent); color: var(--accent); flex: none;
   }
+  /* The glyph's stroke lands at 1.75px against the ring's 1.5 — near enough to
+     read as one weight, and heavier would close the rays up at this size. */
+  .brand i svg { display: block; width: 20px; height: 20px; }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
   .nav-link { color: inherit; transition: color .15s ease; }
   .nav-link.on { color: var(--accent); font-weight: 600; }
