@@ -1,5 +1,5 @@
 ---
-status: active
+status: accepted
 owner: platform-runtime
 reviewers: product, knowledge-domain
 last-reviewed: 2026-08-02
