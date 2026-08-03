@@ -44,6 +44,17 @@ def main() -> int:
     held, cases = routing_floor()
     print(f"시나리오 수용 현황 — {met}/{wanted}")
     print(f"라우팅 바닥 — {held}/{cases}")
+
+    from tests.acceptance.subject_floor import check_all as subjects  # noqa: PLC0415
+
+    read = subjects()
+    if read is None:
+        print("주제 읽기 — 모델 없음 (UPSTAGE_API_KEY)")
+    else:
+        print(f"주제 읽기 — {sum(1 for ok, _ in read if ok)}/{len(read)}")
+        for ok, said in read:
+            if not ok:
+                print(f"        ✗ {said}")
     from tests.acceptance.routing_floor import check_all  # noqa: PLC0415
     for ok, said in check_all():
         if not ok:

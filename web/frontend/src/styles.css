@@ -112,6 +112,13 @@
     box-shadow: var(--lift);
   }
   .nav-cta:hover { border-color: var(--accent); color: var(--accent); }
+  /* Available, not advertised. Starting over is something you do to your own
+     work, so it says so plainly and does not compete with the answer for
+     attention — it only firms up when the pointer is on it. */
+  .nav-cta.quiet {
+    box-shadow: none; font-weight: 500; color: var(--ink-70);
+    padding: .42rem .95rem;
+  }
 
   /* ---------- account ---------- */
   .account { position: relative; }
@@ -596,6 +603,10 @@
     margin: 0; font-size: .875rem; font-weight: 600; color: var(--ink);
     line-height: 1.5;
   }
+  /* What answering opens. Quieter than the question because it is the reason,
+     not the request — and here the quiet is right: this line is a limit on the
+     question above it, which is what the muted style means everywhere else. */
+  .ask-note { margin: .2rem 0 0; font-size: .75rem; color: var(--ink-45); }
   .ask-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 
   /* An amount, shown the way it is read: the currency sits in the field
@@ -656,7 +667,12 @@
   /* The sections nobody asked about, and the audit. Quieter than the answer
      because they are not it — the previous shape gave every section the same
      size and colour, so the screen said nothing about which one was. */
-  .fold.aside > summary { color: var(--ink-45); font-size: .8125rem; }
+  /* 형제와 같은 잉크로. 이 라벨만 한 단계 흐렸던 것은 카드 시절에 「이건
+     답이 아니라 곁가지」를 색으로 말한 것인데, 답이 산문으로 위에 있고 이것이
+     아래에 있는 지금은 곁가지라는 것을 순서가 이미 말한다. 테두리는 누를 수
+     있다고 하고 글자는 못 누른다고 하는 상태만 남아 있었다. */
+  .fold.aside > summary { font-size: .8125rem; }
+  .fold.aside > summary:hover { color: var(--accent); }
   .fold.aside[open] > summary { margin-bottom: .4rem; }
   .fold.aside > .fold { margin-left: .6rem; }
 
@@ -733,18 +749,16 @@
   .ask-row > button:disabled { background: var(--rule); color: var(--paper); cursor: default; }
 
   /* ---------- the answer, inside the message ---------- */
-  .answer {
-    margin-top: .85rem; padding: .9rem 1rem; border: 1px solid var(--rule-faint);
-    border-radius: 12px; background: var(--wash-2);
-  }
-  /* When the answer is prose there is no card. The box was drawn around a
-     figure grid; wrapping sentences in it made the reply look like a record
-     the reader had been handed rather than an answer they had been given. */
-  .answer.told-answer {
-    padding: 0; border: none; background: none; margin-top: .2rem;
-  }
-  .answer.told-answer .folds { margin-top: 0; }
-  .answer.told-answer .folds .fold { border-top: none; padding-top: 0; }
+  /* No card. The figures and everything under them sit on the page, in the
+     same column as the sentences above them.
+
+     The grey box was drawn to group what the tools computed, and grouping is
+     what it did — it also separated. A panel with its own ground and its own
+     border reads as a document attached to the reply rather than part of it,
+     and the reader's eye stops at its edge before it reaches the figure. The
+     order already says what belongs to what: these come last because they are
+     read last. */
+  .answer { margin-top: .85rem; }
   .figrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
   .figrow > div { min-width: 0; }
   .figrow dt { font-size: .6875rem; color: var(--ink-45); }
@@ -754,6 +768,16 @@
   }
   .figrow dd small { font-size: .625rem; color: var(--ink-45); }
   .figrow dd.alarm { color: var(--accent); }
+  /* When the gap opens, under the amount it belongs to. Set as a caption
+     rather than a second figure — it qualifies the number above it, and a
+     date at the same weight would read as a third measurement. */
+  .figrow dd.when {
+    margin-top: .15rem; font-family: var(--sans, inherit); font-size: .6875rem;
+    color: var(--ink-45); letter-spacing: 0;
+  }
+  /* A zero that is the answer. Kept in the grid because its absence is what
+     the sentence beneath is about, and dimmed because nothing is there. */
+  .figrow dd.faded { color: var(--ink-30); }
   .answer-note { margin: .6rem 0 0; font-size: .75rem; color: var(--ink-45); line-height: 1.6; }
   .answer-note b { color: var(--accent); font-weight: 600; }
 
@@ -765,13 +789,27 @@
   .rate-fill { position: absolute; top: 0; bottom: 0; background: var(--tint-strong); }
   .rate-now { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
   .rate-be { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--accent); }
+  /* The end the trade suffers at. A band without it is a range with no
+     direction — an exporter loses on the left and an importer on the right,
+     and nothing in the drawing said which. */
+  .rate-adverse {
+    position: absolute; top: 0; bottom: 0;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
   .rate-legend {
     display: flex; justify-content: space-between; align-items: baseline;
     margin: .35rem 0 0; font-family: var(--mono); font-size: .6875rem;
     color: var(--ink-45); font-variant-numeric: tabular-nums;
   }
   .rate-legend b { color: var(--ink); font-size: .75rem; }
+  .rate-legend .adverse { color: var(--accent-deep); }
+  .rate-legend em {
+    font-style: normal; font-family: var(--sans, inherit); font-size: .625rem;
+    margin: 0 .25rem; letter-spacing: .04em;
+  }
 
+  /* The separators still span the column — it is the summary inside that hugs
+     its label, so the rule stays a rule and the control stays a control. */
   .folds { margin-top: .85rem; display: grid; gap: .1rem; }
   .folds .fold { margin: 0; border-top: 1px dashed var(--rule); padding-top: .45rem; }
   .folds .fold + .fold { margin-top: .25rem; }
@@ -878,14 +916,6 @@
   /* The single most chromatic value is spent here: the figure that should be
      looked at before any other. */
 
-  /* The inputs an answer can be replayed from. Read as a lookup, not prose,
-     so the labels stay in one column and the values line up beside them. */
-  .versions { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .3rem; }
-  .versions li { display: grid; grid-template-columns: 6.5rem 1fr; align-items: baseline; gap: .6rem; font-size: .6875rem; }
-  .versions .vk { color: var(--ink-45); }
-  .versions .vv { font-family: var(--mono); color: var(--ink-70); font-variant-numeric: tabular-nums; }
-  .versions .mono { letter-spacing: .02em; }
-
   /* One trade per row, read left to right the way the sentence was said. */
   .cases .when, .cases .how { font-family: var(--mono); font-size: .6875rem; color: var(--ink-45); }
 
@@ -894,10 +924,37 @@
   /* A section with nothing to show yet: the reason still appears, on one
      line, so refusing to guess does not cost a full card of height. */
 
-  /* Reference material: present when checked for, folded when reading. */
-  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .55rem; }
-  .fold > summary { cursor: pointer; font-size: .75rem; color: var(--ink-45); list-style: none; }
+  /* Reference material: present when checked for, folded when reading.
+
+     The row has to look like something you can press. Inside the grey card it
+     read as a control because the card was a surface and the row sat on it;
+     with the card gone the summary was 12px grey text on the page, the same
+     weight as the sentences above it, and nothing said it opened. So the
+     affordance is the row's own: a hit area wider than the words, a surface
+     that appears under the pointer, and a marker that turns. */
+  .fold { margin: .7rem 0 0; border-top: 1px dashed var(--rule); padding-top: .3rem; }
+  .fold > summary {
+    cursor: pointer; font-size: .75rem; color: var(--ink-70); list-style: none;
+    /* Hugs its label rather than spanning the column: a full-width row reads
+       as a heading, and a shape the size of its own words reads as a control.
+       This is the resting state doing the work — hover cannot be the whole
+       affordance when half the readers are on a touch screen and never
+       hover at all. */
+    display: inline-flex; align-items: baseline; gap: .15rem;
+    padding: .25rem .7rem .25rem .55rem;
+    border: 1px solid var(--rule-faint); border-radius: 999px;
+    transition: background .13s ease, color .13s ease, border-color .13s ease;
+  }
   .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary:hover { background: var(--wash-2); border-color: var(--soft); }
+  .fold > summary:active { background: var(--tint-strong); }
+  /* Open reads as pressed: the shape stays, the ground fills in. */
+  .fold[open] > summary { background: var(--tint); border-color: var(--rule); }
+  /* Keyboard reaches these too, and a control nobody can see focus on is a
+     control nobody can use without a mouse. */
+  .fold > summary:focus-visible {
+    outline: none; background: var(--wash-2); box-shadow: var(--focus-ring);
+  }
 
   /* Each decision at three rates. Figures right-aligned and tabular so the
      columns compare by eye — that is the whole point of the table. */
@@ -978,9 +1035,17 @@
   .sources {
     margin: 0; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
   }
-  .fold > summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform .15s ease; }
+  /* The marker turns rather than swapping glyphs: the rotation is what says
+     the row did something. Kept dimmer than the label so it reads as a hinge
+     and not as punctuation, and it takes the accent along with the label under
+     the pointer. */
+  .fold > summary::before {
+    content: "▸"; display: inline-block; width: 1em; flex: none;
+    color: var(--ink-30); transition: transform .15s ease, color .13s ease;
+  }
   .fold[open] > summary::before { transform: rotate(90deg); }
   .fold > summary:hover { color: var(--accent); }
+  .fold > summary:hover::before { color: var(--accent); }
   .fold-note { margin: .5rem 0 0; font-size: .6875rem; color: var(--ink-45); line-height: 1.6; }
 
 

@@ -167,6 +167,12 @@ _STRUCTURE = (
     ("payment.uses_mutual_account", ("상호계산", "상호 계산")),
 )
 
+#: The fields a sentence can declare. Exported so the web layer can refuse a
+#: caller asserting anything else: the fact catalog is wider than this on
+#: purpose, and a field no sentence can produce must not become one a request
+#: body can.
+DECLARABLE_STRUCTURE = frozenset(field for field, _ in _STRUCTURE)
+
 #: Korean negates after the noun — 「상계가 아닙니다」, 「상계는 하지 않습니다」
 #: — so a marker in the text that follows cancels the reading.
 #:
@@ -223,6 +229,38 @@ def payment_structure(text: str | None) -> dict[str, bool]:
             stated[field] = True
             break
     return stated
+
+
+def withdrawn_structure(text: str | None) -> frozenset[str]:
+    """Which declarations this sentence takes back.
+
+    Not the same claim as denying them. Once a declaration travels between
+    turns — and it has to, or a company that said 「상계로 처리합니다」 and then
+    asked 「왜?」 would watch it evaporate — there must be a way to correct it,
+    or a misreading is permanent for the rest of the conversation.
+
+    Taking back is safe in the direction §5.5 cares about. It moves the answer
+    from 「신고 대상이 될 수 있습니다」 to 「모릅니다」, which is a question the
+    company can answer; it never moves it to 「신고 불필요」, which is the
+    conclusion §5.5 refuses to draw from silence. That is why this returns a
+    set of fields to drop rather than a mapping to `False`.
+
+    「상계가 아니라 상호계산입니다」 lands correctly under exactly this rule:
+    netting is dropped, 상호계산 is stated by `payment_structure`.
+    """
+    if not text:
+        return frozenset()
+    taken_back: set[str] = set()
+    for field, words in _STRUCTURE:
+        for word in words:
+            at = text.find(word)
+            if at < 0:
+                continue
+            tail = text[at + len(word) : at + len(word) + _NEGATION_WINDOW]
+            if any(marker in tail for marker in _NEGATED):
+                taken_back.add(field)
+            break
+    return frozenset(taken_back)
 
 
 def financing_purpose(text: str | None) -> str | None:

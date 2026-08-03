@@ -29,7 +29,7 @@ const DEFAULT_ORDER = [
 ];
 
 const WORKER_LABEL = {
-  exposure: "순노출·자금공백 산출",
+  exposure: "거래 순노출·자금공백 산출",
   source_verification: "공식 출처 검증 확인",
   market_scenario: "변동성 추정 — 최근 60영업일",
   hedge: "헤지비율 산출",
@@ -60,7 +60,13 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
           <AgentTurn
             key={index}
             turn={turn}
-            live={index === turns.length - 1 && !busy}
+            live={
+              // `restored` marks a turn that came back from storage rather
+              // than from the server. It has been read once already, and
+              // replaying the write-out on a refresh would make the page look
+              // like it was answering a question nobody asked.
+              index === turns.length - 1 && !busy && !turn.restored
+            }
             onArrived={onArrived}
             first={!turns.slice(0, index).some((t) => t.kind === "result")}
             previous={
@@ -80,7 +86,7 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
 }
 
 const STEP_LABEL = {
-  exposure: "순노출·자금공백 산출",
+  exposure: "거래 순노출·자금공백 산출",
   source_verification: "공식 출처 검증 확인",
   market_scenario: "변동성 추정",
   support: "지원제도 규칙 판정",
@@ -181,6 +187,11 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             </p>
           ))}
 
+        {/* What we do not do about this subject, before what we want from
+            them. A company that asked what a scheme is should learn that we
+            do not answer that before being asked for an amount. */}
+        {turn.ask.cannot && <p className="told quiet">{turn.ask.cannot}</p>}
+
         {/* Still owed. The subject may have had a part that holds on its own
             — today's rate does — and a part that needs the trade. Saying so
             is what stops the reader waiting for the rest. */}
@@ -251,8 +262,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   const hedgeIsNew = Boolean(hedge) && !previous?.hedge_analysis;
   // The sentence was sent, nothing was read out of it, and nothing moved.
   // Saying "다시 계산했습니다" here claims work that did not happen.
+  //
+  // Not for a follow-up. 「왜?」 states nothing and was not trying to; telling
+  // its author that no trade information could be read out of it answers a
+  // sentence they did not write.
   const unread =
     turn.spoken &&
+    !result.follows &&
     Object.keys(turn.heard ?? {}).length === 0 &&
     !first &&
     !tradesChanged &&
@@ -273,31 +289,25 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // §4.2[2] already read. Absent — an older turn, or a trade description with
   // no question in it — keeps the sentence first.
   const leads = result.lead === "pointer";
-  // The server decides whether this turn asks for the hedge inputs. It used
-  // to be "the hedge worker is blocked", which is true on almost every turn —
-  // so a question about 신고의무 was answered with a demand for the operating
-  // profit §5.3 wanted. The reason still shows in the hedge fold either way.
-  const asksProfit =
-    !hedge && hedgeInputs.length > 0 && result.asking_for === "hedge";
-  // §4.2[2]'s own reason. The fold below shows it too, collapsed; this is the
-  // same sentence where a reader with the input bar open will actually see it.
-  const skippedHedge = result.workers?.skipped?.hedge;
-
   // The order the turn arrives in, as a gap before each unit: the sentence a
   // word at a time, then the blocks below it.
   //
   // The trace is not in here. It is a list of which tools ran, not part of the
   // answer, and staging it made the reader watch a receipt being printed
   // before the answer would start. It is simply there.
+  const tail = trailing(result, order).length;
   const timeline = useMemo(() => {
     const gaps = [];
     for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
-    // card, band, folds, and the line that follows them
-    const blocks = 2 + (result.market_scenario ? 1 : 0) + (asksProfit ? 1 : 0);
+    // The figures, the band when there is one, then each part below them on its
+    // own step — 규칙이 확인한 것, 손익 비교, 건너뛴 이유, 근거, 재현 입력 used
+    // to share one, so the answer was written a word at a time and everything
+    // under it landed on a single frame.
+    const blocks = 1 + (result.market_scenario ? 1 : 0) + tail;
     for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
     return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, asksProfit]);
+  }, [words, tail]);
 
   const [shown, settled] = useCascade(timeline, live);
   // One switch for the whole turn: while it is arriving the parts carry the
@@ -331,6 +341,12 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
       {/* The sentence arrives a word at a time. Written as segments rather than
           JSX so words can be mounted one by one; emphasis rides along on the
           segment. */}
+      {/* What we do not do about the subject they raised, before anything we
+          do. A company that asked what a scheme is met a request for its size
+          and its credit standing, and never learned that the question had no
+          answer here. */}
+      {result.cannot && <p className="told">{result.cannot}</p>}
+
       {/* Written by code, not by §4.2[9]: the sentence is about the figures,
           and this says what else the answer holds. Counts only — every verdict
           is rendered from its own worker's output below.
@@ -344,7 +360,9 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}
 
-      {shown > 0 && <Written segments={line} shown={shown} settled={settled} />}
+      {shown > 0 && !result.said?.retold && !result.cannot && (
+        <Written segments={line} shown={shown} settled={settled} />
+      )}
 
       {!leads && shown > words && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
@@ -361,20 +379,25 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`pointer limit${arrive}`}>{result.coverage}</p>
       )}
 
+      {/* Moved, not shrunk. It is not an answer to a question about what a
+          scheme is and must not lead — but it is a figure the tools computed,
+          and §2's reader does not know their own exposure. Set small and grey
+          it wore the style the limits wear, and a computed amount read as a
+          disclaimer: the demotion meant to keep it visible was removing it.
+
+          Demotion is position here, not size. Same rule as 답·맥락·감사. */}
+      {shown > 0 && result.cannot && !result.said?.retold && (
+        <p className="told">{line.map((seg) => seg.text).join(" ")}</p>
+      )}
+
       {shown > words && (
         <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
       )}
 
-      {/* Asked once, and only in words. The fields live in the bar above the
-          composer so they stay reachable after the thread scrolls on.
-
-          The words come from §4.2[2], which already decided why the worker did
-          not run. This paragraph used to carry its own, which asked for both
-          values whichever one was missing — and would have kept asking after
-          the routing condition changed, because nothing here is tied to it. */}
-      {asksProfit && shown >= timeline.length && skippedHedge && (
-        <p className={arrive.trim()}>{skippedHedge}</p>
-      )}
+      {/* §4.2[2]의 이유는 여기 다시 쓰지 않습니다. 바로 아래 요청 패널이
+          같은 값을 묻고 있고, 그 위에 「기준 영업이익을 알려주시면 …」이 서면
+          같은 요청이 연달아 두 번입니다 — 오늘 로그인 안내에서 걷어낸 것과
+          같은 모양입니다. 이유는 패널의 부제로 들어갔습니다. */}
     </div>
   );
 }
@@ -893,10 +916,48 @@ function Calculation({ folded, children, net }) {
   if (!folded) return children;
   return (
     <details className="fold calc">
-      <summary>환노출 · 순노출 {won(net)} USD</summary>
+      <summary>환노출 · 거래 순노출 {won(net)} USD</summary>
       {children}
     </details>
   );
+}
+
+/** What comes after the figures, in the order it arrives — one key per part.
+ *
+ *  The parts used to be one block behind one condition, so four unrelated
+ *  things — 규칙이 확인한 것, 손익 비교, 건너뛴 워커의 이유, 근거, 재현 입력 —
+ *  landed on the same frame. The answer above them arrives a word at a time and
+ *  then everything under it appeared at once, which reads as a page that was
+ *  already written rather than one being written.
+ *
+ *  Counted here rather than in either caller: the turn needs the number to size
+ *  its cascade and the answer needs the list to render, and the two drifting
+ *  apart would show as a part that never arrives or a pause with nothing in it. */
+function trailing(result, order) {
+  const said = result.said ?? {};
+  const skipped = result.workers?.skipped ?? {};
+  const folded = result.lead === "pointer";
+  const asked = folded
+    ? order.find((s) => s !== "exposure" && s !== "market_scenario")
+    : null;
+  const rest = order.filter(
+    (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
+  );
+
+  const parts = [];
+  if (said.detail?.length > 0) parts.push("detail");
+  if (result.hedge_analysis) parts.push("payoff");
+  for (const section of rest) {
+    if (!skipped[section]) continue;
+    if (asked || result.asking_for === section) continue;
+    parts.push(`skipped:${section}`);
+  }
+  if (said.sources?.length > 0) parts.push("sources");
+  // 「재현에 필요한 입력」은 화면에 없습니다. §6.2가 요구하는 것은 같은 분석이
+  // 같은 패킷을 내는 것이고, 그 근거는 응답의 `calculation_versions`와
+  // `packet_id`가 계속 싣고 있습니다 — 스냅샷 판 번호를 읽는 사람은 화면이
+  // 아니라 그 응답을 보는 사람입니다.
+  return parts;
 }
 
 function Answer({ result, order, shown, arrive }) {
@@ -928,43 +989,133 @@ function Answer({ result, order, shown, arrive }) {
     (s) => s !== "exposure" && s !== "market_scenario" && s !== asked,
   );
   const said = result.said ?? {};
+  // The parts below the figures, and how many of them have arrived. The first
+  // step after the figures (and the band, when there is one) brings the first
+  // part; each step after that brings one more.
+  const parts = trailing(result, order);
+  const here = Math.max(0, shown - (market ? 2 : 1));
+  //: A part arrives with the motion the rest of the turn arrives with, and
+  //: only on the step it belongs to. `at` is that test, written once.
+  const at = (key) => parts.indexOf(key) > -1 && parts.indexOf(key) < here;
+  const step = (key) => (parts.indexOf(key) === here - 1 ? arrive.trim() : "");
   // Whether this turn's answer is sentences. When it is, the card is dropped:
   // the box exists to hold a figure grid, and the grid is folded away.
-  const told =
-    folded &&
-    ((said.support ?? []).length > 0 || (said.compliance ?? []).length > 0);
+  // The card is the figure grid and the band. Prose never belonged inside it —
+  // sentences in a grey box read as a document handed over, not an answer
+  // given, which is the impression the folds were removed to stop.
+  const spoken = said.retold
+    ? [said.retold]
+    : [
+        ...(said.support ?? []),
+        ...(said.compliance ?? []),
+        ...(said.actions ?? []),
+      ];
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
     // them would stack transforms and make them drift twice.
-    <div className={`answer${told ? " told-answer" : ""}${arrive}`}>
+    <>
+    {/* Said first, and outside the card. When the rewrite landed it already
+        carries the figures sentence, so the one above is the same claim twice
+        — three lines apart, in the same words. */}
+    {/* Asked for. These are the conditions each rule checked, and they live in
+        a fold until somebody says 「왜?」 — at which point the thing they asked
+        for being one click away is the same as not answering. First, because
+        the question was 「왜」 and this is the answer to it. */}
+    {(result.because ?? []).map((line) => (
+      <p className="told" key={line}>
+        {line}
+      </p>
+    ))}
+
+    {spoken.map((line) => (
+      <p className="told" key={line}>
+        {line}
+      </p>
+    ))}
+
+    <div className={`answer${arrive}`}>
       <Calculation folded={folded} net={net}>
         <>
+          {/* A zero is a result and it is not news. On a single export all
+              three columns but the first read 0, and two thirds of the grid
+              said nothing while taking the same room as the figure that did.
+              The zeros are stated below in one line, so nothing is hidden and
+              nothing is repeated at full size. */}
           <dl className="figrow">
             <div>
-              <dt>순노출</dt>
+              {/* 「거래」가 붙는 이유는 이것이 세는 것이 거래뿐이기 때문입니다.
+                  명세 §5.1의 `E`는 보유 외화까지 더하지만, 이 값은
+                  Σ수취 − Σ지급이고 §5.1의 검증값(잔여노출)이 붙어 있는 쪽입니다.
+                  보유 외화를 넣은 사람에게 두 값이 갈리므로, 이름이 무엇을
+                  세었는지 말해야 합니다. */}
+              <dt>거래 순노출</dt>
               <dd>
                 {Number(net) > 0 ? "+" : ""}
                 {won(net)} <small>USD</small>
               </dd>
             </div>
-            <div>
-              <dt>자금 공백</dt>
-              <dd className={Number(gap) > 0 ? "alarm" : ""}>
-                {won(gap)} <small>USD</small>
-              </dd>
-            </div>
-            <div>
-              <dt>자연헤지</dt>
-              <dd>
-                {won(natural)} <small>USD</small>
-              </dd>
-            </div>
+            {Number(gap) > 0 && (
+              <div>
+                <dt>자금 공백</dt>
+                <dd className="alarm">
+                  {won(gap)} <small>USD</small>
+                </dd>
+                {/* 금액만 있는 공백은 걱정이고, 날짜가 붙은 공백은 할 일입니다.
+                    8월 25일에 6만 달러가 있느냐 없느냐는 숫자만 보아서는 알 수
+                    없고, 그 날짜는 응답의 타임라인에 이미 있었습니다. */}
+                {result.funding_window?.said && (
+                  <dd className="when">{result.funding_window.said}</dd>
+                )}
+              </div>
+            )}
+            {/* 큰 자리에는 실제로 덮이는 금액이 섭니다.
+                전에는 「기간 상쇄」가 여기 있었는데, 그 값은 전체 기간의 유입과
+                유출이 겹치는 몫일 뿐 결제일까지 맞물리는지는 보지 않습니다.
+                자금 공백 60,000 옆에 기간 상쇄 60,000이 같은 크기로 서면 같은
+                숫자가 두 번 보이고, 하나는 진짜 부담이고 하나는 덮이지 않는
+                착시입니다 — 그리고 「실제로는 0」은 각주에 있었습니다.
+                가장 큰 활자가 가장 오해하기 쉬운 값이었습니다. */}
+            {Number(natural) > 0 && (
+              <div>
+                <dt>실제로 덮이는 금액</dt>
+                <dd className={Number(matched) === 0 ? "faded" : ""}>
+                  {won(matched)} <small>USD</small>
+                </dd>
+              </div>
+            )}
           </dl>
 
-          {Number(natural) > 0 && Number(matched) === 0 && (
+          {(Number(gap) === 0 || Number(natural) === 0) && (
             <p className="answer-note">
-              상계될 것처럼 보이지만 결제일이 어긋나 <b>만기가 겹치는 금액은 0</b>입니다.
+              {Number(gap) === 0 && "결제일에 모자라는 외화는 없습니다."}
+              {Number(gap) === 0 && Number(natural) === 0 && " "}
+              {Number(natural) === 0 &&
+                "상쇄될 반대 방향 거래도 없습니다."}
+            </p>
+          )}
+
+          {/* 상쇄가 있으면 그중 실제로 덮이는 몫을 늘 말합니다. 전에는 0일
+              때만 각주가 붙어서, 6만이 절반만 덮이는 경우에는 화면에 6만만
+              남았습니다 — 둘 중 하나만 보이면 읽는 사람은 그것을 덮인 금액으로
+              읽습니다. */}
+          {Number(natural) > 0 && (
+            <p className="answer-note">
+              {Number(matched) === 0 ? (
+                <>
+                  전 기간으로는 <b>{won(natural)} USD</b>가 상쇄되지만, 결제일이
+                  어긋나 자금으로는 덮이지 않습니다.
+                </>
+              ) : Number(matched) < Number(natural) ? (
+                <>
+                  전 기간 상쇄는 <b>{won(natural)} USD</b>이고, 그중 결제일이
+                  맞물리는 만큼만 자금으로 덮입니다.
+                </>
+              ) : (
+                <>
+                  전 기간 상쇄 <b>{won(natural)} USD</b>가 결제일까지 맞물립니다.
+                </>
+              )}
             </p>
           )}
 
@@ -983,8 +1134,10 @@ function Answer({ result, order, shown, arrive }) {
           so the screen said nothing about which of them was the answer. §2's
           protection is unchanged: everything is still one click away. It just
           no longer takes the same room as the thing that was asked for. */}
-      {shown > (market ? 2 : 1) && (
-        <div className={`folds${arrive}`}>
+      {/* One part per step, in `trailing`'s order. `here` is how many of them
+          have arrived; each renders only once its own step has come. */}
+      {parts.length > 0 && here > 0 && (
+        <div className="folds">
         {/* The judgements, said. Assembled server-side from what the rules
             decided and the words the rulepack wrote its conditions in — the
             same information the folds held, in the shape a person reads.
@@ -998,21 +1151,8 @@ function Answer({ result, order, shown, arrive }) {
             불필요하다는 판정은 아닙니다」 goes in as a phrase the rewrite must
             carry word for word — it is not that compliance cannot be retold,
             it is that one sentence in it cannot be reworded. */}
-        {(said.retold
-          ? [said.retold]
-          : [
-              ...(said.support ?? []),
-              ...(said.compliance ?? []),
-              ...(said.actions ?? []),
-            ]
-        ).map((line) => (
-          <p className="told" key={line}>
-            {line}
-          </p>
-        ))}
-
-        {said.detail?.length > 0 && (
-          <details className="fold aside">
+        {at("detail") && (
+          <details className={`fold aside ${step("detail")}`}>
             <summary>규칙이 확인한 것과 필요서류</summary>
             {said.detail.map((row) => (
               <div className="verdict" key={row.title}>
@@ -1038,19 +1178,23 @@ function Answer({ result, order, shown, arrive }) {
           </details>
         )}
 
-        {hedge && <Payoff hedge={hedge} />}
+        {at("payoff") && (
+          <div className={step("payoff")}>
+            <Payoff hedge={hedge} />
+          </div>
+        )}
 
         {/* Skipped workers still say why, in one line each. */}
         {rest
-          .filter((section) => skipped[section])
+          .filter((section) => at(`skipped:${section}`))
           .map((section) => (
-            <p className="told quiet" key={section}>
+            <p className={`told quiet ${step(`skipped:${section}`)}`} key={section}>
               {skipped[section]}
             </p>
           ))}
 
-        {said.sources?.length > 0 && (
-          <p className="told quiet">
+        {at("sources") && (
+          <p className={`told quiet ${step("sources")}`}>
             근거:{" "}
             {said.sources.map((source, index) => (
               <span key={source.source_id}>
@@ -1067,20 +1211,10 @@ function Answer({ result, order, shown, arrive }) {
           </p>
         )}
 
-        <details className="fold aside">
-          <summary>재현에 필요한 입력</summary>
-          <ul className="versions">
-            {(result.calculation_versions?.snapshots ?? []).map((item) => (
-              <li key={item.source_id}>
-                <span className="vk">{item.source_id}</span>
-                <span className="vv">{item.version}</span>
-              </li>
-            ))}
-          </ul>
-          </details>
         </div>
       )}
     </div>
+    </>
   );
 
   function renderSection(section) {
@@ -1130,6 +1264,13 @@ function RateBand({ market, hedge, arrive }) {
   const upper = Number(market.band_upper);
   const spot = Number(market.spot_rate);
   const be = hedge?.breakeven_rate ? Number(hedge.breakeven_rate) : null;
+  // Which end is the bad one. The band drawn without it is a range with no
+  // direction: an exporter loses on the left and an importer on the right, and
+  // the reader has to work that out from a sentence three lines above. The
+  // adverse rate is already computed — §5.2 picks the end the trade suffers at
+  // — so the drawing can simply say which one it was.
+  const adverse = market.adverse_rate ? Number(market.adverse_rate) : null;
+  const adverseIsLow = adverse !== null && Math.abs(adverse - lower) < Math.abs(adverse - upper);
 
   // The track spans the band exactly, so the numbers printed at each end are
   // the numbers at each end. Padding is added only to bring a breakeven rate
@@ -1149,15 +1290,31 @@ function RateBand({ market, hedge, arrive }) {
           className="rate-fill"
           style={{ left: `${at(lower)}%`, width: `${at(upper) - at(lower)}%` }}
         />
+        {adverse !== null && (
+          <span
+            className={`rate-adverse ${adverseIsLow ? "low" : "high"}`}
+            style={
+              adverseIsLow
+                ? { left: `${at(min)}%`, width: `${at(adverse) - at(min)}%` }
+                : { left: `${at(adverse)}%`, width: `${at(max) - at(adverse)}%` }
+            }
+          />
+        )}
         <span className="rate-now" style={{ left: `${at(spot)}%` }} />
         {be !== null && (
           <span className="rate-be" style={{ left: `${at(be)}%` }} />
         )}
       </div>
       <p className="rate-legend">
-        <span>{won(lower)}</span>
+        <span className={adverseIsLow ? "adverse" : ""}>
+          {won(lower)}
+          {adverse !== null && adverseIsLow && <em>불리</em>}
+        </span>
         <b>현재 {won(spot)}</b>
-        <span>{won(upper)}</span>
+        <span className={adverse !== null && !adverseIsLow ? "adverse" : ""}>
+          {adverse !== null && !adverseIsLow && <em>불리</em>}
+          {won(upper)}
+        </span>
       </p>
       <p className="answer-note">
         {market.horizon_business_days}영업일 · 신뢰 {pct(market.confidence_level, 0)}{" "}

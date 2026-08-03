@@ -19,10 +19,77 @@ a sentence about a range is worse than the range.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 #: Statuses that mean the rules reached a verdict rather than ran out of facts.
 _SETTLED = "insufficient_information"
+
+
+def funding_window(result: dict[str, Any]) -> dict[str, Any] | None:
+    """When the money runs short, and for how long.
+
+    The screen showed 「자금 공백 60,000 USD」 and nothing else. An amount with
+    no date is a worry; an amount with a date is a task — the company either
+    has 60,000 dollars on 8월 25일 or it has to arrange them, and which of
+    those it is cannot be read off the figure alone.
+
+    Everything needed was already in the response. `analyze_exposure` walks the
+    trades in settlement order and records the running balance at each one, so
+    the day the balance first goes negative and the day it comes back are two
+    lookups in a list the screen was already receiving and ignoring.
+
+    A gap that never closes inside the described trades keeps its start and
+    says nothing about an end. Inventing one would mean guessing at a trade
+    the company has not mentioned.
+    """
+    events = (result.get("cashflow_analysis") or {}).get("events") or []
+    opened: str | None = None
+    closed: str | None = None
+    for event in events:
+        gap = _amount(event.get("funding_gap"))
+        if gap > 0 and opened is None:
+            opened = event.get("event_date")
+        elif opened is not None and gap == 0:
+            closed = event.get("event_date")
+            break
+    if opened is None:
+        return None
+
+    days = _days_between(opened, closed)
+    said = _day_of(opened)
+    if said is None:
+        return None
+    return {
+        "from": opened,
+        "until": closed,
+        "days": days,
+        # Assembled here rather than on the screen: this is a sentence about a
+        # calculation, and the rest of them are written in this module.
+        "said": f"{said}부터 {days}일" if days else f"{said}부터",
+    }
+
+
+def _amount(raw: Any) -> float:
+    try:
+        return float(str(raw))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _day_of(iso: str | None) -> str | None:
+    try:
+        when = date.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return None
+    return f"{when.month}월 {when.day}일"
+
+
+def _days_between(start: str | None, end: str | None) -> int | None:
+    try:
+        return (date.fromisoformat(str(end)) - date.fromisoformat(str(start))).days
+    except (TypeError, ValueError):
+        return None
 
 
 def _particle(word: str, pair: tuple[str, str]) -> str:
@@ -81,6 +148,56 @@ def _some(words: list[str]) -> str:
     return f"{_joined(words[:NAMED])} 등 {len(words)}가지"
 
 
+#: How many trades are on screen is not a fact about a rule.
+#:
+#: Every rule runs against every trade, so the packet holds one judgement per
+#: (trade, rule) — which is right, because a duty and an eligibility both
+#: attach to a trade and the audit has to show which. These paragraphs never
+#: name a trade, so the same judgement arrived once per trade: three trades
+#: printed 「다자간 상계면 한국은행에 신고합니다」 three times in a row and
+#: counted fourteen undecided rules as forty-three.
+def _rule_key(item: dict[str, Any]) -> str:
+    """What makes two judgements the same judgement, said in this paragraph.
+
+    `rule_id` on anything the packet produced; the title is the fallback for a
+    hand-written case, and it names the same thing.
+    """
+    return str(item.get("rule_id") or item.get("title") or id(item))
+
+
+def _one_per_rule(
+    items: Any, *, prefer: Any = lambda new, kept: False
+) -> list[dict[str, Any]]:
+    """One judgement per rule, choosing which copy speaks for the rest.
+
+    `prefer(new, kept)` decides when a later copy replaces an earlier one.
+    Copies can disagree — a product can be settled on one trade and short of a
+    fact on another — and the sentence cannot say which trade it means, so the
+    weaker claim is the one kept. Saying 「조건을 충족합니다」 on the strength of
+    one of two trades would be this paragraph deciding something no rule did.
+    """
+    kept: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = _rule_key(item)
+        seen = kept.get(key)
+        if seen is None or prefer(item, seen):
+            kept[key] = item
+    return list(kept.values())
+
+
+def _weaker(new: dict[str, Any], kept: dict[str, Any]) -> bool:
+    """A judgement still short of a fact outranks one that reached a verdict."""
+    return new.get("status") == _SETTLED and kept.get("status") != _SETTLED
+
+
+def _louder(new: dict[str, Any], kept: dict[str, Any]) -> bool:
+    """A rule the company's own words put in play outranks one they did not.
+
+    §5.5's direction: a branch that might apply is stated, never dropped.
+    """
+    return bool(new.get("engaged")) and not kept.get("engaged")
+
+
 def support(result: dict[str, Any]) -> list[str]:
     """What the eligibility rules decided, in paragraphs.
 
@@ -88,7 +205,7 @@ def support(result: dict[str, Any]) -> list[str]:
     short of a fact, and one for what to do about the first. Products with
     nothing to say produce no paragraph rather than an empty heading.
     """
-    candidates = result.get("support_candidates") or []
+    candidates = _one_per_rule(result.get("support_candidates") or [], prefer=_weaker)
     if not candidates:
         return []
 
@@ -139,11 +256,14 @@ def compliance(result: dict[str, Any]) -> list[str]:
     「해당 없음」 and 「아직 모름」 are different answers and §5.5 is explicit
     that the second must never be read as the first.
     """
-    findings = [
-        f
-        for f in (result.get("risk_findings") or [])
-        if (f.get("outcome") or {}).get("kind") != "support_candidate"
-    ]
+    findings = _one_per_rule(
+        (
+            f
+            for f in (result.get("risk_findings") or [])
+            if (f.get("outcome") or {}).get("kind") != "support_candidate"
+        ),
+        prefer=_louder,
+    )
     if not findings:
         return []
 
@@ -213,10 +333,29 @@ TIMING = {
 }
 
 
+def _one_per_errand(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """The same errand once, however many trades produced it.
+
+    An action is keyed by where you go and what you do there — two trades at
+    the same authority for the same product are one visit, and 「다음은
+    한국무역보험공사 상담 및 청약입니다」 twice is not two things to do.
+    """
+    kept: dict[tuple, dict[str, Any]] = {}
+    for action in result.get("next_actions") or []:
+        key = (
+            action.get("authority"),
+            action.get("action"),
+            tuple(sorted(str(p) for p in action.get("product_ids") or [])),
+            tuple(action.get("required_documents") or []),
+        )
+        kept.setdefault(key, action)
+    return list(kept.values())
+
+
 def actions(result: dict[str, Any]) -> list[str]:
     """What the reader has to go and do, and with which documents."""
     said: list[str] = []
-    for action in result.get("next_actions") or []:
+    for action in _one_per_errand(result):
         authority = AUTHORITY_NAME.get(action.get("authority"), action.get("authority"))
         line = f"다음은 {authority} {ACTION_NAME.get(action.get('action'), '상담 및 신청')}입니다."
         documents = action.get("required_documents") or []
@@ -241,6 +380,62 @@ ACTION_NAME = {
 }
 
 
+def because(result: dict[str, Any]) -> list[str]:
+    """What each verdict rested on, by name.
+
+    「왜?」 is the one follow-up this product can answer well, because the answer
+    is already in the packet: every rule records the conditions it checked and
+    the sources it read them from. The screen kept them one fold away — which is
+    right when nobody asked, and wrong the moment somebody does.
+
+    The conditions are named here rather than counted. 「확인한 조건은
+    5가지입니다」 is what the first answer says, and repeating it in reply to
+    「왜?」 would be the product saying the same thing louder.
+
+    Only what reached a verdict. A rule still short of a fact has no reason yet
+    — it has a question, and `support()` already asks it.
+    """
+    said: list[str] = []
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
+        if candidate.get("status") == _SETTLED:
+            continue
+        met = [
+            check["description"]
+            for check in candidate.get("checks") or []
+            if check.get("status") == "passed"
+        ]
+        if not met:
+            continue
+        title = candidate.get("title") or ""
+        listed = _joined(met)
+        said.append(f"{title}{_particle(title, TOPIC)} {listed}을 확인했습니다.")
+
+    for finding in _one_per_rule(
+        (
+            f
+            for f in (result.get("risk_findings") or [])
+            if (f.get("outcome") or {}).get("kind") != "support_candidate"
+        ),
+        prefer=_louder,
+    ):
+        if not finding.get("engaged"):
+            continue
+        conditions = [
+            check["description"]
+            for check in finding.get("checks") or []
+            if check["description"] in SHARED_CONDITION
+        ]
+        if not conditions:
+            continue
+        listed = _joined(conditions)
+        said.append(f"신고 갈래가 열린 것은 {listed}이기 때문입니다.")
+        break
+
+    return said
+
+
 def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
     """The full lists, for the reader who wants them.
 
@@ -249,8 +444,13 @@ def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
     judgement be inspectable. It is one fold away instead of in the first
     paragraph.
     """
+    # Deduped the same way the sentences are. The fold is a longer look at the
+    # same judgements, and a title repeated per trade also collided as a key on
+    # the way to the screen.
     rows: list[dict[str, Any]] = []
-    for candidate in result.get("support_candidates") or []:
+    for candidate in _one_per_rule(
+        result.get("support_candidates") or [], prefer=_weaker
+    ):
         rows.append(
             {
                 "title": candidate.get("title") or "",
@@ -266,7 +466,7 @@ def detail(result: dict[str, Any]) -> list[dict[str, Any]]:
                 ],
             }
         )
-    for action in result.get("next_actions") or []:
+    for action in _one_per_errand(result):
         documents = action.get("required_documents") or []
         if documents:
             rows.append({"title": "필요서류", "met": [], "wanted": documents})

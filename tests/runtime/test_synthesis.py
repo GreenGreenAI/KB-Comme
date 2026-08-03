@@ -183,7 +183,17 @@ class FigureTests(unittest.TestCase):
         written = figures(
             {"cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "100000"}]}}
         )
-        self.assertEqual(written, ["순노출: 100,000 USD"])
+        self.assertEqual(written, ["거래 순노출: 100,000 USD"])
+
+    def test_the_label_says_what_the_figure_counted(self) -> None:
+        """「거래」가 붙는 이유는 이 값이 세는 것이 거래뿐이기 때문이다. 명세
+        §5.1의 `E`는 보유 외화까지 더하지만 이것은 Σ수취 − Σ지급이고, 이름
+        없이 건네면 모델이 더 넓은 뜻으로 쓴다 — 검사를 통과하면서."""
+        written = figures(
+            {"cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "40000"}]}}
+        )
+
+        self.assertTrue(written[0].startswith("거래 순노출: "))
 
     def test_a_rate_carries_its_unit_and_its_reference_moment(self) -> None:
         """§4.2[9]: 수치의 단위·기준환율·기준시점을 함께 표기한다."""

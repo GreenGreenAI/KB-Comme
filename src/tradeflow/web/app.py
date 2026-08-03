@@ -33,7 +33,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from tradeflow.agent.intake import intake
 from tradeflow.domain.enums import TradeDirection
@@ -44,17 +44,27 @@ from tradeflow.knowledge.hedge_quotes import (
 )
 from tradeflow.runtime.accounts import SESSION_DAYS, Account, AccountStore
 from tradeflow.domain.models import CompanyProfile
-from tradeflow.runtime import introduction, narration, observing, planner
+from tradeflow.runtime import asking, introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
-from tradeflow.runtime.synthesis import Synthesizer, figures, pointer
+from tradeflow.runtime.synthesis import Synthesis, Synthesizer, figures, pointer
 from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
-from tradeflow.tools.utterance_kind import ABOUT, GREETING, TRADE, read_kind
+from tradeflow.tools.utterance_kind import (
+    ABOUT,
+    FOLLOW_UP,
+    GREETING,
+    TRADE,
+    TRADE_SLOTS,
+    asks_why,
+    continues,
+    read_kind,
+)
 from tradeflow.tools.utterance import (
     AMBIGUOUS,
     APPEND,
+    DECLARABLE_STRUCTURE,
     financing_purpose,
     krw_amount,
     payment_structure,
@@ -76,7 +86,38 @@ SESSION_COOKIE = "tradeflow_session"
 SessionCookie = Annotated[str | None, Cookie(alias=SESSION_COOKIE)]
 
 app = FastAPI(title="TradeFlow", version="0.1.0")
-accounts = AccountStore(ACCOUNT_DB)
+
+#: 로그인은 닫혀 있습니다. 켜려면 `TRADEFLOW_SIGN_IN`을 세우세요.
+#:
+#: 화면에서 버튼을 내리는 것만으로는 닫힌 것이 아닙니다. `/api/auth/login`은
+#: 그대로 열려 있었고, 주소를 아는 사람은 데모 계정으로 세션을 받을 수
+#: 있었습니다 — 앞문은 잠겼는데 옆문이 열려 있는 상태입니다.
+#:
+#: 기본값이 닫힘인 것도 같은 이유입니다. 스위치를 켜는 것은 결정이지만 끄는
+#: 것을 잊는 것은 사고이고, 인증은 사고 쪽이 훨씬 비쌉니다.
+SIGN_IN_OPEN = bool(os.environ.get("TRADEFLOW_SIGN_IN"))
+
+#: 계정 저장소는 쓸 때 열립니다.
+#:
+#: 모듈을 부르는 것만으로 `AccountStore`가 만들어지던 동안, 로그인을 쓰지 않는
+#: 서버도 시작할 때마다 비밀번호 해시 저장소를 만들었습니다. 쓰지 않는 기능을
+#: 위한 자격 증명 파일은 기능이 아니라 부채입니다.
+_accounts: AccountStore | None = None
+
+
+def accounts_store() -> AccountStore:
+    global _accounts
+    if _accounts is None:
+        _accounts = AccountStore(ACCOUNT_DB)
+    return _accounts
+
+
+def _closed() -> HTTPException:
+    """404, not 403.
+
+    「닫혀 있습니다」는 여기에 문이 있다는 말이고, 그것은 이 배포에서는 사실이
+    아닙니다. 없는 문을 두드린 것과 같은 답을 합니다."""
+    return HTTPException(status_code=404, detail={"reason": "없는 경로입니다"})
 
 #: §4.2[9]. Constructed whether or not a key is present — without one it simply
 #: declines, and the screen writes its own sentence.
@@ -89,7 +130,25 @@ observing.listen()
 logger = logging.getLogger("tradeflow.synthesis")
 
 
+#: 모르는 필드는 받지 않습니다.
+#:
+#: Pydantic의 기본값은 모르는 필드를 조용히 버리는 것입니다. `opening_balances`를
+#: `opening_balance_usd` 대신 보내면 서버는 200으로 답하고 그 값을 버렸습니다 —
+#: 답 자체는 서버가 읽은 입력에 대해 정확하지만, 부른 쪽은 자기가 보낸 값이
+#: 반영된 줄 압니다. 화면에도 아무 표시가 없습니다.
+#:
+#: 이 제품이 하는 말은 「입력한 값으로 계산했습니다」이고, 버려진 입력은 그 말을
+#: 거짓으로 만듭니다. 그래서 422로 거부합니다 — 계산이 조용히 다른 입력 위에서
+#: 도는 것보다 요청이 시끄럽게 실패하는 편이 낫습니다.
+#:
+#: 역할 A의 런타임 handoff 명세(#25)도 같은 것을 요구합니다 — 「Pydantic의 기본
+#: extra-field 무시는 사용할 수 없다」.
+STRICT = ConfigDict(extra="forbid")
+
+
 class LoginRequest(BaseModel):
+    model_config = STRICT
+
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
 
@@ -107,6 +166,8 @@ class ForwardQuoteInput(BaseModel):
     quote for a mismatch the screen itself had caused.
     """
 
+    model_config = STRICT
+
     provider: str = Field(min_length=1, max_length=64)
     contract_rate: str
     cost_rate: str
@@ -118,7 +179,15 @@ class ForwardQuoteInput(BaseModel):
 
 
 def _signed_in(token: str | None) -> Account | None:
-    return accounts.read_session(token)
+    """Who the cookie says this is, or nobody.
+
+    Closed, this never touches the store — so a leftover cookie cannot make an
+    anonymous screen receive an answer judged on an account's company facts,
+    and the store stays unopened.
+    """
+    if not SIGN_IN_OPEN:
+        return None
+    return accounts_store().read_session(token)
 
 
 @app.post("/api/auth/login")
@@ -129,7 +198,9 @@ def login(body: LoginRequest, response: Response) -> dict[str, Any]:
     question nobody asked — whether a given company banks here — to anyone
     willing to type addresses into the form.
     """
-    account = accounts.authenticate(body.email, body.password)
+    if not SIGN_IN_OPEN:
+        raise _closed()
+    account = accounts_store().authenticate(body.email, body.password)
     if account is None:
         raise HTTPException(
             status_code=401,
@@ -161,7 +232,9 @@ def logout(
     Clearing the cookie alone would leave a token that still works for anyone
     who kept a copy of it.
     """
-    accounts.close_session(session)
+    if not SIGN_IN_OPEN:
+        raise _closed()
+    accounts_store().close_session(session)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"account": None}
 
@@ -173,6 +246,8 @@ def me(session: SessionCookie = None) -> dict[str, Any]:
     The screen asks rather than remembering, so being signed in is something
     the server says and not something the client decides about itself.
     """
+    if not SIGN_IN_OPEN:
+        raise _closed()
     account = _signed_in(session)
     return {"account": _account_view(account) if account else None}
 
@@ -196,6 +271,8 @@ def _account_view(account: Account) -> dict[str, Any]:
 class CaseInput(BaseModel):
     """One trade, as far as the user has described it."""
 
+    model_config = STRICT
+
     direction: str | None = None
     amount: str | None = None
     expected_payment_date: str | None = None
@@ -209,6 +286,8 @@ class CaseInput(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    model_config = STRICT
+
     cases: list[CaseInput] = Field(default_factory=list)
     utterance: str | None = None
     company_name: str = "미입력 기업"
@@ -239,6 +318,52 @@ class AnalyzeRequest(BaseModel):
     trace: bool = False
     placement: Literal["append", "merge"] | None = None
     forward_quote: ForwardQuoteInput | None = None
+    #: What the company answered to the questions §5.4's rules raised, by field
+    #: name. Validated against the fact catalog rather than typed here: the
+    #: fields are the rules', and a second list of them in this module would be
+    #: a copy that drifts the first time a rulepack changes.
+    stated_facts: dict[str, str] | None = None
+    #: The §5.5 trade structure earlier turns established — 상계, 제3자 지급,
+    #: 상호계산. Held by the client and resent like the trade, because the
+    #: server reads it out of the sentence and a follow-up has no sentence to
+    #: read it from: 「상계로 처리합니다」 then 「왜?」 lost the netting and every
+    #: branch that hung on it.
+    declared_structure: dict[str, bool] | None = None
+
+    @field_validator("declared_structure")
+    @classmethod
+    def _known_structure_only(
+        cls, given: dict[str, bool] | None
+    ) -> dict[str, bool] | None:
+        """Only fields §5.5's reader itself produces.
+
+        This one is not checked against the fact catalog but against what
+        `payment_structure` can say, which is narrower — the catalog holds
+        fields no sentence declares, and a caller must not be able to assert
+        one here just because it exists."""
+        if not given:
+            return given
+        for field_name in given:
+            if field_name not in DECLARABLE_STRUCTURE:
+                raise ValueError(f"선언할 수 없는 거래 구조입니다: {field_name}")
+        return given
+
+    @field_validator("stated_facts")
+    @classmethod
+    def _known_facts_only(
+        cls, given: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        """Refuse a field the catalog does not know, or a value it would not
+        accept, naming which — the same reason unknown fields are refused at
+        all. A value that quietly vanishes here would be worse than one that
+        vanishes at the edge, because the rule would then report the fact as
+        missing and the screen would ask for it again."""
+        if not given:
+            return given
+        for field_name, value in given.items():
+            if not asking.accepts(field_name, value):
+                raise ValueError(f"알 수 없거나 허용되지 않는 값입니다: {field_name}")
+        return given
 
 
 FIELD_LABELS = {
@@ -392,7 +517,9 @@ def analyze_endpoint(
         topics=read_intent(request.utterance or ""),
     )
     if kind != TRADE and not supplied_trade(supplied):
-        return _answer_without_a_trade(kind, request.utterance, as_of)
+        return _answer_without_a_trade(
+            kind, request.utterance, as_of, _subjects(request)
+        )
 
     reading = intake(
         supplied,
@@ -468,6 +595,19 @@ def analyze_endpoint(
         hedge_measures=_hedge_measures(request.forward_quote, reading.program, as_of),
         utterance=request.utterance,
         intent=_subjects(request),
+        answered_facts=request.stated_facts,
+        declared_structure=request.declared_structure,
+        # The day the analysis is for, not the instant it ran. §6.2 asks that
+        # the same analysis produce the same `packet_id`, and every evidence
+        # descriptor is stamped with this. Left unset it became
+        # `datetime.now()`, so two identical requests a second apart produced
+        # two different packets — the identity said the inputs had changed when
+        # only the clock had.
+        #
+        # The orchestrator had this right and said so (ADR-0007). The web layer
+        # was the one caller that never passed it, so the guarantee held in
+        # every test and in no request.
+        as_of=datetime.combine(as_of, time(0, 0), tzinfo=UTC),
     )
     result = build_response(analysis)
 
@@ -486,6 +626,9 @@ def analyze_endpoint(
         # to the same question reads the same and the next one does not
         # inherit its wording.
         seed=f"{result.get('packet_id')}|{_subject_text(request)}",
+        direction=(result.get("market_scenario") or {}).get(
+            "adverse_cashflow_direction"
+        ),
     )
     if written.accepted:
         result["summary"] = written.sentence
@@ -499,17 +642,21 @@ def analyze_endpoint(
     # Code-owned, and true whether or not the model answered. The sentence is
     # about the figures; this says what else the answer holds.
     subjects = tuple(result["execution_plan"]["topics"])
+    # Said whether or not a trade is on screen. That this product judges
+    # eligibility and does not describe schemes is true either way, and it
+    # lived only on the path taken when there was no trade — so the moment a
+    # company had described one, every question about what something is came
+    # back as an analysis of that trade with no word about the question.
+    meaning = _asks_meaning(request.utterance)
+    result["cannot"] = (
+        CANNOT.get(next(iter(subjects), ""), "") if meaning else ""
+    )
+    # 로그인 안내는 붙이지 않습니다. 기업규모와 신용 상태를 물은 문장 뒤에
+    # 「로그인하시면 계정 사실로 판정합니다」를 덧붙이면, 방금 요청한 두 사실을
+    # 다시 요청하는 두 번째 요청이 되어 읽는 사람이 무엇을 해야 하는지가
+    # 하나에서 둘로 늘어납니다. 계정이 그 사실을 들고 있다는 것은 로그인 화면이
+    # 말할 일이지 판정 결과가 말할 일이 아닙니다.
     result["pointer"] = pointer(result, intent=subjects)
-    if account is None:
-        # §5.4's rules read company facts, and an anonymous caller has none —
-        # so a question about 지원제도 is answered by naming two facts rather
-        # than a product. Signing in is where those facts already live, and
-        # not saying so leaves the reader to supply by hand what the account
-        # would have carried. Only the web layer knows there is no session;
-        # routing must not learn about sessions to say this.
-        blocked = (result.get("workers") or {}).get("skipped") or {}
-        if "support" in blocked and result["pointer"] == blocked["support"]:
-            result["pointer"] += ". 로그인하시면 계정에 등록된 기업 사실로 판정합니다"
     # The judgements as sentences. Written here rather than by §4.2[9], which
     # may not utter a verdict, and rendered as prose rather than as folds —
     # a record is something you audit, not something you read.
@@ -520,6 +667,35 @@ def analyze_endpoint(
         "sources": narration.sources(result),
         "detail": narration.detail(result),
     }
+    # 자금 공백이 언제 열리고 며칠인지. 금액만 있는 공백은 걱정이고, 날짜가
+    # 붙은 공백은 할 일이다 — 8월 25일에 6만 달러가 있느냐 없느냐는 숫자만
+    # 보아서는 알 수 없다. 응답에 이미 있던 타임라인에서 두 번 찾으면 나온다.
+    result["funding_window"] = narration.funding_window(result)
+    # 「왜?」 is the one follow-up this product answers well, because the answer
+    # was already in the packet: every rule records the conditions it checked.
+    # They sat in a fold, which is right until somebody asks — and then the
+    # thing they asked for is one click away and the answer is not on screen.
+    #
+    # Only when asked. Every judgement carrying its reasons in the first
+    # paragraph is the record this product spent a week turning into sentences.
+    result["because"] = (
+        narration.because(result) if asks_why(request.utterance) else []
+    )
+    # What the server ended up holding about the trade structure — this turn's
+    # sentence merged over what the client sent. Echoed so the next turn can
+    # send it back: the browser is where this conversation is kept, and it can
+    # only keep what it is told. The reading stays the server's; the client
+    # carries it and nothing more.
+    result["declared_structure"] = dict(analysis.declared_structure)
+    # Whether this turn was pointing at the last one rather than describing
+    # anything. The screen says 「그 문장에서는 거래 정보를 읽지 못했습니다」
+    # when a sentence changed nothing, which is right for a sentence that tried
+    # to say something and wrong for 「왜?」 — that one was not trying.
+    result["follows"] = bool(
+        request.utterance
+        and continues(request.utterance)
+        and not read_intent(request.utterance)
+    )
     # §4.2[9] again, on the judgements this time — but only to retell them.
     # The instruction asks it to invent nothing; `check_retold` is what makes
     # that a contract rather than a request. A refusal leaves the assembled
@@ -542,20 +718,32 @@ def analyze_endpoint(
         *result["said"]["compliance"],
         *result["said"]["actions"],
     ]
-    retold = synthesizer.retell(
-        told,
-        # Every subject the rules judged. A rewrite may shorten a name; it may
-        # not leave a judgement out.
-        subjects=tuple(
-            row["title"] for row in result["said"]["detail"] if row["title"] != "필요서류"
-        ),
-        # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one sentence.
-        # A rewrite dropped it the first time it was allowed near it.
-        required=tuple(
-            line for line in result["said"]["compliance"] if "판정은 아닙니다" in line
-        ),
-        seed=f"retell|{result.get('packet_id')}",
-    )
+    # A rewrite exists to make several judgements read as one answer. Given a
+    # single line it has nothing to combine and becomes a machine that says the
+    # same thing twice — the screen then showed both, three lines apart, in the
+    # same words. Fewer than two judgements is not an answer that needs one.
+    retold = Synthesis("", False, "합칠 판정이 없습니다")
+    if len(told) > 1 and any(
+        result["said"][section] for section in ("support", "compliance", "actions")
+    ):
+        retold = synthesizer.retell(
+            told,
+            # Every subject the rules judged. A rewrite may shorten a name; it
+            # may not leave a judgement out.
+            subjects=tuple(
+                row["title"]
+                for row in result["said"]["detail"]
+                if row["title"] != "필요서류"
+            ),
+            # §5.5's refusal to read 「아직 모름」 as 「없음」 lives in one
+            # sentence. A rewrite dropped it the first time it was near it.
+            required=tuple(
+                line
+                for line in result["said"]["compliance"]
+                if "판정은 아닙니다" in line
+            ),
+            seed=f"retell|{result.get('packet_id')}",
+        )
     if retold.accepted:
         result["said"]["retold"] = retold.sentence
     elif retold.reason:
@@ -584,7 +772,11 @@ def analyze_endpoint(
     # but only one of them gets the top of the screen and an input panel.
     # A company that asked whether its netting is reportable was being asked
     # for its operating profit, which is §5.3's input and nobody's answer.
-    result["asking_for"] = _asking_for(subjects, result)
+    # A panel is a demand. Opening one under a question we have just said we
+    # cannot answer asks the reader to supply facts for something they did not
+    # ask about. The sentence still names what would unlock the judgement, so
+    # nothing is withheld — it is offered instead of demanded.
+    result["asking_for"] = None if result["cannot"] else _asking_for(subjects, result)
     # The facts §5.4 is waiting for, when the caller is the one who can state
     # them. A signed-in company already stated them once and is never asked.
     result["required_inputs"]["profile"] = (
@@ -595,6 +787,25 @@ def analyze_endpoint(
         ]
         if account is None and "support" in ((result.get("workers") or {}).get("skipped") or {})
         else []
+    )
+    # And the facts a rule that *did* run is still short of. The two are
+    # different questions: the profile above opens the worker, these close the
+    # judgements it produced. Only the second kind was being reported by the
+    # rules and never asked, so a company could answer everything on screen and
+    # still watch two of three products come back 「아직 판정하지 못했습니다」
+    # listing conditions nobody was going to be asked about.
+    result["required_inputs"]["facts"] = asking.questions(
+        result,
+        already=request.stated_facts,
+        # What each trade already carries. Without it a question the company
+        # has answered comes back every turn, because a slot that was filled
+        # does not always produce the fact the rule wanted.
+        supplied=frozenset(
+            (case.case_id, slot)
+            for case in reading.program.cases
+            for slot in asking.slots_of()
+            if case.attributes.get(slot)
+        ),
     )
     return {
         "status": "ready",
@@ -695,8 +906,21 @@ def _subject_text(request: AnalyzeRequest) -> str:
     This turn's own words when it has any; otherwise the question still on the
     table. Only the subject is taken from the older sentence — the slot reader
     never sees it, so a trade described once is not described again.
+
+    A follow-up counts as having none. 「왜?」 and 「그럼?」 are made of pointing
+    words and nothing else: read alone they name no subject, and the answer came
+    back in the default order as if the conversation had just started. What they
+    are about is what the last sentence was about.
+
+    Ordering only, here as everywhere. The older sentence reaches `read_intent`
+    and stops there.
     """
-    return request.utterance or request.asked_about or ""
+    said = request.utterance or ""
+    if not said.strip():
+        return request.asked_about or ""
+    if request.asked_about and continues(said) and not read_intent(said):
+        return request.asked_about
+    return said
 
 
 def _leads(subjects: tuple[str, ...]) -> bool:
@@ -752,11 +976,24 @@ def supplied_trade(cases: list[dict[str, Any]]) -> bool:
     A greeting typed into a session that has a trade on screen is still a
     greeting, but it must not discard what is there — so the trade-less path
     is only taken when there is genuinely no trade anywhere.
+
+    「거래」 is judged the same way `read_kind` judges it: an amount or a date.
+    A direction on its own is not one, and 「환변동보험에 대해 설명해줘」 puts a
+    direction into the case list on its way past — which made the sentence look
+    like a trade already on screen and sent it back to the funnel it had just
+    been kept out of.
     """
-    return any(any(value for value in case.values()) for case in cases)
+    return any(
+        any(case.get(slot) for slot in TRADE_SLOTS) for case in cases
+    )
 
 
-def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> dict[str, Any]:
+def _answer_without_a_trade(
+    kind: str,
+    utterance: str | None,
+    as_of: date,
+    subjects: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """The three turns that are not a trade description.
 
     None of them needs a trade, and all three used to get the same three
@@ -770,7 +1007,8 @@ def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> di
 
     # TOPIC. Some subjects have an answer that stands on its own; the rest
     # still need the trade, and asking for it is right — after saying what
-    # did not need it.
+    # did not need it, and after saying what we do not do at all.
+    lead = next(iter(subjects), "")
     said, figures = _standing_answer(utterance, as_of)
     return {
         "status": "said" if said else "needs_input",
@@ -783,11 +1021,63 @@ def _answer_without_a_trade(kind: str, utterance: str | None, as_of: date) -> di
         # Said whether or not the standing part answered: the subject they
         # raised may still need the trade, and this is the sentence that says
         # so instead of leaving them waiting.
-        "asks_for_trade": ASK_FOR_TRADE.get(
-            next(iter(read_intent(utterance or "")), ""), DEFAULT_ASK
-        ),
+        "asks_for_trade": ASK_FOR_TRADE.get(lead, DEFAULT_ASK),
+        # Named before the ask. A company that asked what a scheme is should
+        # learn that we do not answer that before being told what we want.
+        "cannot": CANNOT.get(lead, "") if _asks_meaning(utterance) else "",
     }
 
+
+#: What this product does not do about a subject, said only when someone asks
+#: about that subject without a trade.
+#:
+#: 「환변동보험에 대해 설명해줘」 has no trade in it and no answer here. The
+#: rules judge whether a company qualifies; nothing in the product describes
+#: what a scheme is for, because a description with no source is the one thing
+#: §1.1 refuses and the extracts hold eligibility conditions only.
+#:
+#: Saying so is the answer. Asking for an amount and a settlement date is not —
+#: that is the funnel answering a question it did not read.
+#: A sentence asking what something *is*, as distinct from whether it applies.
+#:
+#: 「환변동보험이 뭐야」 and 「받을 수 있는 지원제도가 있나요」 read as the same
+#: subject and want different things. The first has no answer here and the
+#: second does, so the honest line and the request panel both hang on telling
+#: them apart. Kept tight on purpose: 「지원제도 알려줘」 is asking which ones,
+#: not what they are, and belongs on the judging side.
+_ASKS_MEANING = (
+    "뭐야",
+    "뭔가요",
+    "뭔지",
+    "무엇인가",
+    "무엇인지",
+    "이란",
+    "란 게",
+    "설명해",
+    "설명 좀",
+    "어떤 제도",
+    "무슨 제도",
+    "차이가",
+    "차이점",
+)
+
+
+def _asks_meaning(utterance: str | None) -> bool:
+    return bool(utterance) and any(word in utterance for word in _ASKS_MEANING)
+
+
+#: 「다만」으로 시작하지 않습니다. 이 문장은 이제 답의 맨 앞에 오고,
+#: 앞선 말이 없는 자리에서 역접 부사는 읽는 사람에게 놓친 문장을 찾게 합니다.
+CANNOT = {
+    "support": (
+        "제도가 무엇인지 설명하는 것은 아직 다루지 않습니다. "
+        "출처에 근거가 없는 설명은 드리지 않습니다."
+    ),
+    "compliance": (
+        "제도나 용어를 설명하는 것은 아직 다루지 않습니다. "
+        "외국환거래법 조문에 근거해 이 거래가 신고 대상인지를 판정합니다."
+    ),
+}
 
 #: What each subject still needs from the trade, once the standing part of the
 #: answer has been given. Written per subject because "금액과 날짜를 알려주세요"

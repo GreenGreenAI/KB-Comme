@@ -5,7 +5,12 @@ import Thread from "./Thread.jsx";
 import AskBar from "./AskBar.jsx";
 import Login from "./Login.jsx";
 import Notices from "./Notices.jsx";
-import { analyze, signOut, whoami } from "./api.js";
+import { analyze, signOut, whoami, SIGN_IN_OPEN } from "./api.js";
+import {
+  forget as forgetSession,
+  load as loadSession,
+  save as saveSession,
+} from "./session.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -84,12 +89,35 @@ function stepsFor(result) {
 /** The conversation lives in the client. The server is stateless, so whatever
  *  the user has told us is resent each turn — the client already has to render
  *  it all, which makes it the natural owner. */
+/** 로그인 스위치는 `api.js`에 있습니다 — 화면에서 버튼을 치우는 것과 요청에
+ *  자격 증명을 싣지 않는 것이 함께 움직여야 하고, 둘 중 하나만 꺼지면 화면과
+ *  서버가 서로 다른 사용자를 봅니다.
+ *
+ *  지우지 않고 스위치로 둔 것은 계정이 사라진 게 아니라 아직 쓰지 않는
+ *  것이기 때문입니다. `Login.jsx`와 서버의 세션·계정 저장소는 그대로입니다.
+ *
+ *  §5.4가 읽는 기업 사실은 그동안 계정이 아니라 화면이 직접 묻습니다 —
+ *  기업규모와 신용 상태를 되묻는 그 경로가 원래 비로그인 방문자의 것입니다. */
 export default function App() {
-  const [view, setView] = useState("entry");
-  const [turns, setTurns] = useState([]);
-  const [facts, setFacts] = useState({ cases: [{}], profile: {}, quote: null });
-  const [result, setResult] = useState(null);
-  const [pending, setPending] = useState(null);
+  // What the last page load left behind, read once before the first render so
+  // the screen never paints an empty thread it is about to replace.
+  const [restored] = useState(loadSession);
+  const [view, setView] = useState(restored?.view ?? "entry");
+  const [turns, setTurns] = useState(restored?.turns ?? []);
+  const [facts, setFacts] = useState(
+    restored?.facts ?? {
+      cases: [{}],
+      profile: {},
+      quote: null,
+      stated: {},
+      structure: {},
+    },
+  );
+  const [result, setResult] = useState(restored?.result ?? null);
+  // The question that was open when the page went away. Restored because it is
+  // half of an exchange: dropping it would leave the answer above it asking
+  // for something with nowhere to answer it.
+  const [pending, setPending] = useState(restored?.pending ?? null);
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(null);
   const [writing, setWriting] = useState(false);
@@ -115,9 +143,22 @@ export default function App() {
     );
   }
 
+  // Written after each change rather than on unload: `beforeunload` does not
+  // fire reliably on mobile, and a tab that is killed rather than closed would
+  // take the whole conversation with it.
+  //
+  // Only what the user told us and what came back. Not `busy`, `thinking` or
+  // `writing` — those describe a request that is no longer in flight, and
+  // restoring them would open the page onto a spinner for work nobody is
+  // doing.
+  useEffect(() => {
+    saveSession({ view, turns, facts, result, pending });
+  }, [view, turns, facts, result, pending]);
+
   // Ask once on load. A session that survived a refresh should not have to be
   // proved again by typing.
   useEffect(() => {
+    if (!SIGN_IN_OPEN) return;
     let live = true;
     whoami()
       .then((found) => live && found && setAccount(found))
@@ -135,6 +176,39 @@ export default function App() {
   //: The last sentence the user wrote. Panel answers carry values and no
   //: words, and the answer has to stay about what was asked.
   const subject = useRef(null);
+
+  /** Put the conversation down and start again.
+   *
+   *  Distinct from clicking the wordmark, which goes to the opening screen and
+   *  keeps everything — a company that scrolled up to read the first answer
+   *  must not lose the fourth. This is the other intention, and it needs its
+   *  own control rather than being a longer press on the same one.
+   *
+   *  Everything the user told us goes: the trades, the company facts, the
+   *  quote, the structure they declared, and the answers the rules asked for.
+   *  Keeping any of it would make the next answer rest on something the reader
+   *  can no longer see, which is the one thing a reset must not leave behind.
+   *
+   *  No confirmation step. What is lost is a conversation the user can retype
+   *  in a sentence, and this is the control a demo reaches for between runs —
+   *  a dialog there costs more than the mistake it prevents. It sits in the
+   *  bar rather than beside the composer so it is not next to what is clicked
+   *  every turn.
+   */
+  function startOver() {
+    forgetSession();
+    setTurns([]);
+    setFacts({ cases: [{}], profile: {}, quote: null, stated: {}, structure: {} });
+    setResult(null);
+    setPending(null);
+    setThinking(null);
+    setWriting(false);
+    setBusy(false);
+    setNotices([]);
+    subject.current = null;
+    stick.current = true;
+    setView("entry");
+  }
 
   /** The conversation continues where it left off, at the bottom.
    *
@@ -232,15 +306,41 @@ export default function App() {
   async function send(utterance, patch = {}, placement = null, said = null) {
     // A slot answer always completes the trade currently being described,
     // which is the last one.
+    // Onto the trade the question was about, and only onto the last one when
+    // nothing said otherwise. A slot answer volunteered mid-intake completes
+    // the trade being described, which is the last; a slot the rules asked for
+    // belongs to the judgement's own trade, and the server names it.
+    //
+    // Without that, a company with an export and an import answered 「언제
+    // 선적하시나요」 onto the import, the export's payment term still did not
+    // derive, and the same question came back every turn after that.
     const nextCases = patch.case
-      ? [...facts.cases.slice(0, -1), { ...facts.cases.at(-1), ...patch.case }]
+      ? facts.cases.map((trade, index) =>
+          patch.caseId
+            ? trade.case_id === patch.caseId
+              ? { ...trade, ...patch.case }
+              : trade
+            : index === facts.cases.length - 1
+              ? { ...trade, ...patch.case }
+              : trade,
+        )
       : facts.cases;
     const nextProfile = { ...facts.profile, ...(patch.profile ?? {}) };
     // The quote is remembered like everything else the user has told us: the
     // server is stateless, so it has to be resent with each turn or the hedge
     // would vanish the moment anything else was said.
     const nextQuote = patch.quote ?? facts.quote ?? null;
-    setFacts({ cases: nextCases, profile: nextProfile, quote: nextQuote });
+    // Answers to the rules' own questions accumulate the same way. The server
+    // is stateless, so a grade stated three turns ago has to travel with every
+    // request or the judgement it opened would close again.
+    const nextStated = { ...facts.stated, ...(patch.facts ?? {}) };
+    setFacts({
+      cases: nextCases,
+      profile: nextProfile,
+      quote: nextQuote,
+      stated: nextStated,
+      structure: facts.structure ?? {},
+    });
 
     // What the user said, as the thread should carry it. A typed sentence is
     // its own text. An answer given through the request panel says what was
@@ -254,8 +354,14 @@ export default function App() {
     // resumes with every send. Only the reader scrolling during the arrival
     // turns it off again.
     stick.current = true;
-    // The last sentence the user actually wrote. Panel answers ride on it
-    // until they write another one.
+    // The last sentence the user actually wrote, kept as the conversation's
+    // standing subject. A follow-up rides on it — 「왜?」 and 「그럼?」 are made
+    // of pointing words and name nothing on their own.
+    //
+    // Sent with the new sentence rather than instead of it, and the server
+    // decides which to read: whether a sentence stands on its own is a reading
+    // of that sentence, and this side does not do readings.
+    const standing = subject.current;
     if (utterance) subject.current = utterance;
     if (spoken) say({ who: "user", text: spoken });
     setView("work");
@@ -264,17 +370,25 @@ export default function App() {
     try {
       const started = performance.now();
       const data = await analyze({
-        cases: nextCases,
+        cases: nextCases.map(asStated),
         utterance,
         // What the conversation is still about. A panel answer carries values
         // and no words, and the server was reading intent from that blank —
         // so the judgement the user had just supplied a fact for closed
         // itself as it arrived and the funnel started asking again.
-        ...(utterance ? {} : { asked_about: subject.current }),
+        ...(standing ? { asked_about: standing } : {}),
         ...nextProfile,
         as_of: today(),
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
+        ...(Object.keys(nextStated).length > 0 ? { stated_facts: nextStated } : {}),
+        // What earlier sentences established about the trade structure. The
+        // server reads 상계 out of the sentence, and a follow-up has no
+        // sentence to read it from — so it travels with the trade, and this
+        // turn's words still win over it.
+        ...(Object.keys(facts.structure ?? {}).length > 0
+          ? { declared_structure: facts.structure }
+          : {}),
       });
       const spent = performance.now() - started;
       // Company facts are not sent from here when signed in. The server reads
@@ -308,7 +422,13 @@ export default function App() {
 
         // The server is the authority on how many trades there are now; it
         // just decided whether the sentence added one.
-        setFacts((prev) => ({ ...prev, cases: data.result.trade_timeline }));
+        setFacts((prev) => ({
+          ...prev,
+          cases: data.result.trade_timeline,
+          // The server is the authority on what has been declared: it read the
+          // sentence, and it merged this turn's reading over what we sent.
+          structure: data.result.declared_structure ?? prev.structure,
+        }));
         setResult(data.result);
         setPending(null);
         setWriting(true);
@@ -353,6 +473,11 @@ export default function App() {
           setView("entry");
         }}
         account={account}
+        //: 지울 대화가 있을 때만 보입니다. 빈 화면에서 「새 대화」는 아무것도
+        //: 하지 않는 버튼이고, 아무것도 하지 않는 버튼은 눌러 본 사람에게
+        //: 제품이 고장 난 것처럼 보입니다.
+        onStartOver={turns.length > 0 ? startOver : null}
+        signInOpen={SIGN_IN_OPEN}
         signingIn={showSignIn}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={async () => {
@@ -373,7 +498,7 @@ export default function App() {
           setNotices((prev) => prev.filter((notice) => notice.id !== id))
         }
       />
-      {showSignIn && !account ? (
+      {SIGN_IN_OPEN && showSignIn && !account ? (
         <Login
           onSignIn={(who) => {
             setAccount(who);
@@ -429,6 +554,21 @@ export default function App() {
                       ? result?.required_inputs?.profile ?? []
                       : []
                   }
+                  askNote={
+                    // 왜 묻는지. §4.2[2]가 워커를 건너뛰며 남긴 이유 그대로이고,
+                    // 지금 열려 있는 패널의 것만 가져옵니다 — 패널이 무엇을
+                    // 묻는지는 라벨이 말하고, 답하면 무엇이 열리는지는 이것이
+                    // 말합니다. 전에는 같은 문장이 패널 위에 따로 서 있어서
+                    // 같은 요청이 연달아 두 번이었습니다.
+                    result?.workers?.skipped?.[result?.asking_for] ?? null
+                  }
+                  factInputs={
+                    // Not gated on `asking_for`: these exist because a rule
+                    // that already ran named them, and each one says which
+                    // product it opens — so an offer about 지원제도 under a
+                    // question about 신고의무 is legible, not a demand.
+                    result?.required_inputs?.facts ?? []
+                  }
                   onSlot={(patch, said) => send(null, patch, null, said)}
                   onPlace={(utterance, placement, said) =>
                     send(utterance, {}, placement, said)
@@ -443,6 +583,21 @@ export default function App() {
       )}
     </>
   );
+}
+
+/** 서버가 정하는 것은 돌려보내지 않습니다.
+ *
+ *  거래 목록은 답에서 온 `trade_timeline`을 그대로 다시 싣는데, 그 행에는
+ *  §4.2[1]이 매긴 `case_id`가 함께 옵니다. 요청 모델이 모르는 필드를 거부하기
+ *  시작하면서 이것이 422로 돌아왔고, 그 거절이 옳습니다 — case_id는 인테이크가
+ *  결정론적으로 붙이는 식별자이고, 클라이언트가 보낸 값을 받아 주면 화면이
+ *  패킷 안의 신원을 고를 수 있게 됩니다. 사용자가 말한 것만 올려 보냅니다. */
+const SERVER_OWNED = ["case_id"];
+
+function asStated(trade) {
+  const stated = { ...(trade ?? {}) };
+  for (const field of SERVER_OWNED) delete stated[field];
+  return stated;
 }
 
 function stripEmpty(object) {

@@ -31,6 +31,10 @@ export default function AskBar({
   requiredInputs,
   quoteInputs,
   profileInputs,
+  factInputs,
+  //: 지금 열려 있는 요청이 무엇을 여는지. 서버가 워커를 건너뛰며 남긴 이유를
+  //: 그대로 받습니다 — 화면이 다시 쓰면 두 문장이 갈라집니다.
+  askNote,
   onSlot,
   onPlace,
 }) {
@@ -83,12 +87,31 @@ export default function AskBar({
   // never asked again — this is the same two by hand, so a company that has
   // not signed up gets a judgement instead of a list of what it would need.
   if (profileInputs?.length > 0) {
-    return <ProfileAsk key="profile" onSlot={onSlot} />;
+    return <ProfileAsk key="profile" note={askNote} onSlot={onSlot} />;
+  }
+
+  // The facts a rule that already ran is still short of. Nothing here decides
+  // what to ask or how to word it — the server sends the question, the answers
+  // on offer, and which product each one opens, all read from the rules and
+  // the fact catalog. A list of fields written on this side would be a copy of
+  // the rulepack, and it would drift the first time a rule changed.
+  if (factInputs?.length > 0) {
+    return (
+      <FactAsk
+        key={`fact:${factInputs[0].field}`}
+        ask={factInputs[0]}
+        onSlot={onSlot}
+      />
+    );
   }
 
   if (requiredInputs?.length > 0) {
     return (
-      <Ask key="profit" label="기준 영업이익과 지키려는 손익 하한을 알려주세요">
+      <Ask
+        key="profit"
+        label="기준 영업이익과 지키려는 손익 하한을 알려주세요"
+        note={askNote}
+      >
         <ProfitFields onSlot={onSlot} />
       </Ask>
     );
@@ -96,7 +119,11 @@ export default function AskBar({
 
   if (quoteInputs?.length > 0) {
     return (
-      <Ask key="quote" label="거래 은행이 제시한 선물환 조건을 알려주세요">
+      <Ask
+        key="quote"
+        label="거래 은행이 제시한 선물환 조건을 알려주세요"
+        note={askNote}
+      >
         <QuoteFields onSlot={onSlot} />
       </Ask>
     );
@@ -149,6 +176,7 @@ function QuoteFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={rate}
         placeholder="계약환율"
         aria-label="계약환율"
@@ -156,6 +184,7 @@ function QuoteFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={cost}
         placeholder="수수료율 (0.0025)"
         aria-label="수수료율"
@@ -197,7 +226,7 @@ function QuoteFields({ onSlot }) {
  *  call site keys this on the question, so a new question is a new panel and
  *  arrives rather than silently swapping its contents.
  */
-function Ask({ label, children }) {
+function Ask({ label, note, children }) {
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setEntered(true), ASK_IN_MS);
@@ -211,6 +240,9 @@ function Ask({ label, children }) {
       aria-label={label}
     >
       <p className="ask-label">{label}</p>
+      {/* What answering opens. A question with no stated purpose reads as a
+          form; the same question with one is an offer the reader can decline. */}
+      {note && <p className="ask-note">{note}</p>}
       {children}
     </div>
   );
@@ -347,6 +379,7 @@ function AmountField({ onSlot }) {
         <input
           ref={focus}
           inputMode="decimal"
+          autoComplete="off"
           value={shown}
           placeholder="100,000"
           aria-label="금액 (USD)"
@@ -392,12 +425,81 @@ const CREDIT_OPTIONS = [
  *  and 신용 상태 is a boolean, and a typed answer would have to be guessed back
  *  into one — which is the guess §1.1 refuses. Both are sent together so the
  *  rules see one company rather than two halves of one. */
-function ProfileAsk({ onSlot }) {
+/** One fact a judgement is waiting for, asked in the rules' own words.
+ *
+ *  One at a time and in rule order. A form of six fields is a form; a question
+ *  with three answers is a conversation, and the next question only exists
+ *  because the last answer did not close the judgement.
+ *
+ *  The label says what it opens. 「K-SURE 등급을 아시나요」 with no reason is a
+ *  demand; the same question under 「단기수출보험(선적후·개별)을 판정하려면」 is
+ *  an offer, and the reader can decide it is not worth answering.
+ */
+function FactAsk({ ask, onSlot }) {
+  // Some of these are not facts about the company at all — they are the trade
+  // detail a fact is computed from, and they travel back the way every other
+  // trade detail does. The server says which, because the server is what knows
+  // whether it asks for a value or for the input to one.
+  const answer = (value, label) =>
+    onSlot(
+      ask.answer_as === "case"
+        ? // `case_id` names the trade the judgement is about. The screen does
+          // not work it out — it is the rule's own subject, and guessing it
+          // from the order the trades were typed in is how the answer used to
+          // land on the wrong one.
+          { case: { [ask.field]: value }, caseId: ask.case_id }
+        : { facts: { [ask.field]: value } },
+      label ?? value,
+    );
+
+  if (ask.options?.length > 0) {
+    return (
+      <Ask label={ask.question} note={ask.opens ? `${ask.opens} 판정에 필요합니다` : null}>
+        <ChoiceList
+          options={ask.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onPick={answer}
+        />
+      </Ask>
+    );
+  }
+  return (
+    <Ask label={ask.question} note={ask.opens ? `${ask.opens} 판정에 필요합니다` : null}>
+      <FactField kind={ask.kind} onSubmit={answer} />
+    </Ask>
+  );
+}
+
+function FactField({ kind, onSubmit }) {
+  const [value, setValue] = useState("");
+  const focus = useAutoFocus();
+  const submit = () => value.trim() && onSubmit(value.trim());
+
+  return (
+    <div className="ask-row">
+      <input
+        ref={focus}
+        type={kind === "date" ? "date" : "text"}
+        value={value}
+        autoComplete="off"
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => event.key === "Enter" && submit()}
+      />
+      <button type="button" onClick={submit} disabled={!value.trim()}>
+        확인
+      </button>
+    </div>
+  );
+}
+
+function ProfileAsk({ note, onSlot }) {
   const [size, setSize] = useState(null);
 
   if (size === null) {
     return (
-      <Ask label="기업규모가 어떻게 되나요?">
+      <Ask label="기업규모가 어떻게 되나요?" note={note}>
         <ChoiceList options={SIZE_OPTIONS} onPick={(value) => setSize(value)} />
       </Ask>
     );
@@ -437,6 +539,7 @@ function ProfitFields({ onSlot }) {
       <input
         ref={focus}
         inputMode="decimal"
+        autoComplete="off"
         value={baseline}
         placeholder="기준 영업이익 (원)"
         aria-label="기준 영업이익"
@@ -444,6 +547,7 @@ function ProfitFields({ onSlot }) {
       />
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={floor}
         placeholder="목표 손익 하한 (원)"
         aria-label="목표 손익 하한"

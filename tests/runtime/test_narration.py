@@ -99,6 +99,62 @@ class SupportTests(unittest.TestCase):
     def test_nothing_judged_says_nothing(self) -> None:
         self.assertEqual([], narration.support({}))
 
+    def test_a_product_is_said_once_however_many_trades_it_was_judged_on(self) -> None:
+        """Every rule runs against every trade, so two trades bring the same
+        product back twice — and the sentence cannot say which trade it means.
+        The errand behind them is one visit, not two, and the fold's rows used
+        the title as a key."""
+        two_trades = {
+            "support_candidates": [
+                {**candidate, "subject_id": f"CASE-{n}", "rule_id": candidate["title"]}
+                for n in (1, 2)
+                for candidate in self.RESULT["support_candidates"]
+            ],
+            "next_actions": [
+                {
+                    "authority": "ksure",
+                    "action": "consult_and_apply_for_ksure_product",
+                    "product_ids": ["KSURE_FX"],
+                    "required_documents": ["청약서", "사업자등록증"],
+                }
+            ]
+            * 2,
+        }
+
+        said = narration.support(two_trades)
+        rows = narration.detail(two_trades)
+
+        self.assertEqual(2, len(said))
+        self.assertEqual(1, len(narration.actions(two_trades)))
+        self.assertEqual(len(rows), len({row["title"] for row in rows}))
+
+    def test_it_keeps_the_weaker_claim_when_two_trades_disagree(self) -> None:
+        """A product can clear on one trade and be short of a fact on another.
+        Neither sentence can name a trade, so 「조건을 충족합니다」 on the
+        strength of one of them would be this paragraph deciding something no
+        rule decided."""
+        disagreeing = {
+            "support_candidates": [
+                {
+                    "rule_id": "KSURE_FX",
+                    "title": "K-SURE 환변동보험",
+                    "status": "expert_confirmation_required",
+                    "checks": [{"description": "수출 거래", "status": "passed"}],
+                },
+                {
+                    "rule_id": "KSURE_FX",
+                    "title": "K-SURE 환변동보험",
+                    "status": "insufficient_information",
+                    "checks": [{"description": "결제일", "status": "uncertain"}],
+                },
+            ]
+        }
+
+        said = narration.support(disagreeing)
+
+        self.assertEqual(1, len(said))
+        self.assertIn("아직 판정하지 못했습니다", said[0])
+
 
 class ComplianceTests(unittest.TestCase):
     RESULT = {
@@ -159,6 +215,25 @@ class ComplianceTests(unittest.TestCase):
 
         self.assertIn("될 수 있습니다", said)
         self.assertNotIn("신고 대상입니다.", said)
+
+    def test_a_rule_is_said_once_however_many_trades_it_ran_against(self) -> None:
+        """§5.5 runs every rule against every trade, so three trades bring the
+        same rule back three times. The packet keeps all three — a duty attaches
+        to a trade — but this paragraph never names a trade, so it printed
+        「다자간 상계면 한국은행에 신고합니다」 three times in a row."""
+        three_trades = {
+            "risk_findings": [
+                {**finding, "subject_id": f"CASE-{n}", "rule_id": finding["title"]}
+                for n in (1, 2, 3)
+                for finding in self.RESULT["risk_findings"]
+            ]
+        }
+
+        said = narration.compliance(three_trades)
+
+        self.assertEqual(1, sum("다자간 상계면" in line for line in said))
+        self.assertIn("2가지 갈래", said[0])
+        self.assertIn("규칙이 1건", said[-1])
 
     def test_it_keeps_not_yet_known_apart_from_not_applicable(self) -> None:
         """§5.5 is explicit that a filing duty is never cleared until the

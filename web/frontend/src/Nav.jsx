@@ -36,7 +36,20 @@ function described(facts) {
     .map(([name, value]) => FACT_LABEL[name](value));
 }
 
-export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut }) {
+export default function Nav({
+  onHome,
+  account,
+  //: 대화를 내려놓고 다시 시작합니다. 브랜드 클릭과 다른 의도라 다른 버튼을
+  //: 씁니다 — 하나는 처음 화면으로 가고 대화는 그대로 두는 것입니다.
+  onStartOver,
+  onSignIn,
+  signingIn,
+  onSignOut,
+  //: 로그인이 닫혀 있으면 이 바에는 계정 자리가 없습니다. 들어갈 문이
+  //: 없는데 문고리만 그려 두면, 눌리지 않는 것이 준비 중인지 고장인지
+  //: 화면이 말해 주지 못합니다.
+  signInOpen = true,
+}) {
   const signedIn = Boolean(account);
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -84,7 +97,11 @@ export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut })
           sign-in form would list rooms nobody can enter yet. Left out rather
           than hidden: the `hidden` attribute loses to this bar's own
           `display: flex`, so it would have shown anyway. */}
-      {signedIn && (
+      {/* 로그인이 닫혀 있는 동안에는 로그인하지 않은 사람이 곧 사용자이므로,
+          영역은 그대로 보입니다. 이 목록을 감췄던 이유는 로그인 폼 위에
+          들어갈 수 없는 방을 늘어놓지 않으려던 것이고, 그 폼이 없으면
+          그 이유도 없습니다. */}
+      {(signedIn || !signInOpen) && (
       <nav aria-label="주요 영역">
         <span className="nav-link on" aria-current="page">분석</span>
         {["지원제도", "신고의무", "근거"].map((area) => (
@@ -101,7 +118,12 @@ export default function Nav({ onHome, account, onSignIn, signingIn, onSignOut })
       )}
 
       <div className="account" ref={box}>
-        {!signedIn ? (
+        {onStartOver && (
+          <button className="nav-cta quiet" type="button" onClick={onStartOver}>
+            새 대화
+          </button>
+        )}
+        {!signInOpen ? null : !signedIn ? (
           signingIn ? (
             /* On the sign-in screen itself, a 로그인 button would point at
                what is already on the screen. What is missing there is a way in

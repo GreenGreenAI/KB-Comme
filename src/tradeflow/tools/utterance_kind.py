@@ -40,6 +40,39 @@ TOPIC = "topic"
 #: The sentence describes a trade, complete or not. §4.2[1] as it stands.
 TRADE = "trade"
 
+#: The sentence continues the last one. 「왜?」 「그럼?」 「더 자세히」 name no
+#: subject and describe no trade, so every reading above returns nothing and the
+#: sentence fell through to TRADE — a two-letter question was answered by asking
+#: for an amount and a settlement date.
+#:
+#: What it is about is the previous turn's subject. That is the only thing
+#: inherited: *ordering*, never facts. A follow-up that could also carry a trade
+#: forward would let a sentence already answered describe its trade a second
+#: time, which is the hole `asked_about` was written to avoid.
+FOLLOW_UP = "follow_up"
+
+#: Words that only make sense pointing at something already said. Kept short and
+#: literal on purpose — a long list would start catching sentences that stand on
+#: their own, and a sentence wrongly read as a follow-up inherits an order it
+#: never asked for.
+_FOLLOW_UP = (
+    "왜",
+    "어째서",
+    "그럼",
+    "그러면",
+    "그거",
+    "그건",
+    "그게",
+    "그 부분",
+    "더 자세",
+    "자세히",
+    "무슨 뜻",
+    "어떻게 해야",
+    "어떻게 하",
+    "방금",
+    "아까",
+)
+
 _GREETINGS = (
     "안녕",
     "반가",
@@ -114,7 +147,7 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
     trade with a greeting attached, and answering the greeting would drop the
     trade — the one thing in the sentence that cost the user effort to write.
     """
-    if heard:
+    if _describes_a_trade(heard):
         return TRADE
     if not text or not text.strip():
         return TRADE
@@ -126,10 +159,57 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
         return TOPIC
     if _is_only_greeting(lowered):
         return GREETING
+    # Points at something already said and adds nothing of its own. It has to be
+    # read after `topics`: 「그럼 신고는?」 names a subject, and a sentence that
+    # says what it is about does not need the last one to say it.
+    if continues(lowered):
+        return FOLLOW_UP
     # Something was said that is neither a greeting, a question about the
     # product, nor a subject we recognise. Asking what the trade is remains the
     # honest move — the alternative is a guess about what they meant.
     return TRADE
+
+
+#: What makes a sentence a description of a trade rather than a mention of one.
+#:
+#: A direction on its own does not. 「일반형 **수출** 환변동보험에 대해 설명해줘」
+#: reads 수출 and nothing else, and the rule that any slot means a trade sent it
+#: down the funnel: the product asked for an amount and a settlement date from
+#: someone who had asked what a product was. Every K-SURE name carries a
+#: direction — 단기**수출**보험, **수입**금융 — so naming a product looks like
+#: describing a trade under that rule.
+#:
+#: An amount or a date has no reason to appear except from a trade, and intake
+#: says the same thing from the other side: a direction alone is never `ready`.
+TRADE_SLOTS = ("amount", "expected_payment_date")
+
+
+def continues(text: str | None) -> bool:
+    """Whether this sentence points at the last one.
+
+    Exported because two places need the same reading and must not disagree
+    about it: this module, to say what kind of turn it is, and the web layer,
+    to decide whose subject the answer is ordered by. A second copy of the word
+    list would drift, and the drift would show as a sentence that reads as a
+    follow-up in one place and as a new question in the other.
+    """
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(word in lowered for word in _FOLLOW_UP)
+
+
+#: The follow-up that has an answer waiting rather than only an order. Every
+#: rule records what it checked; 「왜?」 is the question those records answer.
+_ASKS_WHY = ("왜", "어째서", "무슨 근거", "어떤 근거", "근거가")
+
+
+def asks_why(text: str | None) -> bool:
+    return bool(text) and any(word in text.lower() for word in _ASKS_WHY)
+
+
+def _describes_a_trade(heard: dict[str, str] | None) -> bool:
+    return bool(heard) and any(heard.get(slot) for slot in TRADE_SLOTS)
 
 
 def _is_only_greeting(lowered: str) -> bool:

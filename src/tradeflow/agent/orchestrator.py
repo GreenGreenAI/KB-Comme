@@ -29,6 +29,7 @@ from tradeflow.knowledge.facts import FactAssembler, FactAssertion, FactCatalog
 from tradeflow.knowledge.repository import KnowledgeRepository
 from tradeflow.agent.routing import (
     COMPLIANCE,
+    derive_payment_terms,
     derive_structure,
     EXPOSURE,
     HEDGE,
@@ -37,6 +38,7 @@ from tradeflow.agent.routing import (
     ExecutionPlan,
     plan_execution,
 )
+from tradeflow.runtime import asking
 from tradeflow.runtime.pipeline import TradeFlowPipeline
 from tradeflow.runtime.provenance import (
     CalculationVersions,
@@ -51,7 +53,11 @@ from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.runtime import observing
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance import financing_purpose, payment_structure
+from tradeflow.tools.utterance import (
+    financing_purpose,
+    payment_structure,
+    withdrawn_structure,
+)
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -222,6 +228,16 @@ DECLARED_COMPANY_EVIDENCE_ID = "TRADEFLOW_COMPANY_DECLARED"
 #: What the company said the money is for. Separate from the company
 #: declaration above because it comes from the sentence, not the account.
 DECLARED_FINANCING_EVIDENCE_ID = "TRADEFLOW_FINANCING_DECLARED"
+
+#: The payment term, subtracted from the shipment and payment dates the
+#: company gave. Its own descriptor because the catalog demands `user_trade`
+#: for that field, and the derived-structure evidence attests `calculation`.
+PAYMENT_TERM_EVIDENCE_ID = "TRADEFLOW_PAYMENT_TERM_DERIVED"
+
+#: What the company answered when §5.4 asked for it. One per evidence role,
+#: because the fact catalog fixes the role per field and a single descriptor
+#: would have to claim one of them for facts the rules read differently.
+ANSWERED_EVIDENCE_PREFIX = "TRADEFLOW_ANSWERED_"
 
 #: The §5.5 declarations the company made in the sentence. Separate from the
 #: structure this module computes: those came from a subtraction over dates,
@@ -531,6 +547,115 @@ def _declared_financing_assertions(
     return assertions, (descriptor,)
 
 
+def _payment_term_assertions(
+    program: TradeProgram,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest the payment term this module subtracted out of the user's dates.
+
+    `user_trade`, not `calculation`, and the catalog is why — it fixes the role
+    per field, and for this one it says the term is a fact about the trade. The
+    two inputs are the company's own dates, so what the evidence attests is
+    still the company's trade; the payload carries the arithmetic so the audit
+    can see it was subtracted rather than stated.
+
+    That is the whole difference from asking. A term the company typed could
+    disagree with the dates beside it on screen, and nothing would say which
+    one the rule used.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    terms = derive_payment_terms(program)
+    if not terms:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptor = EvidenceDescriptor(
+        PAYMENT_TERM_EVIDENCE_ID,
+        EvidenceRole.USER_TRADE,
+        case_ids,
+        generated_at=as_of,
+        payload={
+            "facts": dict(sorted(terms.items())),
+            "declared_by": program.company.company_id,
+            "basis": "기업이 말한 선적일과 결제일의 차이",
+        },
+    )
+    assertions = {
+        case_id: tuple(
+            FactAssertion(field, value, (PAYMENT_TERM_EVIDENCE_ID,))
+            for field, value in sorted(terms.items())
+        )
+        for case_id in case_ids
+    }
+    return assertions, (descriptor,)
+
+
+def _answered_fact_assertions(
+    program: TradeProgram,
+    answered: Mapping[str, str] | None,
+    *,
+    as_of: datetime,
+) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
+    """Attest what the company answered when a rule asked for it.
+
+    §5.4 already reported which facts it was short of; nothing carried the
+    answers back. So a company could be asked for its K-SURE grade, type it in,
+    and watch the same product come back 「아직 판정하지 못했습니다」 — the
+    question was real and the answer went nowhere.
+
+    The role is read from the fact catalog, one descriptor per role. Choosing
+    it here would be this module deciding what kind of evidence a company's
+    word is, and the catalog decides that per field precisely so the answer
+    cannot change with the caller: a grade is `support_eligibility`, a purpose
+    is `user_trade`, a bank consultation is `procedure`.
+
+    Anything the catalog does not recognise never arrives — the web layer
+    refuses it at the door — so an unknown field here is a bug rather than an
+    input, and it is dropped rather than guessed at.
+    """
+    empty = {case.case_id: () for case in program.cases}
+    if not answered:
+        return empty, ()
+
+    by_role: dict[str, dict[str, Any]] = {}
+    for field, value in answered.items():
+        role = asking.evidence_role(field)
+        if role is None or not asking.accepts(field, value):
+            continue
+        by_role.setdefault(role, {})[field] = asking.as_stated(field, value)
+    if not by_role:
+        return empty, ()
+
+    case_ids = tuple(case.case_id for case in program.cases)
+    descriptors: list[EvidenceDescriptor] = []
+    assertions: dict[str, list[FactAssertion]] = {case_id: [] for case_id in case_ids}
+    for role, facts in sorted(by_role.items()):
+        evidence_id = f"{ANSWERED_EVIDENCE_PREFIX}{role.upper()}"
+        descriptors.append(
+            EvidenceDescriptor(
+                evidence_id,
+                EvidenceRole(role),
+                case_ids,
+                generated_at=as_of,
+                payload={
+                    "facts": dict(sorted(facts.items())),
+                    "declared_by": program.company.company_id,
+                    "basis": "규칙이 물은 사실에 기업이 답한 값",
+                },
+            )
+        )
+        for case_id in case_ids:
+            assertions[case_id].extend(
+                FactAssertion(field, value, (evidence_id,))
+                for field, value in sorted(facts.items())
+            )
+    return (
+        {case_id: tuple(items) for case_id, items in assertions.items()},
+        tuple(descriptors),
+    )
+
+
 def analyze(
     program: TradeProgram,
     *,
@@ -549,6 +674,12 @@ def analyze(
     #: Ordering only. Facts are read from `utterance`, never from this: a
     #: sentence already answered must not declare its trade a second time.
     intent: tuple[str, ...] | None = None,
+    #: What the company answered to the questions §5.4's rules raised. Read
+    #: through the fact catalog — see `_answered_fact_assertions`.
+    answered_facts: Mapping[str, str] | None = None,
+    #: The §5.5 structure earlier turns established, resent by the client the
+    #: way the trade is. Merged under this turn's sentence, never over it.
+    declared_structure: Mapping[str, bool] | None = None,
     as_of: datetime | None = None,
 ) -> Analysis:
     """Run the workers this program calls for, keeping failures contained."""
@@ -569,7 +700,20 @@ def analyze(
     # merged mapping is for routing only — asserting a field from both would be
     # the same fact arriving twice, which the fact assembler refuses.
     derived_structure = derive_structure(program)
-    declared_structure = payment_structure(utterance)
+    # Read from this turn's sentence, and from what earlier turns established.
+    # The sentence alone loses it the moment the conversation moves on: a
+    # company that said 「상계로 처리합니다」 and then asked 「왜?」 had its
+    # netting declaration evaporate, and §5.5's branches closed with it. The
+    # trade survives because the client resends it; so must this.
+    #
+    # This turn's words win. A company correcting itself — 「상계는 아닙니다」 —
+    # must be able to, and the correction is in the sentence.
+    carried = {
+        field: value
+        for field, value in (declared_structure or {}).items()
+        if field not in withdrawn_structure(utterance)
+    }
+    declared_structure = {**carried, **payment_structure(utterance)}
     structure = {**derived_structure, **declared_structure}
 
     # §4.2[2]: decide the call plan before calling anything. Exposure has
@@ -626,6 +770,12 @@ def analyze(
             program, utterance, as_of=evaluated_at_utc
         )
         country, country_evidence = _country_policy_assertions(program, snapshot_root)
+        answered, answered_evidence = _answered_fact_assertions(
+            program, answered_facts, as_of=evaluated_at_utc
+        )
+        terms, term_evidence = _payment_term_assertions(
+            program, as_of=evaluated_at_utc
+        )
         assertions = {
             case_id: (
                 *assertions.get(case_id, ()),
@@ -633,8 +783,13 @@ def analyze(
                 *stated.get(case_id, ()),
                 *financing.get(case_id, ()),
                 *country.get(case_id, ()),
+                *answered.get(case_id, ()),
+                *terms.get(case_id, ()),
             )
-            for case_id in {*assertions, *declared, *stated, *financing, *country}
+            for case_id in {
+                *assertions, *declared, *stated, *financing, *country,
+                *answered, *terms,
+            }
         }
         structure_evidence = (
             *structure_evidence,
@@ -642,6 +797,8 @@ def analyze(
             *stated_evidence,
             *financing_evidence,
             *country_evidence,
+            *answered_evidence,
+            *term_evidence,
         )
         decision_packet = _isolated(
             report,

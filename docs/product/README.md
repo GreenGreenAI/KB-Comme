@@ -14,6 +14,7 @@ last-reviewed: 2026-07-26
 - [로드맵](roadmap.md)
 - [Decision Workspace 프론트엔드 보완 요구사항](decision-workspace-frontend-requirements.md)
 - [통합 제품·아키텍처 기획서](product-architecture-plan.md)
+- [대표 데모 대본](demo-script.md) — 실제 응답에서 뽑은 수치로 고정한 시연 절차
 
 통합 기획서는 초기 설계의 원문 기준 문서다. 새 결정은 각 주제 문서와 ADR에 먼저
 반영하고, 통합 기획서는 분기 리뷰에서 동기화한다.

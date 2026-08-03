@@ -275,7 +275,7 @@ INSTRUCTION = """\
 금지되는 문장의 예 (전부 위반):
 - "100,000 USD는 1466.3원 기준 146,630,000원입니다" → 곱셈을 했습니다
 - "약 10만 달러의 노출이 있습니다" → 근사했습니다
-- "순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
+- "거래 순노출은 100,000 KRW입니다" → 단위를 바꿨습니다
 - "3억 원 규모 수출이시군요" → 사용자가 쓴 숫자를 되받았습니다. 분석은 확정된
   수치로 돌았으니 목록의 값을 쓰세요
 
@@ -286,13 +286,13 @@ INSTRUCTION = """\
 그대로 쓰지 마세요 — 문장의 모양만 보고, 값은 「확정된 수치」에서 가져오세요.
 
 수출 기업이 "환율이 떨어질까 걱정"이라고 물었을 때:
-- 나쁨: "순노출은 87,300 USD이고 그때 덜 받는 원화는 6,214,000 KRW입니다."
+- 나쁨: "거래 순노출은 87,300 USD이고 그때 덜 받는 원화는 6,214,000 KRW입니다."
   → 카드에 있는 것을 다시 읽었습니다.
 - 좋음: "받을 87,300 USD가 결제일까지 열려 있습니다. 불리한 쪽인 1288.42까지
   가면 그때 손에 들어오는 원화가 6,214,000 KRW 적어집니다."
 
 수입 기업이 "환율이 오를까 걱정, 지금 환전할까요"라고 물었을 때:
-- 나쁨: "순노출은 -87,300 USD입니다."  → 부호를 읽어줬을 뿐입니다.
+- 나쁨: "거래 순노출은 -87,300 USD입니다."  → 부호를 읽어줬을 뿐입니다.
 - 좋음: "보내야 할 87,300 USD가 아직 환전되지 않았습니다. 불리한 쪽인
   1611.75까지 가면 결제에 5,903,000 KRW가 더 듭니다."
 
@@ -309,7 +309,7 @@ INSTRUCTION = """\
 - 환율을 예측하지 마세요. "~까지 가면"처럼 조건부로만 말하세요.
 - 무엇을 하라고 지시하지 마세요. 판단은 아래 규칙 결과가 합니다.
 - 목록을 옮겨 적지 마세요. 가장 중요한 수치 두세 개만 고르세요.
-- 값이 0인 항목은 말하지 마세요. 자연헤지 0, 자금 공백 0을 나열하면 문장이
+- 값이 0인 항목은 말하지 마세요. 기간 상쇄 0, 자금 공백 0을 나열하면 문장이
   카드의 복사본이 됩니다.
 - 두 문장 이내. 짧을수록 좋습니다.
 """
@@ -447,6 +447,40 @@ def check(sentence: str, figures: list[str]) -> str:
 _CLAUSE_BREAK = re.compile(r"(?:이며|이고|하고|지만|,(?!\d)|\.(?!\d)|[!?;。])")
 
 
+#: Which way the money moves, in the words a sentence uses for each direction.
+#:
+#: The figure list already says it — 「그때 덜 받는 원화」 — and the model wrote
+#: the opposite anyway: a company with +40,000 USD coming in was told it had
+#: 「보내야 할 40,000 USD」 and that a falling rate would cost 4,108,400 KRW
+#: 「더」. Every number was quoted exactly, so `check` and `check_bound` both
+#: passed it. They compare atoms; this is a relation between them, and the
+#: relation is what a reader takes away.
+#:
+#: Cheap to catch because the direction is decided upstream: §5.2 picks the end
+#: the trade suffers at and reports which way the cash moves. The sentence only
+#: has to be checked for words that claim the other one.
+_DIRECTION_WORDS = {
+    # Receipts fall. Nothing is being paid, so words about paying are wrong.
+    "decrease": ("더 듭니다", "더 든다", "더 내", "더 지급", "보내야", "지급해야"),
+    # Payments rise. Nothing is being received, so words about receiving are.
+    "increase": ("덜 받", "적게 받", "수취액이 줄", "받는 금액이 줄"),
+}
+
+
+def check_direction(sentence: str, direction: str | None) -> str:
+    """Empty unless the sentence claims the money moves the other way.
+
+    Fail-closed like the rest: an offending sentence is refused and the screen
+    writes the assembled one, which was built from the same figures by code
+    that cannot get the direction wrong.
+    """
+    for wrong in _DIRECTION_WORDS.get(str(direction), ()):
+        if wrong in sentence:
+            said = "덜 받는" if direction == "decrease" else "더 내는"
+            return f"현금 방향이 뒤집혔습니다 — 이 거래는 {said} 쪽입니다"
+    return ""
+
+
 def _label_anchors(label: str) -> tuple[str, ...]:
     shortened = re.sub(r"^(?:그때|현재)\s+", "", label).strip()
     shortened = re.sub(r"\s+(?:금액|차이)$", "", shortened).strip()
@@ -531,9 +565,16 @@ def figures(result: dict[str, Any]) -> list[str]:
 
     cash = result.get("cashflow_analysis") or {}
     for key, label in (
-        ("net_exposure", "순노출"),
-        ("natural_hedge_amount", "자연헤지 금액"),
-        ("maturity_matched_amount", "만기가 겹치는 금액"),
+        # 「거래」를 붙여 건넵니다. 계약의 필드 이름은 `net_exposure` 그대로지만,
+        # 이 값이 세는 것은 거래뿐입니다 — 명세 §5.1의 `E`와 달리 보유 외화가
+        # 들어 있지 않습니다. 이름 없이 건네면 모델이 더 넓은 뜻으로 씁니다.
+        ("net_exposure", "거래 순노출"),
+        # 「자연헤지」로 건네면 모델이 그 말을 그대로 문장에 씁니다. 이 값은
+        # 전 구간 상쇄일 뿐 결제일까지 맞물리는지를 보지 않으므로, 덮였다는
+        # 뜻을 가진 이름으로 부르면 모델은 검사를 통과하면서 사실이 아닌 것을
+        # 말하게 됩니다 — 수치는 도구의 것이고 그 뜻도 도구의 것입니다.
+        ("natural_hedge_amount", "기간 상쇄 금액(만기 무관)"),
+        ("maturity_matched_amount", "그중 실제로 덮이는 금액"),
     ):
         for entry in cash.get(key) or []:
             written.append(f"{label}: {money(entry.get('amount'))} {entry.get('currency')}")
@@ -771,6 +812,10 @@ class Synthesizer:
         #: trade does not inherit it. §6.2 asks that an analysis reproduce, not
         #: that every analysis read alike.
         seed: str | None = None,
+        #: Which way this trade's cash moves at the adverse rate, as §5.2
+        #: decided it. Checked rather than trusted to the prompt — the figure
+        #: list already names the direction and the model wrote the opposite.
+        direction: str | None = None,
     ) -> Synthesis:
         """One sentence about these figures, or a refusal with its reason."""
         if not self.available:
@@ -851,6 +896,9 @@ class Synthesizer:
         broken = check_bound(sentence, used)
         if broken:
             return Synthesis(sentence, False, broken)
+        reversed_flow = check_direction(sentence, direction)
+        if reversed_flow:
+            return Synthesis(sentence, False, reversed_flow)
         return Synthesis(sentence, True)
 
     def retell(

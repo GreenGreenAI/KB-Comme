@@ -42,11 +42,24 @@ logger = logging.getLogger("tradeflow.planner")
 #: readings cannot disagree about what the vocabulary is.
 SUBJECTS = tuple(DEFAULT_ORDER)
 
+#: What each subject covers, in the words that separate it from its neighbours.
+#:
+#: 지원제도 and 헤지 overlap in the world — 환변동보험 is a hedging instrument
+#: and a K-SURE scheme both — so the hint has to say which side of that a
+#: question falls on. Naming a scheme is 지원제도; asking how much of one's own
+#: trade to cover is 헤지.
 SUBJECT_HINT = {
     "exposure": "환노출 — 얼마를 받거나 내야 하는지, 자금이 언제 부족한지",
     "market_scenario": "환율 시나리오 — 환율이 어디까지 움직일 수 있는지",
-    "hedge": "헤지 — 얼마나 헤지해야 하는지, 선물환을 걸지",
-    "support": "지원제도 — 보험·보증·정책자금 등 받을 수 있는 제도",
+    "hedge": (
+        "헤지 — 이 회사의 거래를 얼마나 덮을지, 선물환을 걸지 말지. "
+        "제도의 이름을 부르며 그것이 무엇인지 묻는 것은 여기가 아닙니다."
+    ),
+    "support": (
+        "지원제도 — 기관이 운영하는 보험·보증·정책자금. "
+        "제도 이름(환변동보험, 단기수출보험, 수출신용보증 등)이 나오면 여기입니다. "
+        "그 제도가 헤지 수단이더라도, 묻는 것이 제도라면 여기입니다."
+    ),
     "compliance": "신고의무 — 외국환거래법상 신고·보고 대상인지",
 }
 
@@ -68,6 +81,9 @@ INSTRUCTION = """\
   → support 먼저. 걱정하는 것은 대금 회수이고 그것을 다루는 제도가 있습니다.
     신고의무는 이 문장이 묻는 것이 아닙니다.
 - "지금 환전해 두는 게 나을까요" → hedge
+- "K-SURE 일반형 수출 환변동보험에 대해 설명해줘"
+  → support 먼저. K-SURE가 운영하는 제도를 묻고 있습니다. 그 제도가 헤지
+    수단이기도 하지만, 묻는 것은 제도이지 헤지 방법이 아닙니다.
 
 당신이 고르는 것은 답의 순서일 뿐입니다. 고르지 않은 주제도 답에는 그대로
 들어가므로, 무엇을 빼기 위해 고민하지 마세요.
