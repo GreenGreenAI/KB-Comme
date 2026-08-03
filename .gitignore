@@ -27,3 +27,6 @@ node_modules/
 
 # Accounts are seeded locally, never committed — the file holds password hashes.
 data/accounts.db
+
+# macOS Finder
+.DS_Store

@@ -3,6 +3,40 @@ import { useEffect, useRef, useState } from "react";
 /** Kept in step with the .menu transition in styles.css. */
 const MENU_EXIT_MS = 150;
 
+/** The mark, drawn rather than placed.
+ *
+ *  Strokes and not an image file: the palette is three values and white, and a
+ *  raster mark would be the one thing on the screen that cannot follow it —
+ *  `currentColor` puts this on the same accent as everything else, and it stays
+ *  a mark at every scale a screenshot or a slide asks for.
+ *
+ *  The accent, not orange. The most identifying thing about the original is its
+ *  colour, and in a warm grey-brown world it would be the loudest thing on the
+ *  page — louder than the figure saying how much money is at risk, which is the
+ *  one thing here that has earned that.
+ *
+ *  `aria-hidden` because the word beside it says the same thing. Without it the
+ *  button reads out as its mark and then its name.
+ */
+function Mark() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.1"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      {/* Three strokes through one centre make the six rays. */}
+      <path d="M8.6 4.6V17.4M3.1 7.8l11 6.4M3.1 14.2l11-6.4" />
+      {/* The b: a stem to the right of the star, and its bowl below. */}
+      <path d="M17.4 3.6v12.2" />
+      <circle cx="18.4" cy="15.4" r="3.4" />
+    </svg>
+  );
+}
+
 /** Signed out offers a way to get an account; signed in shows who you are.
  *  The menu is built from this product's own concepts — what is saved here is
  *  what the intake agent no longer has to ask for.
@@ -86,7 +120,10 @@ export default function Nav({
   return (
     <header className="nav">
       <button className="brand" type="button" onClick={onHome}>
-        <i>T</i> TradeFlow
+        <i>
+          <Mark />
+        </i>{" "}
+        KB Comme
       </button>
       {/* The three areas beyond 분석 have no page behind them yet. They are
           shown so the shape of the product is legible, and they respond to the

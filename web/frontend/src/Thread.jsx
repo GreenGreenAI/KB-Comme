@@ -45,7 +45,7 @@ export default function Thread({ turns, busy, thinking, onArrived, threadRef }) 
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
         <div className="turn agent">
-          <span className="who">TradeFlow</span>
+          <span className="who">KB Comme</span>
           <p>거래를 알려주시면 계산을 시작합니다.</p>
         </div>
       )}
@@ -125,7 +125,7 @@ function Thinking({ thinking }) {
 
   return (
     <div className="turn agent thinking" aria-live="polite">
-      <span className="who">TradeFlow</span>
+      <span className="who">KB Comme</span>
       {steps.length === 0 ? (
         <p className="think">
           <Dots />
@@ -156,7 +156,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <p>{turn.text}</p>
       </div>
     );
@@ -165,7 +165,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   if (turn.kind === "placement") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <Understood heard={turn.ask.understood} />
         <p>{turn.ask.question}</p>
       </div>
@@ -178,7 +178,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
     // the answer blocks below belong to a decision and there is none here.
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         {turn.ask.spoken
           ?.split("\n\n")
           .map((block) => (
@@ -208,7 +208,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   if (turn.kind === "ask") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <Understood heard={turn.ask.understood} />
         {turn.ask.issues?.map((issue) => (
           <p key={issue.field}>{issue.reason}</p>
@@ -278,8 +278,13 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // every number in it came from a tool. When it is empty — no key, no network,
   // or a sentence that invented a figure — the turn assembles its own, which is
   // why that assembly stays here rather than being deleted as dead code.
-  const line = result.summary
-    ? [{ text: result.summary }]
+  // What closes the answer. The rewrite when there is one — it is the version
+  // that has read every judgement — and §4.2[9]'s own sentence otherwise.
+  // Both are paragraphs and both get cut to the sentence carrying the figure;
+  // everything after it has already been said above, beside its evidence.
+  const summary = result.said?.retold || result.summary;
+  const line = summary
+    ? [{ text: recap(summary) }]
     : sentence({
         first, market, swing, net: result.cashflow_analysis?.net_exposure?.[0]?.amount,
         hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread,
@@ -296,18 +301,22 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
   // answer, and staging it made the reader watch a receipt being printed
   // before the answer would start. It is simply there.
   const tail = trailing(result, order).length;
+  // The figures, the band when there is one, then each part below them on its
+  // own step — 규칙이 확인한 것, 손익 비교, 건너뛴 이유, 근거 used to share one,
+  // so the answer was written a word at a time and everything under it landed
+  // on a single frame.
+  const blocks = 1 + (result.market_scenario ? 1 : 0) + tail;
   const timeline = useMemo(() => {
     const gaps = [];
-    for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
-    // The figures, the band when there is one, then each part below them on its
-    // own step — 규칙이 확인한 것, 손익 비교, 건너뛴 이유, 근거, 재현 입력 used
-    // to share one, so the answer was written a word at a time and everything
-    // under it landed on a single frame.
-    const blocks = 1 + (result.market_scenario ? 1 : 0) + tail;
+    // Blocks first, sentence last. The summary is now what closes the answer
+    // rather than what opens it, and an arrival order that still typed it out
+    // first would be the old reading order surviving the layout change — the
+    // reader would watch a conclusion appear before anything supporting it.
     for (let i = 0; i < blocks; i += 1) gaps.push(BLOCK_MS);
+    for (let i = 0; i < words; i += 1) gaps.push(i === 0 ? OPENING_MS : WORD_MS);
     return gaps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, tail]);
+  }, [words, blocks]);
 
   const [shown, settled] = useCascade(timeline, live);
   // One switch for the whole turn: while it is arriving the parts carry the
@@ -326,7 +335,7 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
 
   return (
     <div className="turn agent">
-      <span className="who">TradeFlow</span>
+      <span className="who">KB Comme</span>
 
       {trace.length > 0 && (
         <div className="trace">
@@ -360,22 +369,18 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className={`pointer lead${arrive}`}>{result.pointer}</p>
       )}
 
-      {shown > 0 && !result.said?.retold && !result.cannot && (
-        <Written segments={line} shown={shown} settled={settled} />
-      )}
-
-      {!leads && shown > words && result.pointer && (
+      {!leads && shown > 0 && result.pointer && (
         <p className={`pointer${arrive}`}>{result.pointer}</p>
       )}
 
       {/* What the subject they raised is not covered by. Nothing above is
           false without it; what is missing is the sentence that stops the
           reader waiting for an answer that is not coming. */}
-      {shown > words && result.holds && (
+      {shown > 0 && result.holds && (
         <p className={`pointer lead${arrive}`}>{result.holds}</p>
       )}
 
-      {shown > words && result.coverage && (
+      {shown > 0 && result.coverage && (
         <p className={`pointer limit${arrive}`}>{result.coverage}</p>
       )}
 
@@ -390,8 +395,28 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
         <p className="told">{line.map((seg) => seg.text).join(" ")}</p>
       )}
 
-      {shown > words && (
-        <Answer result={result} order={order} shown={shown - words} arrive={arrive} />
+      {shown > 0 && (
+        <Answer result={result} order={order} shown={shown} arrive={arrive} />
+      )}
+
+      {/* The summary, last and once. It used to open the answer and it packed
+          five assertions into five sentences — the exposure, three verdicts
+          and a document count — with the grounds for every one of them in a
+          fold underneath all five. Read in that order the reader met the
+          conclusions before anything that supported them, and could only check
+          one by leaving the paragraph.
+          Now the blocks above have said each of those things beside its own
+          evidence, so what is left for this line to do is be the one sentence
+          somebody repeats afterwards. `recap` keeps it to that. */}
+      {shown > blocks && !result.cannot && (
+        <div className="recap">
+          <Written segments={line} shown={shown - blocks} settled={settled} />
+          {/* The largest number in the answer was the only claim with nothing
+              under it. Every rule judgement could at least be opened; the
+              figure most likely to be repeated to a bank could not say where
+              it came from. */}
+          {settled && result.basis && <p className="ground-row">{result.basis}</p>}
+        </div>
       )}
 
       {/* §4.2[2]의 이유는 여기 다시 쓰지 않습니다. 바로 아래 요청 패널이
@@ -701,6 +726,50 @@ function Compliance({ result, open }) {
   );
 }
 
+/** What each row of evidence is evidence *of*. Two words, because a reader
+ *  scanning down the blocks needs to tell at a glance which side of a
+ *  judgement a line is on — and 「확인」 beside 「필요」 does that where a bare
+ *  bullet list does not. */
+const GROUND_LABEL = { met: "확인", wanted: "필요", ours: "저희 몫" };
+
+/** The documents are not conditions. 「필요」 above a list of forms reads as
+ *  facts the reader is being asked for, which is the one thing this screen
+ *  must never blur — a form to bring and a fact still missing are different
+ *  kinds of unfinished. */
+const ACTION_GROUND_LABEL = { met: "확인", wanted: "서류", ours: "저희 몫" };
+
+/** One claim with its grounds directly beneath it.
+ *
+ *  Every sentence here was already on screen and so was every row under it —
+ *  the sentences ran together as one paragraph and the rows sat in a fold
+ *  below all of them. Nothing is new; what changed is that a claim and the
+ *  thing that supports it are now in the same place, which is the only
+ *  arrangement in which either is worth showing.
+ *
+ *  The rows are a line, not a list. Five conditions set as five bullets is the
+ *  record this product spent its time turning into sentences, arriving back in
+ *  a different shape.
+ */
+function Grounded({ block }) {
+  const labels = block.kind === "action" ? ACTION_GROUND_LABEL : GROUND_LABEL;
+  // 「저희 몫」 last: it is the only row that asks nothing of the reader, and
+  // putting it above what they can act on makes them read past it.
+  const rows = ["met", "wanted", "ours"].filter(
+    (side) => (block[side] ?? []).length > 0,
+  );
+  return (
+    <div className={`ground ${block.kind}${block.settled === false ? " open" : ""}`}>
+      <p className="ground-claim">{block.claim}</p>
+      {rows.map((side) => (
+        <p className={`ground-row ${side}`} key={side}>
+          <span className="ground-label">{labels[side]}</span>
+          {block[side].join(" · ")}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /** What the person reading this has to go and do.
  *
  *  The product's output is not a number, it is a trade decision plan. Every
@@ -767,6 +836,49 @@ const SECTION_LABEL = {
  *
  *  Only the headline figures are open. Everything else is a fold — this is a
  *  chat message, and a message that takes four screens is not one. */
+/** The synthesised paragraph, kept to the sentence worth repeating.
+ *
+ *  §4.2[9] writes one paragraph per turn and it grows with the analysis: a
+ *  turn that judged three products and produced two errands came back as five
+ *  assertions in a row, every one of them also stated — with its evidence —
+ *  in the blocks above. Read together they are the same answer twice, and the
+ *  copy without grounds was the one that led.
+ *
+ *  Cutting it here rather than asking the model for less: the guard that
+ *  checks every figure against a tool runs on the whole paragraph, and a
+ *  shorter prompt would have moved that check, not kept it. What survives is
+ *  the first sentence, which is where §4.2[9] puts the figure.
+ */
+function recap(summary) {
+  // The stop has to be followed by something for the sentence to have ended:
+  // 「100,000 USD」 and 「1,441.1원」 carry stops of their own, and splitting on
+  // every one of them leaves 「최대 10,188」.
+  const sentences = String(summary).trim().split(/(?<=[.。])\s+/u);
+  const kept = [];
+  for (const line of sentences) {
+    // Cutting at the first sentence was wrong and it lost the figure. §4.2[9]
+    // writes the calculation first and the verdicts after, but how many
+    // sentences the calculation takes is the model's to decide — one turn
+    // opened 「100,000 USD 결제가 결제일까지 열려 있습니다」 and put the
+    // 10,188,000 in the sentence after it. So the cut is made where the
+    // subject changes rather than after a fixed count.
+    if (JUDGEMENT.test(line)) break;
+    kept.push(line);
+    if (kept.length === RECAP_MAX) break;
+  }
+  // A summary that names a scheme in its first sentence still has to say
+  // something. One sentence of overlap beats an empty close.
+  return (kept.length > 0 ? kept : sentences.slice(0, 1)).join(" ");
+}
+
+/** A sentence that has moved on to the verdicts — which the blocks above have
+ *  already given, each beside the conditions it rests on. */
+const JUDGEMENT = /K-SURE|보험|보증|신고|서류|상담|제도/u;
+
+/** Two at the outside. The recap is what somebody repeats afterwards, and
+ *  nobody repeats a paragraph. */
+const RECAP_MAX = 2;
+
 /** The agent's line for this turn, as segments. */
 function sentence({ first, market, swing, net, hedge, hedgeIsNew, tradesChanged, tradeCount, opened, unread }) {
   if (first && market && swing !== null) {
@@ -1003,13 +1115,28 @@ function Answer({ result, order, shown, arrive }) {
   // The card is the figure grid and the band. Prose never belonged inside it —
   // sentences in a grey box read as a document handed over, not an answer
   // given, which is the impression the folds were removed to stop.
-  const spoken = said.retold
-    ? [said.retold]
-    : [
-        ...(said.support ?? []),
-        ...(said.compliance ?? []),
-        ...(said.actions ?? []),
-      ];
+  // The same judgements with their grounds attached. `spoken` remains the
+  // fallback for a turn the server answered before this field existed — a
+  // restored session carries whatever the response held at the time, and a
+  // blank block is worse than an ungrounded sentence.
+  //
+  // `retold` does not disable this, and briefly it did. The rewrite is the
+  // one path that only runs when there is a key, so switching the blocks off
+  // for it meant the whole change was invisible in the only build anyone was
+  // looking at — and what it renders instead is precisely the paragraph the
+  // blocks exist to break up: every judgement merged into one, none of them
+  // near its evidence. It belongs in the recap, not above the answer.
+  const grounded = said.grounded ?? [];
+  const spoken =
+    grounded.length > 0
+      ? []
+      : said.retold
+        ? [said.retold]
+        : [
+            ...(said.support ?? []),
+            ...(said.compliance ?? []),
+            ...(said.actions ?? []),
+          ];
 
   return (
     // The figures ride inside the card's own arrival — a second animation on
@@ -1028,11 +1155,15 @@ function Answer({ result, order, shown, arrive }) {
       </p>
     ))}
 
-    {spoken.map((line) => (
-      <p className="told" key={line}>
-        {line}
-      </p>
-    ))}
+    {grounded.length > 0
+      ? grounded.map((block, index) => (
+          <Grounded block={block} key={`${block.kind}-${index}`} />
+        ))
+      : spoken.map((line) => (
+          <p className="told" key={line}>
+            {line}
+          </p>
+        ))}
 
     <div className={`answer${arrive}`}>
       <Calculation folded={folded} net={net}>
@@ -1154,8 +1285,12 @@ function Answer({ result, order, shown, arrive }) {
         {at("detail") && (
           <details className={`fold aside ${step("detail")}`}>
             <summary>규칙이 확인한 것과 필요서류</summary>
-            {said.detail.map((row) => (
-              <div className="verdict" key={row.title}>
+            {/* Keyed by position, not by title. Two errands at the same
+                authority each contribute a row called 「필요서류」, and React
+                drops the second of two children sharing a key — the document
+                list for the second errand simply was not rendered. */}
+            {said.detail.map((row, index) => (
+              <div className="verdict" key={`${row.title}-${index}`}>
                 <div className="verdict-head">
                   <b>{row.title}</b>
                 </div>

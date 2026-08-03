@@ -156,6 +156,120 @@ class SupportTests(unittest.TestCase):
         self.assertIn("아직 판정하지 못했습니다", said[0])
 
 
+class GroundedTests(unittest.TestCase):
+    """A claim and the evidence for it, built in one pass.
+
+    They used to be built by two functions in two different orders — sentences
+    settled-first, rows in rule order — so the screen could only put all the
+    sentences in a paragraph and all the rows in a fold underneath. The
+    evidence was present and unusable, which is worse than absent: the product
+    looks like it is showing its work while making the work unreadable.
+    """
+
+    RESULT = {
+        "support_candidates": [
+            {
+                "rule_id": "KSURE_POSTSHIP",
+                "title": "K-SURE 단기수출보험(선적후·개별)",
+                "status": "insufficient_information",
+                "checks": [
+                    {"field": "trade.direction", "description": "수출 거래", "status": "passed"},
+                    {
+                        "field": "company.ksure_exporter_grade",
+                        "description": "K-SURE 수출자 신용등급 F급 이상",
+                        "status": "uncertain",
+                    },
+                    {
+                        "field": "counterparty.country_restricted",
+                        "description": "국별인수방침 인수제한국 소재가 아님",
+                        "status": "uncertain",
+                    },
+                ],
+            },
+            {
+                "rule_id": "KSURE_FX",
+                "title": "K-SURE 환변동보험",
+                "status": "expert_confirmation_required",
+                "checks": [
+                    {"field": "company.size", "description": "중소·중견기업", "status": "passed"},
+                ],
+            },
+        ]
+    }
+
+    def test_a_claim_carries_its_own_grounds(self) -> None:
+        blocks = narration.grounded(self.RESULT)
+
+        settled = next(b for b in blocks if b["settled"])
+        self.assertIn("중소·중견기업", settled["met"])
+        self.assertNotIn("국별인수방침 인수제한국 소재가 아님", settled["met"])
+
+    def test_what_is_decided_comes_before_what_is_not(self) -> None:
+        """The question was 「받을 수 있나요」. An answer that opens with what
+        is still unknown answers a different one — and the rulepack's order is
+        not the reader's."""
+        self.assertEqual(
+            [True, False], [block["settled"] for block in narration.grounded(self.RESULT)]
+        )
+
+    def test_it_does_not_ask_for_what_it_refuses_to_ask_for(self) -> None:
+        """`asking.ASKABLE` leaves 국별인수방침 out on purpose — a company's
+        answer about whether its buyer's country is restricted is evidence of
+        nothing. The sentence went on demanding it anyway, so the reader was
+        left waiting on a question that never arrives."""
+        open_one = next(b for b in narration.grounded(self.RESULT) if not b["settled"])
+
+        self.assertEqual(["K-SURE 수출자 신용등급 F급 이상"], open_one["wanted"])
+        self.assertEqual(["국별인수방침 인수제한국 소재가 아님"], open_one["ours"])
+        self.assertIn("알려주시면", open_one["claim"])
+        self.assertIn("저희가 확인할 항목", open_one["claim"])
+
+    def test_a_condition_nobody_will_be_asked_about_is_still_named(self) -> None:
+        """Silence about it reads as the rule having passed."""
+        open_one = next(b for b in narration.grounded(self.RESULT) if not b["settled"])
+
+        self.assertIn("국별인수방침", open_one["claim"])
+
+    def test_the_claim_is_word_for_word_the_summary_sentence(self) -> None:
+        """The block under a claim and the summary above it are the same
+        assertion. A reader who finds them differently worded has to work out
+        whether they are also differently meant."""
+        claims = [b["claim"] for b in narration.grounded(self.RESULT) if b["kind"] == "support"]
+
+        self.assertEqual(sorted(narration.support(self.RESULT)), sorted(claims))
+
+
+class BasisTests(unittest.TestCase):
+    RESULT = {
+        "cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "100000"}]},
+        "market_scenario": {
+            "spot_rate": "1441.1",
+            "adverse_rate": "1339.22",
+            "confidence_level": 0.9,
+            "observed_from": "2026-05-04",
+            "observed_to": "2026-07-31",
+            "observation_days": 60,
+        },
+    }
+
+    def test_the_largest_number_can_say_where_it_came_from(self) -> None:
+        """Every rule judgement could at least be opened. The figure most
+        likely to be repeated to a bank was the one claim on the screen with
+        nothing underneath it."""
+        said = narration.basis(self.RESULT)
+
+        self.assertIn("거래 순노출 100,000 USD", said)
+        self.assertIn("Σ수취 − Σ지급", said)
+        self.assertIn("1,339.22원", said)
+        self.assertIn("신뢰수준 90%", said)
+        self.assertIn("2026-05-04 ~ 2026-07-31", said)
+
+    def test_no_scenario_says_nothing(self) -> None:
+        """§5.2 refuses to produce a bound it cannot date, and a basis line for
+        a figure that was never computed would be a citation for nothing."""
+        self.assertIsNone(narration.basis({"cashflow_analysis": {}}))
+
+
 class ComplianceTests(unittest.TestCase):
     RESULT = {
         "risk_findings": [

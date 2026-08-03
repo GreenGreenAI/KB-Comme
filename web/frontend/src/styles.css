@@ -1,19 +1,44 @@
-/* Palette is four values only: #5f5449, #9b6a6c, #b09398 and white.
+/* Palette is four values only: #5f5449, #93605f, #b09398 and white.
      Softer tones are those same values mixed with white, never new hues.
      With no green/amber/red to lean on, state is carried by form — filled vs
      outlined vs dashed — and the most chromatic value is reserved for the one
      thing that should pull the eye. */
   :root {
     --ink: #5f5449;
-    --accent: #9b6a6c;
+    --accent: #93605f;
     --soft: #b09398;
     --paper: #ffffff;
 
-    --ink-70: color-mix(in srgb, var(--ink) 70%, #fff);
-    --ink-45: color-mix(in srgb, var(--ink) 45%, #fff);
-    --ink-30: color-mix(in srgb, var(--ink) 30%, #fff);
-    --rule: color-mix(in srgb, var(--soft) 42%, #fff);
-    --rule-faint: color-mix(in srgb, var(--soft) 22%, #fff);
+    /* How far each step is mixed toward white is the whole legibility budget of
+       the product: `--ink-45` alone dresses 45 rules, and every limit sentence,
+       every source line and every fold label is one of them.
+
+       Measured against white, the steps used to land at 3.53 / 2.10 / 1.60 —
+       so the two lines that carry the most caution, 「근거」 and 「한계」, were
+       the least readable things on the screen. They were legible on the laptop
+       they were designed on and gone on a projector in a lit room, which is
+       where this gets shown.
+
+       There is no arrangement of this scale that keeps three readable tiers.
+       AA for text this small starts at 4.58:1, which is 81% of the way to full
+       ink; a tier above it that is visibly different is at 90%, and body is
+       100%. Three steps do not fit in that gap — so the lightness scale carries
+       two tiers and size and weight carry the rest, which is what the captions
+       were already doing at 11 and 12px. The hues are untouched: this palette
+       is three values and white, and buying contrast with a new colour would
+       have got the same ratios at the cost of the one thing the design is. */
+    --ink-70: color-mix(in srgb, var(--ink) 90%, #fff);
+    --ink-45: color-mix(in srgb, var(--ink) 81%, #fff);
+    /* Not held to the text bar: a placeholder, a fold's hinge, and a figure
+       that is zero — all of them saying「없음」, where being quiet is the
+       message rather than an oversight. Lifted enough to be seen at all. */
+    --ink-30: color-mix(in srgb, var(--ink) 60%, #fff);
+    /* Hairlines are what the eye uses to find the edge of a fold or a row.
+       They cannot reach the 3:1 asked of controls without `--soft` becoming a
+       different colour, so they are lifted as far as the hue allows and the
+       controls carry their state in fill and label as well as in the line. */
+    --rule: color-mix(in srgb, var(--soft) 60%, #fff);
+    --rule-faint: color-mix(in srgb, var(--soft) 34%, #fff);
     --tint: color-mix(in srgb, var(--soft) 14%, #fff);
     --tint-strong: color-mix(in srgb, var(--soft) 26%, #fff);
     --accent-tint: color-mix(in srgb, var(--accent) 12%, #fff);
@@ -64,7 +89,10 @@
   html, body { height: 100%; overflow: hidden; }
   body {
     margin: 0; height: 100%; color: var(--ink);
-    font-family: var(--sans); font-size: 15px; line-height: 1.62;
+    /* 16px, not 15. The sizes set in `rem` are measured against the root and do
+       not move with this, so raising it lifts exactly the running text of an
+       answer and leaves every label and chip where the layout put them. */
+    font-family: var(--sans); font-size: 16px; line-height: 1.62;
     background:
       radial-gradient(1150px 540px at 20% -10%, var(--wash), transparent 60%),
       radial-gradient(880px 460px at 90% 2%, var(--wash-2), transparent 55%),
@@ -94,11 +122,18 @@
     cursor: pointer; color: inherit; transition: opacity .12s ease;
   }
   .brand:active { opacity: .6; }
+  /* 30px, not the 26 this ring held a letter at. Six rays and a bowl inside a
+     26px ring leave 20px of usable circle, and at that size the mark has to be
+     enlarged to check whether it was drawn well — a mark you have to zoom to
+     read is a mark that does not work at the only size it is ever used. Four
+     pixels of ring is the whole difference; the nav's height does not move. */
   .brand i {
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    border: 1.5px solid var(--accent); color: var(--accent);
-    font-family: var(--mono); font-size: .75rem; font-style: normal;
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    border: 1.5px solid var(--accent); color: var(--accent); flex: none;
   }
+  /* The glyph's stroke lands at 1.75px against the ring's 1.5 — near enough to
+     read as one weight, and heavier would close the rays up at this size. */
+  .brand i svg { display: block; width: 20px; height: 20px; }
   .nav nav { display: flex; gap: 1.5rem; font-size: .875rem; color: var(--ink-70); }
   .nav-link { color: inherit; transition: color .15s ease; }
   .nav-link.on { color: var(--accent); font-weight: 600; }
@@ -397,9 +432,14 @@
     padding: clamp(3.5rem, 11vh, 8rem) 0 5rem; text-align: center;
     display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
   }
+  /* Sized to the words in it. 「짐작하지 말고 / 계산하세요」 was nine syllables
+     and could take 67px; this line is nearly three times that, and at the old
+     size both halves wrapped — four lines of display type before the reader
+     reaches anything they can do. The type is smaller and the opening is
+     shorter to look at, which is the trade a longer sentence asks for. */
   h1.hero {
-    margin: .3rem 0 0; font-size: clamp(2.6rem, 5.6vw, 4.2rem); font-weight: 300;
-    letter-spacing: -.045em; line-height: 1.08; text-wrap: balance;
+    margin: .3rem 0 0; font-size: clamp(1.75rem, 3.4vw, 2.5rem); font-weight: 300;
+    letter-spacing: -.03em; line-height: 1.24; text-wrap: balance;
   }
   /* The two lines are separate elements now, one per beat of the reveal, so
      each needs its own line rather than the <br> that used to divide them. */
@@ -416,7 +456,13 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: none; }
   }
-  .standfirst { margin: 0; max-width: 34rem; color: var(--ink-70); font-size: 1.0625rem; }
+  /* Wider than it was, because the sentence under the headline is now two of
+     them. At 34rem this ran to five lines and the input dropped below the
+     fold on a laptop — the one thing the page exists to put in front of
+     someone. */
+  .standfirst {
+    margin: 0; max-width: 38rem; color: var(--ink-70); font-size: 1.0625rem;
+  }
 
   .prompt {
     width: 100%; margin-top: 1.4rem; background: var(--paper);
@@ -456,7 +502,6 @@
     padding: .45rem 1rem; font-size: .875rem; color: var(--ink-70); box-shadow: var(--lift);
   }
   .chip:hover { color: var(--accent); border-color: var(--accent); }
-  .assurance { margin: 1.6rem 0 0; font-size: .8125rem; color: var(--ink-45); max-width: 33rem; }
 
   /* ================= WORK ================= */
   /* 14px nav offset + nav height + the gap under it. Kept as one value so the
@@ -690,6 +735,53 @@
 
   .turn.agent p.prose { white-space: pre-line; }
 
+  /* ---------- a claim with its grounds ---------- */
+  /* The claims used to run together as one paragraph with every ground in a
+     fold beneath all of them. Separating them is the whole point, so the
+     separation has to be structural — a gap and a rule, not just a line break,
+     because a paragraph break is what the sentences already had. */
+  .ground {
+    margin: 0 0 .35rem; padding: 0 0 .75rem;
+    border-bottom: 1px solid var(--rule-faint);
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+  .ground:last-of-type { border-bottom: 0; }
+  .ground-claim { margin: 0; line-height: 1.7; }
+  /* A judgement still short of a fact is not a weaker yes, and the difference
+     has to survive being scanned rather than read. Carried by an edge, since
+     the palette keeps its one chromatic value for the figures. */
+  .ground.open { border-left: 2px solid var(--rule); padding-left: .8rem; }
+  .ground.action .ground-claim { color: var(--ink-70); }
+
+  /* The grounds are a line, not a list. Five conditions set as five bullets is
+     the record this screen spent its time turning into sentences, arriving
+     back in a different shape. */
+  .ground-row {
+    margin: 0; font-size: .8125rem; line-height: 1.65; color: var(--ink-45);
+  }
+  .ground-label {
+    display: inline-block; min-width: 2.2rem; margin-right: .5rem;
+    font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
+    color: var(--ink-70);
+  }
+  /* What is still missing reads at the weight of the claim it is holding up.
+     Set at the same hush as 확인 it looked like more of the same evidence,
+     when it is the reason the judgement has not closed. */
+  .ground-row.wanted { color: var(--ink-70); }
+  /* Waiting on us, not on them. Nothing for the reader to do, so it does not
+     take the weight that 「필요」 does — but it is still named, because a
+     condition nobody mentions reads as a condition that passed. */
+  .ground-row.ours { color: var(--ink-45); }
+
+  /* ---------- the closing summary ---------- */
+  /* Separated by space and a rule rather than by a heading. It is the same
+     answer said shorter, and a label above it would announce a new section
+     where there is only a second reading of the one above. */
+  .recap {
+    margin: 1rem 0 0; padding-top: .85rem; border-top: 1px solid var(--rule);
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+
   .pointer.lead {
     /* Answering first, not annotating. The same line reads as a footnote at
        the size it has under the sentence. */
@@ -701,15 +793,44 @@
   /* Stacked, keyboard-first. Each option is a different thing to do, so they
      are read rather than scanned; side-by-side pills invite a click before
      the second one has been read. */
-  .choices { display: grid; gap: 2px; outline: none; }
+  /* A row's height is written down rather than left to the text, because the
+     cap below counts rows. Inherited line-height would make 「3줄」 mean one
+     thing for 「A」 and another for 「모릅니다 · 등급이 없습니다」, and the list
+     would stop at three and a half. */
+  .choices {
+    display: grid; gap: var(--choice-gap); outline: none;
+    --choice-pad: .38rem;
+    --choice-line: 1.35rem;
+    --choice-gap: 2px;
+    --choice-row: calc(var(--choice-line) + 2 * var(--choice-pad));
+  }
+  /* Three rows and the two gaps between them. Exactly — a fourth row peeking
+     would read as a rendering accident rather than as an invitation, and the
+     line underneath already says how many there are. */
+  .choices.scrolls {
+    max-height: calc(3 * var(--choice-row) + 2 * var(--choice-gap));
+    overflow-y: auto; scrollbar-width: thin;
+    /* The scrollbar sits inside the box; without this the rows reflow the
+       moment the list becomes scrollable. */
+    scrollbar-gutter: stable;
+  }
+  .choices-more {
+    margin: .4rem 0 0; font-size: .6875rem; color: var(--ink-45);
+  }
   .choice {
+    /* `min-height`, not `height`. The cap counts rows, so a row has to have a
+       known height — but a label that wraps must grow rather than be cut, and
+       an option the reader cannot finish reading is worse than a list that
+       shows two and a half. */
+    line-height: var(--choice-line); min-height: var(--choice-row);
     /* Four tracks, because ::before is a grid item too. Giving it its own
        column keeps the hint out of the 1.1rem caret track, where it wrapped
        one character per line. */
     display: grid; grid-template-columns: .8rem auto auto 1fr;
     align-items: baseline; gap: .5rem;
     width: 100%; text-align: left; cursor: pointer;
-    padding: .38rem .6rem .38rem .3rem; border: none; border-radius: 8px;
+    padding: var(--choice-pad) .6rem var(--choice-pad) .3rem;
+    border: none; border-radius: 8px;
     background: none; color: var(--ink); font-size: .8125rem;
     transition: background .12s ease, color .12s ease;
   }
@@ -729,6 +850,10 @@
   .choice-key {
     font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
     border: 1px solid var(--rule); border-radius: 4px; padding: .05rem .3rem;
+    /* Its own line box, or the badge's border and padding are added to the
+       inherited line-height and every row comes out taller than the row height
+       the cap is counting in. */
+    line-height: 1;
   }
   .choice.on .choice-key { border-color: var(--accent); color: var(--accent-deep); }
   .choice-label { font-weight: 600; }
@@ -1038,8 +1163,11 @@
     margin: .2rem 0 .3rem; padding-left: .9rem;
     font-family: var(--mono); font-size: .6875rem; line-height: 1.7; color: var(--ink-70);
   }
+  /* 10px monospace was the smallest thing in the product, and it is the line
+     that says which authority a judgement came from — the part a reader is
+     most likely to want to check and least able to read across a room. */
   .sources {
-    margin: 0; font-family: var(--mono); font-size: .625rem; color: var(--ink-45);
+    margin: 0; font-family: var(--mono); font-size: .6875rem; color: var(--ink-45);
   }
   /* The marker turns rather than swapping glyphs: the rotation is what says
      the row did something. Kept dimmer than the label so it reads as a hinge
