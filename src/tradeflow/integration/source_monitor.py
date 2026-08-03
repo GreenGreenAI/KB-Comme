@@ -102,7 +102,7 @@ def fetch_and_check(
         spec.url,
         headers={
             "Accept": "text/html,application/xhtml+xml",
-            "User-Agent": "TradeFlow-Knowledge-Monitor/0.1",
+            "User-Agent": "KB Comme-Knowledge-Monitor/0.1",
         },
     )
     with opener(request, timeout=30) as response:

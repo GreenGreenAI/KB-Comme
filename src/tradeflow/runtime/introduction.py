@@ -1,0 +1,84 @@
+"""What this product does, in its own words, derived from what it holds.
+
+"뭘 할 수 있어?" has an answer already sitting in the code: which calculations
+are wired, which authorities have rules behind them. Writing that answer as a
+paragraph would be the fourth place the same claim lives, and the first to go
+stale — a marketing sentence outlives the rule it describes, and then the
+product promises something it stopped doing.
+
+So it is assembled. Adding a 수출입은행 rulepack changes this paragraph with
+nobody editing it, exactly as it changes `coverage.statement`.
+"""
+
+from __future__ import annotations
+
+from tradeflow.runtime import coverage
+
+#: What the code computes, named the way the answer names it. This part is a
+#: declaration — a worker's identifier does not say what a company gets from
+#: it — but each line is one the response contract actually carries.
+CALCULATIONS = (
+    "수출입 거래의 순노출과 자금 공백",
+    "한국은행 매매기준율 기준 환율 시나리오",
+    "은행 선물환 호가를 받으면 헤지비율",
+)
+
+
+def _judgements() -> tuple[str, ...]:
+    """The rule-backed judgements, named by the bodies that stand behind them.
+
+    Read from the rulepacks. A section with no rules yet is left out rather
+    than promised — `coverage` says what is missing, and this says what is
+    there, from the same source.
+    """
+    said: list[str] = []
+    for section, verb in (("support", "자격"), ("compliance", "신고 의무")):
+        names = sorted(
+            {
+                coverage.INTENDED[section][authority]
+                for authority in coverage.held(section)
+                if authority in coverage.INTENDED[section]
+            }
+        )
+        if names:
+            said.append(f"{' · '.join(names)}의 {verb}")
+    return tuple(said)
+
+
+def paragraph() -> str:
+    """One short answer to "뭘 할 수 있어?", with its own limits attached.
+
+    The limits come from `coverage`, not from a second list here. A product
+    that describes itself without them is answering a different question than
+    the one asked.
+    """
+    lines = [
+        "거래를 말씀해 주시면 이런 것을 계산하고 판정합니다.",
+        "· " + "\n· ".join(CALCULATIONS),
+    ]
+    judgements = _judgements()
+    if judgements:
+        lines.append("· " + "\n· ".join(judgements))
+    lines.append(
+        "금액과 규정 판정은 코드가 하고, 근거로 쓴 출처와 기준일을 함께 "
+        "보여드립니다. 환율을 예측하지는 않습니다."
+    )
+    limits = [coverage.statement(section) for section in ("support", "compliance")]
+    stated = " ".join(line for line in limits if line)
+    if stated:
+        lines.append(stated)
+    return "\n\n".join(lines)
+
+
+def opening() -> str:
+    """The reply to a greeting.
+
+    Short on purpose. Someone who said hello has not asked for the paragraph
+    above, and answering a greeting with a capability list is the same mistake
+    as answering it with three questions — it just takes longer to read.
+    """
+    return (
+        "안녕하세요. 수출입 거래의 환위험과 지원제도·신고의무를 함께 봐 "
+        "드립니다.\n\n거래를 편하게 말씀해 주세요. "
+        "예: 10월 24일에 수출대금 10만 달러 받기로 했어요"
+    )

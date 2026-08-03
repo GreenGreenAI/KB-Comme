@@ -47,7 +47,10 @@ _SCALES = "억|조|천만|백만|십만|만|천"
 _PARTS = rf"(?:\d[\d,]*(?:\.\d+)?\s*(?:{_SCALES})?\s*)+"
 _PART = re.compile(rf"(\d[\d,]*(?:\.\d+)?)\s*({_SCALES})?")
 
-_AMOUNT_PREFIXED = re.compile(rf"\$\s*({_PARTS})")
+_AMOUNT_PREFIXED = re.compile(
+    rf"(?:\$|USD)\s*({_PARTS})",
+    re.IGNORECASE,
+)
 _AMOUNT_SUFFIXED = re.compile(rf"({_PARTS})\s*(?:달러|불|usd|USD)")
 
 #: A sum in won. Not an exposure amount — §5.1 measures foreign currency, and
@@ -147,6 +150,122 @@ _FINANCING_PURPOSE = (
 )
 
 
+#: §5.5's declarations, in the words a company uses for them.
+#:
+#: The compliance worker has been skipped on every request this product has
+#: ever served, and its skip reason asks for exactly these — while the sentence
+#: it is answering says 「상계로 처리하는데 신고 대상인가요」. Nineteen rules
+#: are loaded and ready; the input was never reaching them.
+#:
+#: `payment.uses_foreign_exchange_bank` is not read. The words that would carry
+#: it — 은행, 송금 — appear in sentences about forward quotes and ordinary
+#: payments alike, and reading it wrong changes which authority a filing goes
+#: to. The rule reports it missing, which is a question the user can answer.
+_STRUCTURE = (
+    ("payment.is_netting", ("상계", "네팅", "netting", "차액만", "차액 결제")),
+    (
+        "payment.is_third_party",
+        ("제3자", "제삼자", "3자 지급", "대신 지급", "대신 받", "대신 결제"),
+    ),
+    ("payment.uses_mutual_account", ("상호계산", "상호 계산")),
+)
+
+#: The fields a sentence can declare. Exported so the web layer can refuse a
+#: caller asserting anything else: the fact catalog is wider than this on
+#: purpose, and a field no sentence can produce must not become one a request
+#: body can.
+DECLARABLE_STRUCTURE = frozenset(field for field, _ in _STRUCTURE)
+
+#: Korean negates after the noun — 「상계가 아닙니다」, 「상계는 하지 않습니다」
+#: — so a marker in the text that follows cancels the reading.
+#:
+#: 아니 and 아닙 are both here because a Korean syllable is one character: the
+#: 니 in 아닙니다 sits inside 닙, so a search for 아니 walks straight past the
+#: most common way to say no. Testing the list against real sentences is not
+#: optional — the failure is silent and reads as a declaration.
+_NEGATED = (
+    "아니",
+    "아닙",
+    "아녜",
+    "아냐",
+    "아님",
+    "않",
+    "없",
+    "말고",
+    "제외",
+    "빼고",
+    "안 하",
+    "안하",
+)
+
+#: How far past the word to look. Long enough for 「상계로 처리하지 않습니다」,
+#: short enough that the next clause's 없습니다 does not reach back.
+_NEGATION_WINDOW = 14
+
+
+def payment_structure(text: str | None) -> dict[str, bool]:
+    """The §5.5 declarations the sentence states, positively.
+
+    Only `True`, and only when nothing nearby negates it. The asymmetry is
+    deliberate and it is the whole safety of this function: reading a stated
+    netting as absent leaves the rule asking a question the company can answer,
+    while reading an absent netting as stated would tell a company with a
+    filing duty that it has none. §5.5 refuses to conclude 신고 불필요 from
+    silence, and a misread would slip past that refusal by pretending the
+    silence was speech.
+
+    So a negation says nothing rather than saying `False`. "상계는 아닙니다" is
+    a real declaration and would be useful, but distinguishing it reliably from
+    "상계가 아니라 상호계산입니다" is not something a keyword window can do.
+    """
+    if not text:
+        return {}
+    stated: dict[str, bool] = {}
+    for field, words in _STRUCTURE:
+        for word in words:
+            at = text.find(word)
+            if at < 0:
+                continue
+            tail = text[at + len(word) : at + len(word) + _NEGATION_WINDOW]
+            if any(marker in tail for marker in _NEGATED):
+                continue
+            stated[field] = True
+            break
+    return stated
+
+
+def withdrawn_structure(text: str | None) -> frozenset[str]:
+    """Which declarations this sentence takes back.
+
+    Not the same claim as denying them. Once a declaration travels between
+    turns — and it has to, or a company that said 「상계로 처리합니다」 and then
+    asked 「왜?」 would watch it evaporate — there must be a way to correct it,
+    or a misreading is permanent for the rest of the conversation.
+
+    Taking back is safe in the direction §5.5 cares about. It moves the answer
+    from 「신고 대상이 될 수 있습니다」 to 「모릅니다」, which is a question the
+    company can answer; it never moves it to 「신고 불필요」, which is the
+    conclusion §5.5 refuses to draw from silence. That is why this returns a
+    set of fields to drop rather than a mapping to `False`.
+
+    「상계가 아니라 상호계산입니다」 lands correctly under exactly this rule:
+    netting is dropped, 상호계산 is stated by `payment_structure`.
+    """
+    if not text:
+        return frozenset()
+    taken_back: set[str] = set()
+    for field, words in _STRUCTURE:
+        for word in words:
+            at = text.find(word)
+            if at < 0:
+                continue
+            tail = text[at + len(word) : at + len(word) + _NEGATION_WINDOW]
+            if any(marker in tail for marker in _NEGATED):
+                taken_back.add(field)
+            break
+    return frozenset(taken_back)
+
+
 def financing_purpose(text: str | None) -> str | None:
     """What the money is for, when the sentence says so.
 
@@ -182,7 +301,9 @@ _ADDITIONAL_TRADE = re.compile(
 # counting every receipt/payment verb would create false duplicates. The
 # negative lookarounds keep the generic word "수출입" from becoming two trades.
 _TRADE_ANCHOR = re.compile(r"수출(?!입)|(?<!수출)수입")
-_CLAUSE_SEPARATOR = re.compile(r"[,;]\s*|(?:하고|하며|그리고)\s*")
+_CLAUSE_SEPARATOR = re.compile(
+    r",(?!\d)\s*|;\s*|[.!?。]\s+|(?:하고|하며|그리고)\s*"
+)
 
 
 def _direction(text: str) -> str | None:
@@ -459,11 +580,30 @@ def split_trade_candidates(
     for index, anchor in enumerate(anchors):
         clause = text[boundaries[index] : boundaries[index + 1]].strip()
         heard = read_utterance(clause, as_of=as_of)
+        # A direction word inside a question or product name is not a trade.
+        # ``수출지원``, ``수출보험`` and ``수입금융`` used to survive because
+        # the direction injected below made an otherwise empty reading truthy.
+        # Require transaction evidence that was independently read from the
+        # clause before treating the anchor as a separate case.
+        if not any(
+            field in heard
+            for field in (
+                "amount",
+                "expected_payment_date",
+                "country",
+                "currency",
+                "payment_method",
+            )
+        ):
+            continue
         # The anchor itself is authoritative even when another directional
         # verb appears in the same clause near the boundary.
         heard["direction"] = "수출" if anchor.group(0) == "수출" else "수입"
         if heard:
             candidates.append(heard)
+    candidate_directions = {item["direction"] for item in candidates}
+    if len(candidates) < 2 or len(candidate_directions) < 2:
+        return ()
     return tuple(candidates)
 
 

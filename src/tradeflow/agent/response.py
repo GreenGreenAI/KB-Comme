@@ -16,12 +16,30 @@ import json
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from tradeflow.agent.orchestrator import FORMULA_VERSION, Analysis
 from tradeflow.agent.routing import COMPLIANCE, DECLARED_STRUCTURE_FIELDS
 from tradeflow.knowledge.compliance_declarations import DECLARABLE_GATEWAY_FIELDS
 from tradeflow.runtime.analysis_service import decision_packet_document
+from tradeflow.runtime.sources import cite
+
+
+_RULE_SUFFIXES = (" 후보", " 검토")
+
+
+def _product_name(title: str) -> str:
+    for suffix in _RULE_SUFFIXES:
+        if title.endswith(suffix):
+            return title[: -len(suffix)]
+    return title
+
+
+def _engaged(decision: dict[str, Any], declared: Mapping[str, bool]) -> bool:
+    if not declared:
+        return False
+    reasons = " ".join(decision.get("reasons") or ())
+    return any(f"{field}=" in reasons for field in declared)
 
 def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
@@ -61,6 +79,7 @@ def _market_scenario(analysis: Analysis) -> dict[str, Any] | None:
 
 def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
     packet = analysis.decision_packet
+    declared = analysis.declared_structure
     if packet is None:
         return {
             "decision_packet": None,
@@ -81,12 +100,14 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
         projected = {
             "subject_id": decision["subject_id"],
             "rule_id": decision["rule_id"],
-            "title": decision["title"],
+            "title": _product_name(decision["title"]),
             "status": decision["status"],
             "matched": decision["matched"],
             "reasons": decision["reasons"],
             "missing_fields": decision["missing_fields"],
             "source_ids": decision["source_ids"],
+            "sources": cite(decision["source_ids"]),
+            "checks": decision.get("checks") or [],
             "outcome": outcome,
         }
         if outcome.get("kind") == "support_candidate":
@@ -96,6 +117,7 @@ def _knowledge_projection(analysis: Analysis) -> dict[str, Any]:
                 else support_candidates
             ).append(projected)
         elif decision["matched"] is not False:
+            projected["engaged"] = _engaged(decision, declared)
             risk_findings.append(projected)
 
     actions = document["actions"]
@@ -309,9 +331,113 @@ def _missing_input_queue(
     )
 
 
+EXTERNAL_EVIDENCE_CAPABILITIES = {
+    "counterparty.country_restricted": "ksure.country_policy.lookup.v1",
+    "counterparty.ksure_importer_grade": "ksure.importer_grade.lookup.v1",
+    "company.ksure_exporter_grade": "ksure.exporter_grade.lookup.v1",
+}
+
+
+def _work_queues(
+    missing_queue: list[dict[str, Any]],
+    knowledge: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Partition unresolved work by the actor that can actually resolve it."""
+    user_questions: list[dict[str, Any]] = []
+    system_fetches: list[dict[str, Any]] = []
+    expert_tasks: list[dict[str, Any]] = []
+
+    compliance = [
+        item
+        for item in missing_queue
+        if item.get("scope") == "compliance_declaration"
+    ]
+    if compliance:
+        user_questions.append({
+            "question_id": "trade_structure_confirmation",
+            "fields": [item["field"] for item in compliance],
+            "question": (
+                "상계, 제3자 지급, 상호계산계정 사용 여부와 "
+                "외국환은행을 통한 지급 여부를 확인해 주세요."
+            ),
+        })
+
+    financing = [
+        item
+        for item in missing_queue
+        if item.get("field") in {
+            "financing.purpose",
+            "financing.has_bank_consultation",
+        }
+    ]
+    if financing:
+        user_questions.append({
+            "question_id": "financing_context",
+            "fields": [item["field"] for item in financing],
+            "question": "금융 목적과 은행 사전상담 완료 여부를 알려주세요.",
+        })
+
+    for item in missing_queue:
+        scope = item.get("scope")
+        if scope == "compliance_declaration":
+            continue
+        if item.get("field") in {
+            "financing.purpose",
+            "financing.has_bank_consultation",
+        }:
+            continue
+        if scope == "external_evidence":
+            field = item["field"]
+            system_fetches.append({
+                "field": field,
+                "capability_id": EXTERNAL_EVIDENCE_CAPABILITIES.get(
+                    field,
+                    "external_evidence.lookup.v1",
+                ),
+                "subject_id": item.get("subject_id"),
+                "status": "provider_unavailable",
+                "reason": item.get("reason"),
+            })
+            continue
+        user_questions.append({
+            "question_id": f"input:{item['field']}",
+            "fields": [item["field"]],
+            "question": item.get("reason"),
+        })
+
+    for candidate in knowledge.get("support_candidates") or []:
+        status = candidate.get("status")
+        if status not in {
+            "expert_confirmation_required",
+            "conditionally_eligible",
+        }:
+            continue
+        expert_tasks.append({
+            "task_id": (
+                f"{candidate.get('subject_id')}:{candidate.get('rule_id')}"
+            ),
+            "title": candidate.get("title"),
+            "status": status,
+            "authority": (candidate.get("outcome") or {}).get("authority"),
+            "reason": (
+                "전문가 확인 필요"
+                if status == "expert_confirmation_required"
+                else "조건 충족 여부 확인 필요"
+            ),
+        })
+
+    return {
+        "user_questions": user_questions,
+        "system_fetches": system_fetches,
+        "expert_tasks": expert_tasks,
+    }
+
+
 def build_response(analysis: Analysis) -> dict[str, Any]:
     """Project the analysis onto the response contract, summary left blank."""
     knowledge = _knowledge_projection(analysis)
+    missing_queue = _missing_input_queue(analysis, knowledge)
+    work_queues = _work_queues(missing_queue, knowledge)
     return {
         "summary": "",
         "packet_id": (
@@ -339,6 +465,19 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
                 "amount": str(case.amount),
                 "expected_payment_date": case.expected_payment_date.isoformat(),
                 "payment_method": case.payment_method.value,
+                **{
+                    field: (
+                        value.isoformat() if hasattr(value, "isoformat") else value
+                    )
+                    for field, value in case.attributes.items()
+                    if field
+                    in {
+                        "counterparty_id",
+                        "expected_shipment_date",
+                        "advance_payment_ratio",
+                        "contract_date",
+                    }
+                },
             }
             for case in analysis.program.cases
         ],
@@ -361,7 +500,8 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             "failed": analysis.report.failed,
             "skipped": analysis.report.skipped,
         },
-        "missing_input_queue": _missing_input_queue(analysis, knowledge),
+        "missing_input_queue": missing_queue,
+        **work_queues,
         "required_inputs": {
             "hedge": list(analysis.required_inputs),
             "quote": (
@@ -371,7 +511,7 @@ def build_response(analysis: Analysis) -> dict[str, Any]:
             ),
             "all": [
                 item["field"]
-                for item in _missing_input_queue(analysis, knowledge)
+                for item in missing_queue
             ],
         },
         # §4.2[2]'s output. A reader can see which workers were called and, for

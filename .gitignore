@@ -14,9 +14,13 @@ build/
 data/runtime/
 
 node_modules/
-web/frontend/dist/
 web/frontend/test-results/
 web/frontend/playwright-report/
+
+# The Python server serves the committed frontend build for reviewers who do
+# not have the Node toolchain installed. `npm run build` refreshes these files.
+!web/frontend/dist/
+!web/frontend/dist/**
 
 # Accounts are seeded locally, never committed — the file holds password hashes.
 data/accounts.db

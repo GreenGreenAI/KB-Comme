@@ -13,6 +13,31 @@ const base = {
 };
 
 describe("AskBar decision input queue", () => {
+  it("sends the decisive liquidity answer as an opening balance", async () => {
+    const user = userEvent.setup();
+    const onSlot = vi.fn();
+    render(
+      <AskBar
+        {...base}
+        decisiveQuestions={[{
+          question_id: "liquidity.opening_balance.USD",
+          field: "opening_balance_usd",
+          scope: "liquidity",
+          question: "현재 보유한 USD 외화잔액은 얼마인가요?",
+        }]}
+        onSlot={onSlot}
+        onUnknown={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("opening_balance_usd"), "20000");
+    await user.click(screen.getByRole("button", { name: "확인" }));
+    expect(onSlot).toHaveBeenCalledWith(
+      { profile: { opening_balance_usd: "20000" } },
+      "20000",
+    );
+  });
+
   it("keeps an unknown answer unknown instead of sending false", async () => {
     const user = userEvent.setup();
     const onSlot = vi.fn();

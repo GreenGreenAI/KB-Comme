@@ -54,6 +54,16 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
             run_id,
             self.accounts.read_analysis(self.admin, run_id)["run_id"],
         )
+        consultation = self.accounts.record_consultation_event(
+            self.user,
+            run_id,
+            handoff_id="HANDOFF-POSTGRES",
+            status="ready_for_manual_handoff",
+        )
+        self.assertEqual(
+            "ready_for_manual_handoff",
+            self.accounts.read_consultation(self.admin, run_id)["status"],
+        )
         first = self.accounts.append_audit(
             self.user,
             action="analysis.create",
@@ -75,6 +85,12 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
                     "UPDATE audit_events SET action = 'tampered'"
                     " WHERE event_id = %s",
                     (first["event_id"],),
+                )
+        with self.assertRaises(psycopg.Error):
+            with psycopg.connect(DATABASE_URL) as db:
+                db.execute(
+                    "DELETE FROM consultation_events WHERE event_id = %s",
+                    (consultation["event_id"],),
                 )
 
     def test_document_metadata_and_encrypted_blob_use_production_store(self) -> None:

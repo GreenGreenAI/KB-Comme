@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 
 from tradeflow.runtime.synthesis import (
+    check_retold,
     Synthesizer,
     check,
     check_bound,
@@ -104,7 +105,7 @@ class StrictRuleTests(unittest.TestCase):
             "순노출은 10,525,000 KRW이고 "
             "원화 수취액은 100,000 USD입니다."
         )
-        self.assertIn("의미가 바뀌", check_bound(sentence, FIGURES[:3:2]))
+        self.assertIn("순노출", check_bound(sentence, FIGURES[:3:2]))
 
 
 class BoundRenderingTests(unittest.TestCase):
@@ -162,7 +163,7 @@ class BoundRenderingTests(unittest.TestCase):
         written = synthesizer.write(FIGURES)
 
         self.assertFalse(written.accepted)
-        self.assertIn("의미가 바뀌", written.reason)
+        self.assertIn("순노출", written.reason)
 
     def test_altered_label_unit_or_value_is_rejected(self) -> None:
         synthesizer, _ = synthesizer_returning(
@@ -182,7 +183,17 @@ class FigureTests(unittest.TestCase):
         written = figures(
             {"cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "100000"}]}}
         )
-        self.assertEqual(written, ["순노출: 100,000 USD"])
+        self.assertEqual(written, ["거래 순노출: 100,000 USD"])
+
+    def test_the_label_says_what_the_figure_counted(self) -> None:
+        """「거래」가 붙는 이유는 이 값이 세는 것이 거래뿐이기 때문이다. 명세
+        §5.1의 `E`는 보유 외화까지 더하지만 이것은 Σ수취 − Σ지급이고, 이름
+        없이 건네면 모델이 더 넓은 뜻으로 쓴다 — 검사를 통과하면서."""
+        written = figures(
+            {"cashflow_analysis": {"net_exposure": [{"currency": "USD", "amount": "40000"}]}}
+        )
+
+        self.assertTrue(written[0].startswith("거래 순노출: "))
 
     def test_a_rate_carries_its_unit_and_its_reference_moment(self) -> None:
         """§4.2[9]: 수치의 단위·기준환율·기준시점을 함께 표기한다."""
@@ -393,5 +404,285 @@ class WithoutAKeyTests(unittest.TestCase):
         self.assertIn("수치가 없습니다", written.reason)
 
 
+class PointerLeadsWithTheReasonTests(unittest.TestCase):
+    """A worker that did not run has no counts, so the pointer had nothing to
+    say — and the answer opened on the exchange rate, to a company that had
+    asked about 지원제도 and whose reason for not getting one was sitting in a
+    fold two blocks down."""
+
+    RESULT = {
+        "workers": {"skipped": {"support": "기업규모와 신용 상태를 알려주시면 판정합니다"}},
+        "support_candidates": [],
+        "filing_obligations": [],
+        "next_actions": [],
+    }
+
+    def test_the_reason_is_the_answer_when_that_worker_was_asked_about(self) -> None:
+        self.assertEqual(
+            "기업규모와 신용 상태를 알려주시면 판정합니다",
+            pointer(self.RESULT, intent=("support",)),
+        )
+
+    def test_a_question_about_something_else_still_gets_the_counts(self) -> None:
+        """The skipped worker keeps reporting itself in its own fold. Leading
+        with it whatever was asked would make every answer about the thing the
+        product could not do."""
+        self.assertIn("신고 검토", pointer(self.RESULT, intent=("compliance",)))
+
+    def test_no_intent_keeps_the_counts(self) -> None:
+        self.assertIn("신고 검토", pointer(self.RESULT))
+
+    def test_a_worker_that_ran_is_not_treated_as_skipped(self) -> None:
+        ran = {
+            "workers": {"skipped": {}},
+            "support_candidates": [
+                {"status": "expert_confirmation_required", "title": ""},
+                {"status": "insufficient_information", "title": ""},
+            ],
+            "filing_obligations": [],
+            "next_actions": [],
+        }
+
+        said = pointer(ran, intent=("support",))
+
+        self.assertIn("지원제도 후보 1건", said)
+        self.assertIn("정보 부족 1건", said)
+
+
+class NamedVerdictTests(unittest.TestCase):
+    """「받을 수 있는 지원제도가 있나요」 is answered by a name, not a count.
+
+    「지원제도 후보 1건 · 정보 부족 2건」 is our bookkeeping: it says how many
+    rows the reader is about to scroll past, which is not what was asked.
+    """
+
+    RESULT = {
+        "workers": {"skipped": {}},
+        "support_candidates": [
+            {"status": "expert_confirmation_required", "title": "K-SURE 환변동보험"},
+            {"status": "insufficient_information", "title": "K-SURE 수출신용보증"},
+        ],
+        "filing_obligations": [],
+        "next_actions": [],
+    }
+
+    def test_it_names_what_the_rules_settled(self) -> None:
+        said = pointer(self.RESULT, intent=("support",))
+
+        self.assertIn("K-SURE 환변동보험은 조건을 충족합니다", said)
+        self.assertIn("1개는 몇 가지를 더 알려주시면", said)
+
+    def test_it_concludes_nothing_the_rules_did_not(self) -> None:
+        """A pointer that could say 「신청하실 수 있습니다」 would be deciding.
+        Naming what a rule named is reporting; the rest is the rule's."""
+        said = pointer(self.RESULT, intent=("support",))
+
+        self.assertNotIn("신청", said)
+        self.assertNotIn("자격", said)
+
+    def test_a_question_about_something_else_keeps_the_counts(self) -> None:
+        self.assertIn("지원제도 후보", pointer(self.RESULT, intent=("hedge",)))
+
+    def test_nothing_settled_falls_back_to_counting(self) -> None:
+        open_only = {
+            **self.RESULT,
+            "support_candidates": [
+                {"status": "insufficient_information", "title": "K-SURE 수출신용보증"}
+            ],
+        }
+
+        self.assertIn("정보 부족 1건", pointer(open_only, intent=("support",)))
+
+
+class NaturalProseTests(unittest.TestCase):
+    """The binding check used to demand the label, not merely forbid the wrong
+    one — every number had to appear beside the word we labelled it with.
+
+    That rejected 「받을 100,000 USD가 결제일까지 열려 있습니다」: correct,
+    natural, and saying nothing we did not compute. Every synthesised sentence
+    failed it, the screen fell back to its own fixed prose, and every answer
+    opened the same way. The check meant to keep the model honest had quietly
+    removed it from the product.
+    """
+
+    FIGURES = [
+        "순노출: 100,000 USD",
+        "불리한 쪽 환율: 1361.05 (KRW per USD, 신뢰수준 0.9)",
+        "그때 덜 받는 원화: 10,525,000 KRW",
+    ]
+
+    def test_a_figure_may_be_named_the_way_korean_names_it(self) -> None:
+        self.assertEqual(
+            "",
+            check_bound(
+                "받을 100,000 USD가 결제일까지 열려 있습니다. 불리한 쪽인 "
+                "1361.05까지 가면 그때 손에 들어오는 원화가 10,525,000 KRW "
+                "적어집니다.",
+                self.FIGURES,
+            ),
+        )
+
+    def test_quoting_our_own_labels_still_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_bound(
+                "순노출 100,000 USD, 불리한 쪽 환율 1361.05, "
+                "그때 덜 받는 원화 10,525,000 KRW.",
+                self.FIGURES,
+            ),
+        )
+
+    def test_a_shared_word_is_not_a_claim_about_which_figure_is_meant(self) -> None:
+        """「현재 환율」 shortens to 「환율」, which appears in any sentence about
+        the adverse rate. Matching on the shortened form made every such
+        sentence look like a misattribution."""
+        figures = [
+            "현재 환율: 1466.3 (KRW per USD, 한국은행 매매기준율 2026-07-27 기준)",
+            "불리한 쪽 환율: 1361.05 (KRW per USD, 신뢰수준 0.9)",
+        ]
+
+        self.assertEqual(
+            "",
+            check_bound(
+                "지금 환율은 1466.3이고, 불리한 쪽 환율은 1361.05입니다.", figures
+            ),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetoldContractTests(unittest.TestCase):
+    """「정보를 추가생성하지 말고 결과만 조합하라」 is a request when it is
+    written in a prompt and a contract when it is checked here.
+
+    The same model was asked not to instruct and answered 「담당 부서로
+    연결해 드리겠습니다」; asked not to calculate and answered 「1억 3,610만
+    5,000원」; and asked to keep it short, dropped two of four judgements.
+    Each was caught by a check, none by the instruction.
+    """
+
+    SOURCE = (
+        "K-SURE 일반형 수출 환변동보험은 조건을 충족합니다. 확인한 조건은 5가지입니다. "
+        "다음은 한국무역보험공사 상담 및 청약입니다. 필요서류는 6건입니다."
+    )
+    SUBJECTS = ("K-SURE 일반형 수출 환변동보험",)
+
+    def test_a_faithful_rewrite_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험은 조건 5가지를 충족합니다. "
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_an_institution_that_was_not_judged_is_refused(self) -> None:
+        self.assertIn(
+            "KOTRA",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험 외에 KOTRA 수출바우처도 있습니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_number_the_model_worked_out_is_refused(self) -> None:
+        """Arithmetically right and an invention by the only definition that
+        matters: it was not in what the rules produced."""
+        self.assertIn(
+            "11",
+            check_retold(
+                "K-SURE 일반형 수출 환변동보험은 모두 11가지를 요구합니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_dropped_judgement_is_refused(self) -> None:
+        """Invention is the loud failure; omission is the quiet one. A summary
+        that leaves a product out reads well and leaves the company believing
+        it was never considered."""
+        self.assertIn(
+            "환변동보험",
+            check_retold(
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+    def test_a_shortened_product_name_is_not_an_omission(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "환변동보험은 조건 5가지를 충족합니다. "
+                "한국무역보험공사 상담 및 청약에 필요서류 6건이 듭니다.",
+                self.SOURCE,
+                self.SUBJECTS,
+            ),
+        )
+
+
+class RequiredPhraseTests(unittest.TestCase):
+    """Some sentences may not be paraphrased at all.
+
+    §5.5 rests on 「신고가 불필요하다는 판정은 아닙니다」, and the first rewrite
+    allowed near it shortened it away — shorter, better read, and leaving the
+    company believing it has no filing duty. A subject can be renamed; this
+    cannot be reworded.
+    """
+
+    SOURCE = (
+        "양자간 상계면 외국환은행에 보고합니다. "
+        "말씀해 주신 것으로는 해당 여부를 알 수 없는 규칙이 14건 더 있습니다. "
+        "신고가 불필요하다는 판정은 아닙니다."
+    )
+    KEEP = ("신고가 불필요하다는 판정은 아닙니다",)
+
+    def test_carrying_it_word_for_word_passes(self) -> None:
+        self.assertEqual(
+            "",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 아직 "
+                "알 수 없습니다. 신고가 불필요하다는 판정은 아닙니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )
+
+    def test_shortening_it_away_is_refused(self) -> None:
+        self.assertIn(
+            "그대로 옮겨야 하는 문장",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 아직 "
+                "알 수 없습니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )
+
+    def test_rewording_it_is_refused(self) -> None:
+        """「신고 의무가 없다는 뜻은 아닙니다」 means the same thing and is not
+        the sentence. The rule is verbatim because judging the paraphrase is
+        the thing this check exists to avoid.
+
+        Which guard refuses it is not the point — this one is caught by the
+        verdict check first, because 의무 is a word the source never used. The
+        property under test is that it does not get through.
+        """
+        self.assertNotEqual(
+            "",
+            check_retold(
+                "양자간 상계면 외국환은행에 보고합니다. 나머지 14건은 신고 "
+                "의무가 없다는 뜻은 아닙니다.",
+                self.SOURCE,
+                (),
+                self.KEEP,
+            ),
+        )

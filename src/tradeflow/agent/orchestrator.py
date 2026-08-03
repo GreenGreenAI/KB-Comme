@@ -52,7 +52,8 @@ from tradeflow.tools.fx_series import usd_krw_series
 from tradeflow.tools.hedge import review_measures, usable_measures
 from tradeflow.tools.hedge_ratio import HedgeAnalysis, analyze_hedge
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance import financing_purpose
+from tradeflow.tools.utterance import financing_purpose, payment_structure
+from tradeflow.runtime import observing
 from tradeflow.domain.datasets import (
     SnapshotDataset,
     parse_ksure_country_policy_payload,
@@ -85,6 +86,7 @@ class WorkerReport:
     completed: list[str] = field(default_factory=list)
     failed: dict[str, str] = field(default_factory=dict)
     skipped: dict[str, str] = field(default_factory=dict)
+    took: dict[str, float] = field(default_factory=dict)
 
     def missing_information(self) -> tuple[str, ...]:
         return tuple(
@@ -95,11 +97,12 @@ class WorkerReport:
 
 def _isolated(report: WorkerReport, name: str, run: Callable[[], Any]) -> Any | None:
     """Run one worker, recording a failure instead of propagating it (§9.3)."""
-    try:
-        return run()
-    except Exception as exc:  # noqa: BLE001 — any worker failure must be survivable
-        report.failed[name] = f"{type(exc).__name__}: {exc}"
-        return None
+    with observing.took(report.took, name):
+        try:
+            return run()
+        except Exception as exc:  # noqa: BLE001 — any worker failure must be survivable
+            report.failed[name] = f"{type(exc).__name__}: {exc}"
+            return None
 
 
 @dataclass(frozen=True)
@@ -120,6 +123,7 @@ class Analysis:
     review_reasons: tuple[str, ...]
     versions: CalculationVersions
     plan: ExecutionPlan
+    declared_structure: Mapping[str, bool] = field(default_factory=dict)
 
     @property
     def review_required(self) -> bool:
@@ -261,6 +265,8 @@ def _structure_assertions(
 def _country_policy_assertions(
     program: TradeProgram,
     snapshot_root: Path | str,
+    *,
+    as_of: datetime | None = None,
 ) -> tuple[dict[str, tuple[FactAssertion, ...]], tuple[EvidenceDescriptor, ...]]:
     """Bind each case's counterparty country to K-SURE's acceptance policy.
 
@@ -280,7 +286,7 @@ def _country_policy_assertions(
         return empty, ()
 
     try:
-        path = latest_snapshot_path(snapshot_root, COUNTRY_POLICY_SOURCE)
+        path = latest_snapshot_path(snapshot_root, COUNTRY_POLICY_SOURCE, as_of=as_of)
         ref, payload = read_snapshot(path)
         catalog = parse_ksure_country_policy_payload(payload)
     except (SnapshotNotFoundError, OSError, ValueError, TypeError):
@@ -469,6 +475,30 @@ def analyze(
     # only the company can state (netting and friends) are not here; see
     # routing.DECLARED_STRUCTURE_FIELDS.
     structure = derive_structure(program)
+    spoken_structure = payment_structure(utterance)
+    if spoken_structure and not compliance_declarations:
+        field_to_argument = {
+            "payment.is_netting": "is_netting",
+            "payment.is_third_party": "is_third_party",
+            "payment.uses_mutual_account": "uses_mutual_account",
+            "payment.uses_foreign_exchange_bank": "uses_foreign_exchange_bank",
+        }
+        compliance_declarations = tuple(
+            ComplianceGatewayDeclaration(
+                declaration_id=f"utterance-{case.case_id}",
+                company_id=program.company.company_id,
+                case_id=case.case_id,
+                declared_at=evaluated_at,
+                declared_by_role="company_user",
+                confirmed=True,
+                **{
+                    field_to_argument[field]: value
+                    for field, value in spoken_structure.items()
+                    if field in field_to_argument
+                },
+            )
+            for case in program.cases
+        )
     declaration_input = ComplianceDeclarationAssembler(_fact_catalog()).assemble(
         program=program,
         declarations=tuple(compliance_declarations),
@@ -530,7 +560,9 @@ def analyze(
         financing, financing_evidence = _declared_financing_assertions(
             program, utterance, as_of=evaluated_at_utc
         )
-        country, country_evidence = _country_policy_assertions(program, snapshot_root)
+        country, country_evidence = _country_policy_assertions(
+            program, snapshot_root, as_of=evaluated_at_utc
+        )
         assertions = {
             case_id: (
                 *assertions.get(case_id, ()),
@@ -591,7 +623,7 @@ def analyze(
 
     def _market() -> ScenarioBand:
         nonlocal snapshot
-        path = latest_snapshot_path(snapshot_root, FX_SOURCE)
+        path = latest_snapshot_path(snapshot_root, FX_SOURCE, as_of=evaluated_at)
         ref, payload = read_snapshot(path)
         snapshot = ref
         require_fresh(ref, FX_FRESHNESS, evaluated_at)
@@ -675,6 +707,7 @@ def analyze(
         required_inputs=tuple(required_inputs),
         review_reasons=tuple(dict.fromkeys(review)),
         plan=plan,
+        declared_structure={**declared_structure, **spoken_structure},
         versions=CalculationVersions(
             formula_version=FORMULA_VERSION,
             packet_schema_version=(

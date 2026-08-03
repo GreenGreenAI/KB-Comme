@@ -3,8 +3,8 @@
   "sources": [
     {
       "source_id": "TRADEFLOW_DEMO_SOURCE",
-      "title": "TradeFlow 구조 검증용 내부 출처",
-      "organization": "TradeFlow",
+      "title": "KB Comme 구조 검증용 내부 출처",
+      "organization": "KB Comme",
       "url": "https://example.invalid/tradeflow/demo-source",
       "official": false,
       "retrieved_at": "2026-07-26T00:00:00",

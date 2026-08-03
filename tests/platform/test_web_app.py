@@ -4,17 +4,21 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
+from pydantic import ValidationError
 
 from tradeflow.runtime.accounts import AccountStore
 from tradeflow.web import app
 from tradeflow.web.app import (
     AnalyzeRequest,
+    ConsultationEventRequest,
     ConsultationHandoffRequest,
     ProfileFactsRequest,
     analysis_history,
     analyze_endpoint,
     create_consultation_handoff,
+    read_consultation,
+    record_consultation_event,
     saved_analysis,
     update_profile,
 )
@@ -41,6 +45,20 @@ class WebApiValidationTests(unittest.TestCase):
 
         self.assertIn("support", body["result"]["execution_plan"]["planned"])
         self.assertTrue(body["result"]["packet_id"].startswith("decision:"))
+
+    def test_a_field_this_endpoint_does_not_know_is_refused_not_dropped(self) -> None:
+        """Pydantic's default is to drop what it does not recognise, and the
+        answer then looks right while resting on inputs the caller did not
+        send: `opening_balances` instead of `opening_balance_usd` came back 200
+        with the balance discarded and nothing on screen saying so.
+
+        A trade description carries the same hazard one level down, so the case
+        model refuses too."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(opening_balances={"USD": "20000"})
+
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(cases=[{"direction": "export", "ammount": "100000"}])
 
     def test_invalid_money_is_rejected_instead_of_treated_as_missing(self) -> None:
         with self.assertRaises(HTTPException) as context:
@@ -163,6 +181,25 @@ class MultipleTradeIntakeTests(unittest.TestCase):
         self.assertEqual("수출", body["candidates"][1]["direction"])
         self.assertEqual("100000", body["candidates"][1]["amount"])
 
+    def test_support_question_does_not_create_a_phantom_export_trade(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=date.today().isoformat(),
+                utterance=(
+                    "베트남에서 원자재 6만 달러를 수입해 8월 25일에 지급하고, "
+                    "완제품을 미국에 10만 달러 수출해 10월 24일에 받습니다. "
+                    "그 사이 부족한 자금과 환위험, 받을 수 있는 수출지원이 궁금합니다."
+                ),
+            )
+        )
+
+        self.assertEqual("needs_trade_split", body["status"])
+        self.assertEqual(2, len(body["candidates"]))
+        self.assertEqual(
+            ["수입", "수출"],
+            [item["direction"] for item in body["candidates"]],
+        )
+
     def test_confirmed_split_cases_produce_the_expected_maturity_gap(self) -> None:
         as_of = date.today()
         body = analyze_endpoint(
@@ -198,6 +235,101 @@ class MultipleTradeIntakeTests(unittest.TestCase):
         self.assertEqual(
             "40000",
             exposure["net_exposure"][0]["amount"],
+        )
+        self.assertTrue(body["result"]["summary"])
+        self.assertIn("60,000 USD", body["result"]["summary"])
+
+
+class ProfilePolicyWebIntegrationTests(unittest.TestCase):
+    def test_ready_response_exposes_profile_policy_and_capability_trace(self) -> None:
+        as_of = date.today()
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=as_of.isoformat(),
+                company_name="한빛정밀",
+                is_sme=True,
+                company_facts={"company.size": "small"},
+                cases=[{
+                    "direction": "export",
+                    "amount": "100000",
+                    "currency": "USD",
+                    "payment_method": "TT",
+                    "expected_payment_date": (
+                        as_of + timedelta(days=60)
+                    ).isoformat(),
+                    "country": "US",
+                }],
+            )
+        )
+
+        self.assertEqual("ready", body["status"])
+        result = body["result"]
+        self.assertEqual("1.0", result["profile_policy"]["schema_version"])
+        self.assertIn(
+            "exporter",
+            result["profile_policy"]["axes"]["trade_role"],
+        )
+        self.assertIsInstance(result["capability_trace"], list)
+
+    def test_missing_work_is_partitioned_by_actor(self) -> None:
+        as_of = date.today()
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                as_of=as_of.isoformat(),
+                is_sme=True,
+                company_facts={
+                    "company.is_domestic": True,
+                    "company.size": "small",
+                    "company.credit_issue_free": True,
+                    "company.ksure_exporter_grade": "A",
+                },
+                cases=[{
+                    "direction": "export",
+                    "amount": "100000",
+                    "currency": "USD",
+                    "payment_method": "TT",
+                    "expected_payment_date": (
+                        as_of + timedelta(days=60)
+                    ).isoformat(),
+                    "country": "US",
+                    "case_facts": {"trade.payment_term_days": 60},
+                }],
+            )
+        )
+
+        result = body["result"]
+        question_ids = {
+            item["question_id"] for item in result["user_questions"]
+        }
+        self.assertIn("trade_structure_confirmation", question_ids)
+        capabilities = {
+            item["capability_id"] for item in result["system_fetches"]
+        }
+        self.assertIn("ksure.country_policy.lookup.v1", capabilities)
+        self.assertIn("ksure.importer_grade.lookup.v1", capabilities)
+        self.assertTrue(result["expert_tasks"])
+
+    def test_failed_market_worker_becomes_a_system_refresh_task(self) -> None:
+        from tradeflow.web.app import _add_runtime_fetches
+
+        result = {
+            "workers": {
+                "completed": ["exposure"],
+                "failed": {"market_scenario": "snapshot is stale"},
+                "skipped": {},
+            },
+            "system_fetches": [],
+        }
+
+        _add_runtime_fetches(result)
+
+        self.assertEqual(
+            "market_data.ecos_usd_krw.refresh.v1",
+            result["system_fetches"][0]["capability_id"],
+        )
+        self.assertEqual(
+            "provider_unavailable",
+            result["system_fetches"][0]["status"],
         )
 
 
@@ -396,7 +528,17 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
                     body["analysis_run_id"],
                     ConsultationHandoffRequest(consent=True),
                     token,
-                )["handoff"]
+                )
+                consultation = handoff["consultation"]
+                handoff = handoff["handoff"]
+                shared = record_consultation_event(
+                    body["analysis_run_id"],
+                    ConsultationEventRequest(status="shared_manually"),
+                    token,
+                )["consultation"]
+                persisted = read_consultation(
+                    body["analysis_run_id"], token
+                )["consultation"]
                 audit = store.list_audit(account)
 
         self.assertEqual("small", updated["account"]["facts"]["company.size"])
@@ -412,12 +554,113 @@ class DecisionWorkspaceContractTests(unittest.TestCase):
         )
         self.assertFalse(handoff["privacy"]["raw_document_content_included"])
         self.assertFalse(handoff["privacy"]["transmission_performed"])
+        self.assertEqual("1.1", handoff["schema_version"])
+        self.assertEqual("ready_for_manual_handoff", consultation["status"])
+        self.assertEqual("shared_manually", shared["status"])
+        self.assertEqual(shared, persisted)
+        self.assertEqual(
+            "needs_information",
+            handoff["consultation_readiness"]["status"],
+        )
         self.assertTrue(
             any(
                 item["action"] == "consultation_handoff.prepare"
                 for item in audit
             )
         )
+
+    def test_redecision_returns_tenant_scoped_delta_and_passport_history(self) -> None:
+        cases = [
+            {
+                "direction": "import",
+                "currency": "USD",
+                "amount": "60000",
+                "expected_payment_date": "2026-08-25",
+            },
+            {
+                "direction": "export",
+                "currency": "USD",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+                "case_facts": {
+                    "financing.purpose": "trade_finance",
+                    "financing.has_bank_consultation": False,
+                },
+            },
+        ]
+        with TemporaryDirectory() as directory:
+            store = AccountStore(Path(directory) / "accounts.db")
+            account = store.create(
+                "delta@example.com",
+                "pw",
+                company_name="델타무역",
+                account_id="COMPANY-DELTA",
+            )
+            token = store.open_session(account)
+            with patch("tradeflow.web.app.accounts", store):
+                update_profile(
+                    ProfileFactsRequest(
+                        facts={
+                            "company.size": "small",
+                            "company.credit_issue_free": True,
+                        }
+                    ),
+                    token,
+                )
+                first = analyze_endpoint(
+                    AnalyzeRequest(as_of="2026-08-01", cases=cases),
+                    token,
+                )
+                cases[1]["case_facts"]["financing.has_bank_consultation"] = True
+                second = analyze_endpoint(
+                    AnalyzeRequest(
+                        as_of="2026-08-01",
+                        cases=cases,
+                        opening_balance_usd="20000",
+                        previous_analysis_run_id=first["analysis_run_id"],
+                    ),
+                    token,
+                )
+                passport = create_consultation_handoff(
+                    second["analysis_run_id"],
+                    ConsultationHandoffRequest(consent=True),
+                    token,
+                )["handoff"]
+
+        result = second["result"]
+        delta = result["decision_delta"]
+        self.assertTrue(delta["changed"])
+        self.assertIn(
+            ("funding_gap", "60000", "40000"),
+            {
+                (item["metric"], item["before"], item["after"])
+                for item in delta["changes"]
+            },
+        )
+        self.assertIn(
+            ("conditionally_eligible", "expert_confirmation_required"),
+            {
+                (item["before"], item["after"])
+                for item in delta["changes"]
+                if item["metric"] == "support_candidate_status"
+            },
+        )
+        self.assertEqual("decision_passport", passport["packet_type"])
+        self.assertEqual(
+            delta,
+            passport["decision_experience"]["decision_delta"],
+        )
+
+    def test_anonymous_redecision_cannot_name_a_saved_run(self) -> None:
+        with self.assertRaises(HTTPException) as context:
+            analyze_endpoint(
+                AnalyzeRequest(
+                    cases=[self._case()],
+                    previous_analysis_run_id="RUN-NOT-MINE",
+                )
+            )
+
+        self.assertEqual(401, context.exception.status_code)
 
 
 class SecondTradeTests(unittest.TestCase):
@@ -556,28 +799,442 @@ class AnswerOrderTests(unittest.TestCase):
     design and it stays — but it meant a company asking about 제작 자금 always
     opened the answer on its exchange-rate exposure, with the judgement it had
     asked for two lines below in the code-owned pointer.
+
+    Written against the subjects rather than the sentence: the reading is now
+    the keywords plus whatever the model adds, and this holds for both.
     """
 
-    def test_a_financing_question_is_answered_first(self) -> None:
-        self.assertTrue(
-            app._pointer_leads(
-                "제품 제작에 들어갈 자금이 부족합니다. 무역금융이 있을까요?"
-            )
-        )
-
     def test_a_filing_question_is_answered_first(self) -> None:
-        self.assertTrue(app._pointer_leads("신고해야 할 게 있나요?"))
+        self.assertTrue(app._leads(("compliance",)))
+
+    def test_a_financing_question_is_answered_first(self) -> None:
+        self.assertTrue(app._leads(("support",)))
 
     def test_an_exposure_question_keeps_the_sentence_first(self) -> None:
-        self.assertFalse(app._pointer_leads("환율이 얼마나 오를까요?"))
+        self.assertFalse(app._leads(("market_scenario",)))
+        self.assertFalse(app._leads(("exposure",)))
+        self.assertFalse(app._leads(("hedge",)))
 
     def test_a_trade_description_keeps_the_sentence_first(self) -> None:
         """No question in it, so nothing was asked out of order."""
-        self.assertFalse(
-            app._pointer_leads("10월 24일에 수출대금 10만 달러 받기로 했어요")
+        self.assertFalse(app._leads(()))
+
+
+class AskingForTests(unittest.TestCase):
+    """Which blocked worker gets the top of the screen and an input panel.
+
+    Every skipped worker reports its reason in its own fold, and that does not
+    change — but an input panel is a demand, and a demand for a value the
+    question did not need reads as the product not having listened. A company
+    asking whether its netting is reportable was being asked for its operating
+    profit, which is §5.3's input and nobody's answer.
+    """
+
+    def _skipped(self, *names: str) -> dict:
+        return {"workers": {"skipped": {name: "…" for name in names}}}
+
+    def test_a_filing_question_is_not_asked_for_the_operating_profit(self) -> None:
+        self.assertIsNone(app._asking_for(("compliance",), self._skipped("hedge")))
+
+    def test_a_hedge_question_is(self) -> None:
+        self.assertEqual(
+            "hedge", app._asking_for(("hedge",), self._skipped("hedge"))
         )
-        self.assertFalse(app._pointer_leads(None))
+
+    def test_a_trade_description_keeps_the_funnel(self) -> None:
+        """§2's reader does not know their exposure well enough to ask about it
+        by name, so a sentence that asked about nothing keeps the old
+        behaviour."""
+        self.assertEqual("hedge", app._asking_for((), self._skipped("hedge")))
+
+    def test_nothing_is_asked_for_when_nothing_is_blocked(self) -> None:
+        self.assertIsNone(app._asking_for(("hedge",), {}))
+
+
+class AnonymousSupportTests(unittest.TestCase):
+    """§5.4's rules read company facts and an anonymous caller has none, so a
+    question about 지원제도 is answered by naming two facts rather than a
+    product. One request, not two: the sentence asks for the facts and stops
+    there. Adding 「로그인하시면 계정 사실로 판정합니다」 asked for the same two
+    facts a second way, and what the reader had to do went from one to two."""
+
+    def test_it_asks_for_the_two_facts_and_only_that(self) -> None:
+        body = analyze_endpoint(
+            AnalyzeRequest(
+                cases=[],
+                utterance="10월 24일 수출 10만 달러인데 받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+            )
+        )
+        pointer = body["result"]["pointer"]
+
+        self.assertIn("기업규모와 신용 상태", pointer)
+        self.assertNotIn("로그인", pointer)
+
+
+class ReproducibilityTests(unittest.TestCase):
+    """§6.2: the same analysis produces the same packet.
+
+    The orchestrator stamps every evidence descriptor with the analysis moment
+    and had this right (ADR-0007). This endpoint was the one caller that never
+    passed one, so the moment became `datetime.now()` and two identical
+    requests a second apart produced two different packets — the identity said
+    the inputs had changed when only the clock had. It held in every test and
+    in no request, because the tests all call `analyze` directly.
+    """
+
+    BODY = dict(
+        cases=[
+            {
+                "direction": "수입",
+                "amount": "60000",
+                "expected_payment_date": "2026-08-25",
+            },
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+            },
+        ],
+        opening_balance_usd="20000",
+        utterance="받을 수 있는 지원제도가 있나요",
+        as_of="2026-08-01",
+        company_size="small",
+        credit_issue_free=True,
+    )
+
+    def _packet(self, **change) -> str:
+        body = {**self.BODY, **change}
+        return analyze_endpoint(AnalyzeRequest(**body))["result"]["packet_id"]
+
+    def test_the_same_request_twice_is_the_same_packet(self) -> None:
+        first = self._packet()
+
+        self.assertTrue(first)
+        self.assertEqual(first, self._packet())
+
+    def test_a_changed_input_is_a_different_packet(self) -> None:
+        """The identity has to be sensitive to what it covers, or matching ids
+        would prove nothing."""
+        self.assertNotEqual(self._packet(), self._packet(opening_balance_usd=None))
+
+
+class TradeEchoTests(unittest.TestCase):
+    """The client resends what this list says the trades are.
+
+    It stopped at the six fields the figures need, so the shipment date the
+    company had just supplied was dropped on the next turn — the rule reported
+    the payment term missing again and 「언제 선적하시나요」 came back, every
+    turn, for anyone who kept talking.
+    """
+
+    def _timeline(self, case: dict) -> dict:
+        body = analyze_endpoint(
+            AnalyzeRequest(cases=[case], as_of="2026-08-02", utterance="지원제도")
+        )
+        return body["result"]["trade_timeline"][0]
+
+    def test_an_optional_detail_survives_the_round_trip(self) -> None:
+        echoed = self._timeline(
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+                "expected_shipment_date": "2026-09-15",
+            }
+        )
+
+        self.assertEqual("2026-09-15", echoed["expected_shipment_date"])
+
+        # And what comes back is a request this endpoint accepts. An echo the
+        # caller cannot resend is the same as no echo.
+        AnalyzeRequest(cases=[{k: v for k, v in echoed.items() if k != "case_id"}])
+
+    def test_what_was_not_given_is_not_invented(self) -> None:
+        echoed = self._timeline(
+            {
+                "direction": "수출",
+                "amount": "100000",
+                "expected_payment_date": "2026-10-24",
+            }
+        )
+
+        self.assertNotIn("expected_shipment_date", echoed)
+
+
+class SignInClosedTests(unittest.TestCase):
+    """Taking the button off the screen is not closing the door.
+
+    `/api/auth/login` stayed open behind it, and anyone who knew the path could
+    still get a session from the demo account — the front door locked and the
+    side door standing open."""
+
+    def test_the_auth_paths_are_not_there(self) -> None:
+        """404, not 403. 「닫혀 있습니다」 says there is a door here, which is
+        not true of this deployment."""
+        self.assertFalse(app.SIGN_IN_OPEN)
+
+        for call in (
+            lambda: app.login(
+                app.LoginRequest(email="demo@tradeflow.kr", password="x"),
+                Response(),
+            ),
+            lambda: app.logout(Response(), session="anything"),
+            lambda: app.me(session="anything"),
+        ):
+            with self.assertRaises(HTTPException) as refused:
+                call()
+            self.assertEqual(404, refused.exception.status_code)
+
+    def test_a_leftover_cookie_signs_nobody_in(self) -> None:
+        """Otherwise an anonymous screen receives an answer judged on an
+        account's company facts, and nothing on it says so."""
+        self.assertIsNone(app._signed_in("a-token-from-before"))
+
+    def test_the_credential_store_is_not_opened(self) -> None:
+        """A password-hash file created on every start, for a feature nobody
+        can reach, is not a feature — it is a liability."""
+        self.assertIsNone(app._accounts)
+
+
+class AnsweredFactTests(unittest.TestCase):
+    """§5.4 reported what it was missing and nothing carried the answers back.
+
+    A company could be asked for its bank consultation, answer it, and watch
+    the same product come back 「아직 판정하지 못했습니다」 — the question was
+    real and the answer went nowhere."""
+
+    CASE = {
+        "direction": "수출",
+        "amount": "100000",
+        "expected_payment_date": "2026-10-24",
+    }
+
+    def _analyze(self, **extra) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[self.CASE],
+                utterance="받을 수 있는 지원제도가 있나요",
+                as_of="2026-08-01",
+                company_size="small",
+                credit_issue_free=True,
+                **extra,
+            )
+        )["result"]
+
+    def test_an_answer_closes_the_judgement_that_asked_for_it(self) -> None:
+        before = self._analyze()
+        after = self._analyze(
+            stated_facts={
+                "financing.purpose": "trade_finance",
+                "financing.has_bank_consultation": "true",
+            }
+        )
+
+        def status(result: dict) -> str:
+            return next(
+                candidate["status"]
+                for candidate in result["support_candidates"]
+                if "수출신용보증" in candidate["title"]
+            )
+
+        self.assertEqual("insufficient_information", status(before))
+        self.assertNotEqual("insufficient_information", status(after))
+
+    def test_what_was_answered_is_not_asked_for_again(self) -> None:
+        asked = self._analyze(
+            stated_facts={"financing.purpose": "trade_finance"}
+        )["required_inputs"]["facts"]
+
+        self.assertNotIn("financing.purpose", [item["field"] for item in asked])
+
+    def test_a_fact_the_catalog_does_not_know_is_refused(self) -> None:
+        """Named rather than dropped. A value that vanished here would leave
+        the rule reporting the fact as missing and the screen asking for it
+        again — the same silence, one layer down."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"company.favourite_colour": "red"})
+
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"company.ksure_exporter_grade": "Z"})
+
+    def test_a_fact_we_look_up_ourselves_is_refused_from_the_caller(self) -> None:
+        """§5.4 asks whether the buyer's country is restricted; K-SURE's policy
+        snapshot answers that. A caller saying so would be supplying our
+        judgement as if it were their fact."""
+        with self.assertRaises(ValidationError):
+            AnalyzeRequest(stated_facts={"counterparty.country_restricted": "false"})
+
+
+class StatedProfileTests(unittest.TestCase):
+    """The same two facts by hand, for a company that has not signed up."""
+
+    def _support(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                utterance="받을 수 있는 지원제도가 있나요",
+                as_of="2026-07-28",
+                **body,
+            )
+        )["result"]
+
+    def test_stating_them_produces_a_judgement(self) -> None:
+        result = self._support(company_size="small", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+        self.assertTrue(result["support_candidates"])
+
+    def test_stating_nothing_still_asks(self) -> None:
+        """§5.4 must go on reporting the facts as missing rather than being
+        handed an invented `False`."""
+        result = self._support()
+
+        self.assertIn("support", result["workers"]["skipped"])
+        self.assertEqual(
+            ["company_size", "credit_issue_free"], result["required_inputs"]["profile"]
+        )
+
+    def test_the_size_settles_whether_it_is_an_sme(self) -> None:
+        """They are the same claim, and letting them disagree would be a
+        contradiction the rules cannot see."""
+        result = self._support(company_size="large", credit_issue_free=True)
+
+        self.assertNotIn("support", result["workers"]["skipped"])
+
+
+class StandingSubjectTests(unittest.TestCase):
+    """A request panel sends values and no words.
+
+    Reading intent from that blank reordered the answer back to the default
+    the moment the user supplied what was asked for — the judgement they came
+    for closed itself as it arrived, and the funnel started asking again.
+    """
+
+    def _answer(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "100000",
+                        "expected_payment_date": "2026-10-24",
+                    }
+                ],
+                as_of="2026-07-28",
+                company_size="small",
+                credit_issue_free=True,
+                **body,
+            )
+        )["result"]
+
+    def test_the_question_still_on_the_table_orders_the_answer(self) -> None:
+        result = self._answer(asked_about="받을 수 있는 지원제도가 있나요")
+
+        self.assertEqual("pointer", result["lead"])
+        self.assertEqual("support", result["execution_plan"]["section_order"][0])
+
+    def test_a_turn_with_no_subject_at_all_keeps_the_default(self) -> None:
+        result = self._answer()
+
+        self.assertEqual("summary", result["lead"])
+
+    def test_the_older_sentence_never_reaches_the_slot_reader(self) -> None:
+        """Ordering only. A trade described once must not describe itself a
+        second time — two turns would produce two trades."""
+        result = self._answer(
+            asked_about="12월 3일에 수입대금 5만 달러 지급합니다"
+        )
+
+        self.assertEqual(1, len(result["trade_timeline"]))
+        self.assertEqual("100000", result["trade_timeline"][0]["amount"])
+
+
+class AsksMeaningTests(unittest.TestCase):
+    """「환변동보험이 뭐야」 and 「받을 수 있는 지원제도가 있나요」 read as the
+    same subject and want different things.
+
+    The first has no answer here — the extracts hold eligibility conditions
+    and nothing describes what a scheme is for — and the second does. The
+    honest line and the request panel both hang on telling them apart.
+    """
+
+    TRADE = {
+        "direction": "수출",
+        "amount": "150000",
+        "expected_payment_date": "2026-12-03",
+    }
+
+    def _answer(self, utterance: str) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[self.TRADE], utterance=utterance, as_of="2026-07-31"
+            )
+        )["result"]
+
+    def test_a_question_about_meaning_is_answered_as_one(self) -> None:
+        """It lived only on the path taken when there was no trade, so the
+        moment a company had described one every question about what something
+        is came back as an analysis of that trade."""
+        result = self._answer("환변동보험이 뭐야?")
+
+        self.assertIn("설명하는 것은 아직 다루지 않습니다", result["cannot"])
+
+    def test_a_question_about_eligibility_is_not(self) -> None:
+        self.assertEqual("", self._answer("받을 수 있는 지원제도가 있나요")["cannot"])
+
+    def test_no_panel_opens_under_a_question_we_declined(self) -> None:
+        """A panel is a demand. Opening one under a question we have just said
+        we cannot answer asks for facts about something else."""
+        self.assertIsNone(self._answer("환변동보험이 뭐야?")["asking_for"])
+        self.assertEqual(
+            "support", self._answer("받을 수 있는 지원제도가 있나요")["asking_for"]
+        )
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetellGuardTests(unittest.TestCase):
+    """A rewrite exists to make several judgements read as one answer.
+
+    Given a single line it has nothing to combine and becomes a machine that
+    says the same thing twice — and the screen showed both, three lines apart,
+    in the same words.
+    """
+
+    def _answer(self, **body) -> dict:
+        return analyze_endpoint(
+            AnalyzeRequest(
+                cases=[
+                    {
+                        "direction": "수출",
+                        "amount": "150000",
+                        "expected_payment_date": "2026-12-03",
+                    }
+                ],
+                utterance="환율이 더 떨어지면 얼마나 손해인가요",
+                as_of="2026-07-31",
+                **body,
+            )
+        )["result"]
+
+    def test_nothing_to_combine_is_not_retold(self) -> None:
+        """An anonymous caller gets no eligibility judgement, so the only line
+        would be the figures sentence the screen already shows."""
+        result = self._answer()
+
+        self.assertEqual([], result["said"]["support"])
+        self.assertNotIn("retold", result["said"])
+
+    def test_judgements_are_retold(self) -> None:
+        result = self._answer(company_size="small", credit_issue_free=True)
+
+        self.assertTrue(result["said"]["support"])

@@ -89,5 +89,5 @@ rulepack status is not active
 4. `check_rulepacks.py --require-ready`와 전체 회귀 테스트를 실행한다.
 5. 승격 commit을 상대 역할이 검토한 뒤 병합한다.
 
-전문가의 신원·소속·권한 근거와 원문 증거를 Tradeflow 작성자가 대신 만들어서는
+전문가의 신원·소속·권한 근거와 원문 증거를 KB Comme 작성자가 대신 만들어서는
 안 된다. 따라서 이 한 항목은 코드 작업으로 대체할 수 없는 외부 운영 게이트다.

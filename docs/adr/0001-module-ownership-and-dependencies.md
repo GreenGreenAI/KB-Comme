@@ -24,7 +24,7 @@ domain
 runtime ─┴── contracts + knowledge
 ```
 
-- `domain`은 다른 TradeFlow 계층을 import하지 않는다.
+- `domain`은 다른 KB Comme 계층을 import하지 않는다.
 - `contracts`는 `domain`만 참조한다.
 - `knowledge`는 `domain`, `contracts`만 참조한다.
 - `tools`는 `domain`만 참조한다.

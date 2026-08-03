@@ -30,6 +30,7 @@ export default function AskBar({
   pending,
   requiredInputs,
   missingInputs,
+  decisiveQuestions,
   quoteInputs,
   onSlot,
   onPlace,
@@ -94,6 +95,18 @@ export default function AskBar({
       <Ask key={`slot:${slot}`} label={question}>
         <SlotField slot={slot} onSlot={onSlot} />
       </Ask>
+    );
+  }
+
+  const decisive = decisiveQuestions?.[0];
+  if (decisive) {
+    return (
+      <MissingFactField
+        key={decisive.question_id}
+        item={decisive}
+        onSlot={onSlot}
+        onUnknown={onUnknown}
+      />
     );
   }
 
@@ -170,7 +183,7 @@ const DECLARATION_KEY = {
 };
 
 function MissingFactField({ item, onSlot, onUnknown }) {
-  const question = FACT_LABEL[item.field] ?? `${item.field} 값을 알려주세요`;
+  const question = item.question ?? FACT_LABEL[item.field] ?? `${item.field} 값을 알려주세요`;
   const options = FACT_OPTIONS[item.field];
   const boolean =
     item.field === "company.credit_issue_free" ||
@@ -179,6 +192,10 @@ function MissingFactField({ item, onSlot, onUnknown }) {
     item.scope === "compliance_declaration";
 
   function answer(value, spoken) {
+    if (item.scope === "liquidity" || item.scope === "hedge") {
+      onSlot({ profile: { [item.field]: value } }, spoken);
+      return;
+    }
     if (item.scope === "profile") {
       onSlot({ profile: { company_facts: { [item.field]: value } } }, spoken);
       return;

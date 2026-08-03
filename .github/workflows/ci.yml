@@ -39,12 +39,18 @@ jobs:
           PYTHONPATH: src
           TRADEFLOW_TEST_POSTGRES_URL: postgresql://tradeflow:tradeflow@127.0.0.1:5432/tradeflow_test
         run: python -W error::DeprecationWarning -m unittest discover -s tests -t . -v
+      - name: Report customer task benchmark
+        env:
+          PYTHONPATH: src
+        run: python scripts/benchmark_user_tasks.py --json
       - name: Build frontend
         working-directory: web/frontend
         run: |
           npm ci
           npm test
           npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
       - name: Compile
         run: python -m compileall -q src tests examples
       - name: Check documentation

@@ -9,7 +9,7 @@ last-reviewed: 2026-07-28
 
 ## 1. 규정 검토
 
-Tradeflow 작성자가 자신의 규칙을 `domain_expert`로 승인해서는 안 된다.
+KB Comme 작성자가 자신의 규칙을 `domain_expert`로 승인해서는 안 된다.
 `scripts/build_rulepack_review_packets.py`가 만드는 패킷은 규칙·golden case·경계값과
 규칙팩의 semantic SHA-256과 validation suite의 canonical SHA-256을 한 묶음으로
 고정한다. semantic hash는 승격 메타데이터인 `status`와 `production_ready`만

@@ -66,6 +66,15 @@ class PacketRequirement:
 
 
 @dataclass(frozen=True)
+class PacketCheck:
+    """One condition of a rule, in the rule's own words."""
+
+    field: str
+    description: str
+    status: str
+
+
+@dataclass(frozen=True)
 class PacketDecision:
     rule_id: str
     title: str
@@ -79,6 +88,7 @@ class PacketDecision:
     subject_id: str | None
     matched: bool | None
     categories: tuple[DecisionCategory, ...]
+    checks: tuple[PacketCheck, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -437,6 +447,14 @@ def _freeze_decision(decision: RuleDecision) -> PacketDecision:
                 current_value=_freeze(item.current_value),
             )
             for item in decision.requirements
+        ),
+        checks=tuple(
+            PacketCheck(
+                field=item.field,
+                description=item.description,
+                status=item.status,
+            )
+            for item in decision.checks
         ),
         source_claim_ids=decision.source_claim_ids,
         candidate_outcome=_freeze(decision.candidate_outcome),

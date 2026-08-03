@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "TRADEFLOW_KB_USER_TYPE_API_V1",
+  "as_of": "2026-07-28",
+  "scenarios": [
+    {
+      "id": "KBAPI01",
+      "user_type": "기존 수출 중소·중견기업",
+      "query": "수출입 만기 사이의 자금 공백과 환위험, 수출지원 후보를 확인한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "company_name": "한빛정밀",
+        "is_sme": true,
+        "company_facts": {"company.size": "small", "company.is_domestic": true, "company.credit_issue_free": true, "company.ksure_exporter_grade": "A"},
+        "cases": [
+          {"direction": "import", "amount": "60000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-08-25", "country": "VN"},
+          {"direction": "export", "amount": "100000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-10-24", "country": "US", "case_facts": {"trade.payment_term_days": 60}}
+        ]
+      },
+      "required_capabilities": ["exposure", "funding_gap", "natural_hedge", "market_scenario", "support_ksure", "profile_policy"],
+      "desired_capabilities": ["bank_trade_history", "bank_product_catalog", "hedge_ratio"]
+    },
+    {
+      "id": "KBAPI02",
+      "user_type": "잠재 수출기업",
+      "query": "첫 수출계약을 전제로 초기 자금과 보증 후보를 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "is_sme": true,
+        "company_facts": {"company.size": "small", "company.is_domestic": true, "company.credit_issue_free": true, "company.ksure_exporter_grade": "A"},
+        "cases": [{"direction": "export", "amount": "80000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-11-15", "country": "US", "case_facts": {"trade.payment_term_days": 90, "financing.purpose": "trade_finance", "financing.has_bank_consultation": false}}]
+      },
+      "required_capabilities": ["exposure", "market_scenario", "support_ksure", "expert_task", "profile_policy"],
+      "desired_capabilities": ["export_contract_evidence", "first_export_guidance", "bank_product_catalog"]
+    },
+    {
+      "id": "KBAPI03",
+      "user_type": "소재·부품·장비/방산 수입기업",
+      "query": "수입대금 지급에 필요한 외화와 수입금융 구조를 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "is_sme": true,
+        "company_facts": {"company.size": "small"},
+        "cases": [{"direction": "import", "amount": "120000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-10-30", "country": "DE"}]
+      },
+      "required_capabilities": ["exposure", "funding_gap", "market_scenario", "profile_policy"],
+      "desired_capabilities": ["import_lc", "payment_usance", "import_insurance", "bank_fee_calculation"]
+    },
+    {
+      "id": "KBAPI04",
+      "user_type": "분쟁·고위험 지역 진출 수출입기업",
+      "query": "고위험 국가 거래의 결제·보험·환율 위험을 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "is_sme": true,
+        "company_facts": {"company.size": "small", "company.is_domestic": true, "company.credit_issue_free": true, "company.ksure_exporter_grade": "A"},
+        "cases": [{"direction": "export", "amount": "150000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-12-15", "country": "YE", "case_facts": {"trade.payment_term_days": 120}}]
+      },
+      "required_capabilities": ["exposure", "market_scenario", "support_ksure", "country_risk_lookup_requested", "system_fetch_partition"],
+      "desired_capabilities": ["country_risk_result", "payment_method_cost_comparison", "bank_preference_program"]
+    },
+    {
+      "id": "KBAPI05",
+      "user_type": "대기업·중견 수출기업(해외 구매자 금융)",
+      "query": "장기 외상 수출채권의 바이어 금융과 조기 현금화를 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "company_facts": {"company.size": "mid_sized", "company.is_domestic": true, "company.credit_issue_free": true, "company.ksure_exporter_grade": "A"},
+        "cases": [{"direction": "export", "amount": "500000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2027-07-28", "country": "US", "case_facts": {"trade.payment_term_days": 365}}]
+      },
+      "required_capabilities": ["exposure", "market_scenario", "support_ksure", "buyer_credit_lookup_requested", "system_fetch_partition"],
+      "desired_capabilities": ["trade_info", "buyer_finance", "receivable_early_cash", "overseas_branch_terms"]
+    },
+    {
+      "id": "KBAPI06",
+      "user_type": "스타트업/초기 수출기업",
+      "query": "초기 수출기업의 금융과 통관 준비사항을 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "is_sme": true,
+        "company_facts": {"company.size": "small", "company.is_domestic": true, "company.credit_issue_free": true, "company.ksure_exporter_grade": "A"},
+        "cases": [{"direction": "export", "amount": "30000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-10-15", "country": "JP"}]
+      },
+      "required_capabilities": ["exposure", "market_scenario", "support_ksure", "profile_policy"],
+      "desired_capabilities": ["startup_classification", "hs_customs_guidance", "license_guidance", "erp_recommendation"]
+    },
+    {
+      "id": "KBAPI07",
+      "user_type": "협력사·서플라이체인 기업",
+      "query": "간접 수출 협력사의 자금 공백과 협약금융 가능성을 검토한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "is_sme": true,
+        "company_facts": {"company.size": "small"},
+        "cases": [
+          {"direction": "import", "amount": "70000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-09-15", "country": "CN"},
+          {"direction": "export", "amount": "90000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-11-30", "country": "US"}
+        ]
+      },
+      "required_capabilities": ["exposure", "funding_gap", "natural_hedge", "market_scenario", "profile_policy"],
+      "desired_capabilities": ["supplier_relationship", "indirect_export_history", "agreement_program", "bank_limit_simulation"]
+    },
+    {
+      "id": "KBAPI08",
+      "user_type": "환리스크 민감 기업(재무팀 주도)",
+      "query": "확정 선물환 호가로 목표 손익 하한을 지키는 헤지 비율을 계산한다",
+      "request": {
+        "as_of": "2026-07-28",
+        "baseline_profit": "600000000",
+        "profit_floor": "595000000",
+        "cases": [{"direction": "import", "amount": "100000", "currency": "USD", "payment_method": "TT", "expected_payment_date": "2026-09-28", "country": "US"}],
+        "forward_quote": {"provider": "KB국민은행", "contract_rate": "1489.50", "cost_rate": "0.0025", "valid_until": "2026-07-30", "confirmed": true}
+      },
+      "required_capabilities": ["exposure", "funding_gap", "market_scenario", "hedge_ratio", "payoff_comparison"],
+      "desired_capabilities": ["star_fx_execution", "bank_quote_refresh", "fx_consulting_match"]
+    }
+  ]
+}

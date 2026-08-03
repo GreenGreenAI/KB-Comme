@@ -25,7 +25,7 @@
         "permission to retain point-in-time RFQ history",
         "permitted internal analytics and derived-data use"
       ],
-      "reason": "Tradeflow must not collect or retain quotes outside the contracted use."
+      "reason": "KB Comme must not collect or retain quotes outside the contracted use."
     },
     {
       "requirement_id": "LIQUIDITY_ENTITLEMENTS",

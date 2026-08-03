@@ -12,6 +12,7 @@ import {
   signOut,
   updateProfile,
   whoami,
+  SIGN_IN_OPEN,
 } from "./api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -325,6 +326,9 @@ export default function App() {
         ...nextProfile,
         compliance_declarations: nextDeclarations,
         as_of: today(),
+        ...(account && result?.analysis_run_id
+          ? { previous_analysis_run_id: result.analysis_run_id }
+          : {}),
         ...(placement ? { placement } : {}),
         ...(nextQuote ? { forward_quote: nextQuote } : {}),
       });
@@ -409,6 +413,19 @@ export default function App() {
     }
   }
 
+  function startOver() {
+    setTurns([]);
+    setFacts({ cases: [{}], profile: {}, declarations: [], quote: null });
+    setResult(null);
+    setPending(null);
+    setThinking(null);
+    setWriting(false);
+    setBusy(false);
+    setNotices([]);
+    stick.current = true;
+    setView("entry");
+  }
+
   return (
     <>
       {/* Home returns to the opening screen without discarding anything. The
@@ -420,6 +437,8 @@ export default function App() {
           setView("entry");
         }}
         account={account}
+        onStartOver={turns.length > 0 ? startOver : null}
+        signInOpen={SIGN_IN_OPEN}
         signingIn={showSignIn}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={async () => {
@@ -505,6 +524,9 @@ export default function App() {
                       : result?.required_inputs?.hedge ?? []
                   }
                   missingInputs={(result?.missing_input_queue ?? []).filter(
+                    (item) => !knownUnknowns.includes(item.field),
+                  )}
+                  decisiveQuestions={(result?.next_decisive_questions ?? []).filter(
                     (item) => !knownUnknowns.includes(item.field),
                   )}
                   quoteInputs={

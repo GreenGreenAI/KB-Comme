@@ -46,7 +46,7 @@ export default function Thread({ turns, account, busy, thinking, onArrived, thre
     <div className="thread" ref={threadRef}>
       {turns.length === 0 && !busy && (
         <div className="turn agent">
-          <span className="who">TradeFlow</span>
+          <span className="who">KB Comme</span>
           <p>거래를 알려주시면 계산을 시작합니다.</p>
         </div>
       )}
@@ -122,7 +122,7 @@ function Thinking({ thinking }) {
 
   return (
     <div className="turn agent thinking" aria-live="polite">
-      <span className="who">TradeFlow</span>
+      <span className="who">KB Comme</span>
       {steps.length === 0 ? (
         <p className="think">
           <Dots />
@@ -153,7 +153,7 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
   if (turn.kind === "error") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <p>{turn.text}</p>
       </div>
     );
@@ -162,7 +162,7 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
   if (turn.kind === "placement") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <Understood heard={turn.ask.understood} />
         <p>{turn.ask.question}</p>
       </div>
@@ -172,7 +172,7 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
   if (turn.kind === "trade_split") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <p>{turn.ask.question}</p>
         <ul className="reasons">
           {turn.ask.candidates.map((candidate, index) => (
@@ -189,7 +189,7 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
   if (turn.kind === "ask") {
     return (
       <div className="turn agent">
-        <span className="who">TradeFlow</span>
+        <span className="who">KB Comme</span>
         <Understood heard={turn.ask.understood} />
         {turn.ask.issues?.map((issue) => (
           <p key={issue.field}>{issue.reason}</p>
@@ -300,7 +300,7 @@ function AgentTurn({ turn, live, first, previous, signedIn, onArrived }) {
 
   return (
     <div className="turn agent">
-      <span className="who">TradeFlow</span>
+      <span className="who">KB Comme</span>
 
       {trace.length > 0 && (
         <div className="trace">

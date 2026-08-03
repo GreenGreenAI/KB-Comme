@@ -74,6 +74,23 @@ const result = {
     business_input_hash: "sha256:business",
     snapshots: [],
   },
+  next_decisive_questions: [{
+    question_id: "liquidity.opening_balance.USD",
+    field: "opening_balance_usd",
+    fields: ["opening_balance_usd"],
+    scope: "liquidity",
+    subject_id: "USD",
+    actor: "user",
+    question: "현재 보유한 USD 외화잔액은 얼마인가요?",
+    reason: "보유 외화는 최대 자금 공백을 줄입니다.",
+    changes: ["최대 자금 공백"],
+    impact_preview: {
+      metric: "funding_gap",
+      currency: "USD",
+      current: "60000",
+    },
+  }],
+  decision_delta: null,
 };
 
 test("a trade reaches the full decision workspace", async ({ page }) => {
@@ -107,14 +124,98 @@ test("a trade reaches the full decision workspace", async ({ page }) => {
   }).click();
 
   await expect(page.getByRole("heading", { name: "지원제도 판정" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "무엇이 결과를 바꾸나요?" })).toBeVisible();
   await expect(page.getByText("환변동보험 후보").first()).toBeVisible();
   await expect(page.getByLabel("검토 필요")).toBeVisible();
   await expect(page.getByRole("group", {
-    name: "현재 신용 제한 사유가 없나요?",
+    name: "현재 보유한 USD 외화잔액은 얼마인가요?",
   })).toBeVisible();
 
   await page.getByText("근거와 재현 정보").click();
   await expect(page.getByRole("link", { name: "공식 출처 열기" })).toBeVisible();
+});
+
+test("a decisive answer is sent as a redecision and renders its delta", async ({ page }) => {
+  let analyzeCount = 0;
+  let secondRequest = null;
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/auth/me") {
+      await route.fulfill({
+        json: {
+          account: {
+            account_id: "ACCOUNT-DELTA",
+            organization_id: "COMPANY-DELTA",
+            role: "company_admin",
+            email: "delta@example.com",
+            company_name: "델타무역",
+            facts: {},
+          },
+        },
+      });
+      return;
+    }
+    if (path === "/api/analyses") {
+      await route.fulfill({ json: { analyses: [] } });
+      return;
+    }
+    if (path === "/api/analyze") {
+      analyzeCount += 1;
+      if (analyzeCount === 2) secondRequest = request.postDataJSON();
+      const updated = analyzeCount === 1
+        ? result
+        : {
+            ...result,
+            cashflow_analysis: {
+              ...result.cashflow_analysis,
+              funding_gap: [{ currency: "USD", peak_amount: "40000" }],
+            },
+            next_decisive_questions: [],
+            decision_delta: {
+              changed: true,
+              changes: [{
+                kind: "cashflow_metric",
+                metric: "funding_gap",
+                label: "최대 자금 공백",
+                subject_id: "USD",
+                before: "60000",
+                after: "40000",
+                unit: "USD",
+              }],
+              resolved_questions: [{
+                question_id: "liquidity.opening_balance.USD",
+                field: "opening_balance_usd",
+                question: "현재 보유한 USD 외화잔액은 얼마인가요?",
+              }],
+            },
+          };
+      await route.fulfill({
+        json: {
+          status: "ready",
+          understood: {},
+          analysis_run_id: analyzeCount === 1 ? "RUN-BEFORE" : "RUN-AFTER",
+          result: updated,
+        },
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, json: {} });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", {
+    name: "10월 24일에 수출대금 10만 달러 받기로 했어요",
+  }).click();
+  await page.getByLabel("opening_balance_usd").fill("20000");
+  await page.getByRole("button", { name: "확인" }).click();
+
+  await expect.poll(() => analyzeCount).toBe(2);
+  expect(secondRequest.previous_analysis_run_id).toBe("RUN-BEFORE");
+  expect(secondRequest.opening_balance_usd).toBe("20000");
+  await page.getByText("전체 결과 보기").last().click();
+  await expect(page.getByRole("heading", { name: "이번 답변으로 달라진 결정" }).last()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("USD 40,000").last()).toBeVisible();
 });
 
 test("a signed-in tenant reviews an extracted trade document", async ({ page }) => {
@@ -236,4 +337,82 @@ test("a signed-in tenant reviews an extracted trade document", async ({ page }) 
   await page.getByRole("button", { name: "추출 필드 확인 저장" }).click();
   await page.getByRole("button", { name: "거래·문서 정합성 검사" }).click();
   await expect(page.getByText("사람의 확인이 필요한 불일치")).toBeVisible();
+});
+
+test("a manual consultation continues from passport to shared state", async ({ page }) => {
+  let consultation = null;
+  let recordedBody = null;
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/auth/me") {
+      await route.fulfill({ json: { account: {
+        account_id: "ACCOUNT-CONSULT",
+        organization_id: "COMPANY-CONSULT",
+        role: "company_admin",
+        email: "consult@example.com",
+        company_name: "상담기업",
+        facts: {},
+      } } });
+      return;
+    }
+    if (path === "/api/analyses") {
+      await route.fulfill({ json: { analyses: [] } });
+      return;
+    }
+    if (path === "/api/analyze") {
+      await route.fulfill({ json: {
+        status: "ready",
+        understood: {},
+        analysis_run_id: "RUN-CONSULT",
+        result,
+      } });
+      return;
+    }
+    if (path === "/api/trade-cases/EXPORT-001/documents") {
+      await route.fulfill({ json: { documents: [] } });
+      return;
+    }
+    if (path === "/api/analyses/RUN-CONSULT/consultation" && request.method() === "GET") {
+      await route.fulfill({ json: { consultation } });
+      return;
+    }
+    if (path === "/api/analyses/RUN-CONSULT/consultation-handoff") {
+      consultation = {
+        status: "ready_for_manual_handoff",
+        verification: "user_recorded_not_bank_verified",
+      };
+      await route.fulfill({ json: {
+        handoff: {
+          handoff_id: "HANDOFF-CONSULT",
+          state: "ready_for_manual_handoff",
+        },
+        consultation,
+      } });
+      return;
+    }
+    if (path === "/api/analyses/RUN-CONSULT/consultation-events") {
+      recordedBody = request.postDataJSON();
+      consultation = {
+        status: recordedBody.status,
+        verification: "user_recorded_not_bank_verified",
+      };
+      await route.fulfill({ json: { consultation } });
+      return;
+    }
+    await route.fulfill({ status: 404, json: {} });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", {
+    name: "10월 24일에 수출대금 10만 달러 받기로 했어요",
+  }).click();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Decision Passport 내려받기" }).click();
+  await expect(page.getByText("전달 준비")).toBeVisible();
+  await page.getByRole("button", { name: "담당자에게 전달 완료로 기록" }).click();
+
+  await expect(page.getByText("수동 전달 완료")).toBeVisible();
+  expect(recordedBody.status).toBe("shared_manually");
+  await expect(page.getByText(/은행 확인 정보가 아닙니다/)).toBeVisible();
 });

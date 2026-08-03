@@ -18,7 +18,7 @@ from tradeflow.tools.exposure import DefaultExposureService
 
 
 class TradeFlowPipeline:
-    """Small deterministic vertical slice for the TradeFlow MVP."""
+    """Small deterministic vertical slice for the KB Comme MVP."""
 
     def __init__(
         self,

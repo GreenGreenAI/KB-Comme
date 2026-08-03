@@ -1,4 +1,4 @@
-"""Fail-closed ERP projections into the normalized TradeFlow trade feed."""
+"""Fail-closed ERP projections into the normalized KB Comme trade feed."""
 
 from __future__ import annotations
 

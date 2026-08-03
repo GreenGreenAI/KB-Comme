@@ -1,4 +1,4 @@
-"""TradeFlow domain types."""
+"""KB Comme domain types."""
 
 from tradeflow.domain.dataset_registry import (
     DatasetDefinition,

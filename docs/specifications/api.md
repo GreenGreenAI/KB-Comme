@@ -95,5 +95,16 @@ API가 도입될 때 각 엔드포인트에 다음을 정의한다.
 - 감사 이벤트: `consultation_handoff.prepare`
 
 응답 패킷에는 분석 식별자, 기업·거래, 순노출·자금공백, 지원·신고 판정, 다음 행동, 문서
-체크리스트, 누락 정보, 근거와 계산 버전이 포함된다. 실제 KB API가 확보되면 이 계약을
+체크리스트, 업로드 문서 inventory, 상담 누락·미확인 정보, 근거와 계산 버전이 포함된다.
+실제 KB API가 확보되면 이 계약을
 소비하는 integration 어댑터를 추가하고 핵심 분석 계약은 변경하지 않는다.
+
+`GET /api/analyses/{run_id}/consultation`은 현재 조직의 사용자 기록 상담 이력을 조회한다.
+`POST /api/analyses/{run_id}/consultation-events`는 다음 상태 중 허용된 전이만 append한다.
+
+- `shared_manually`
+- `consultation_in_progress`
+- `additional_information_requested` — `requested_items` 1개 이상 필요
+- `outcome_recorded` — 결과 `note` 필요
+
+모든 응답은 `verification=user_recorded_not_bank_verified`이며 KB 접수·확인·승인을 뜻하지 않는다.

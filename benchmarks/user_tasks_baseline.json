@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "TRADEFLOW_USER_TASKS_V1",
+  "minimum_task_success_rate": 1.0,
+  "minimum_check_success_rate": 1.0,
+  "minimum_capabilities_met": 18,
+  "required_critical_scenarios": [
+    "UT01",
+    "UT02",
+    "UT03",
+    "UT04",
+    "UT05",
+    "UT06",
+    "UT07",
+    "UT08",
+    "UT09",
+    "UT10",
+    "UT11",
+    "UT12",
+    "UT13",
+    "UT14",
+    "UT15",
+    "UT16",
+    "UT17"
+  ],
+  "latency": {
+    "policy": "observe_only",
+    "median_ms_reference": null,
+    "p95_ms_reference": null,
+    "note": "인프로세스 지연은 환경 의존적이므로 초기에는 회귀 게이트가 아니라 추세로 기록한다."
+  }
+}

@@ -32,4 +32,4 @@ foreach ($line in Get-Content -LiteralPath $Path -Encoding utf8) {
     $loaded += 1
 }
 
-Write-Host "Loaded $loaded TradeFlow environment variables."
+Write-Host "Loaded $loaded KB Comme environment variables."

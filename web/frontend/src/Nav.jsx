@@ -39,9 +39,11 @@ function described(facts) {
 export default function Nav({
   onHome,
   account,
+  onStartOver,
   onSignIn,
   signingIn,
   onSignOut,
+  signInOpen = true,
   analyses = [],
   onOpenAnalysis,
 }) {
@@ -81,7 +83,7 @@ export default function Nav({
   return (
     <header className="nav">
       <button className="brand" type="button" onClick={onHome}>
-        <i>T</i> TradeFlow
+        <i>C</i> KB Comme
       </button>
       {/* The three areas beyond 분석 have no page behind them yet. They are
           shown so the shape of the product is legible, and they respond to the
@@ -99,7 +101,12 @@ export default function Nav({
       ) : null}
 
       <div className="account" ref={box}>
-        {!signedIn ? (
+        {onStartOver && (
+          <button className="nav-cta quiet" type="button" onClick={onStartOver}>
+            새 대화
+          </button>
+        )}
+        {!signInOpen ? null : !signedIn ? (
           signingIn ? (
             /* On the sign-in screen itself, a 로그인 button would point at
                what is already on the screen. What is missing there is a way in
