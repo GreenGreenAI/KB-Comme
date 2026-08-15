@@ -125,6 +125,107 @@ SCHEMA = {
     },
 }
 
+#: 사교적 답변의 상한. 길이가 그 자체로 검사입니다 — 인사에 세 문장으로
+#: 답했다면 인사에 답한 것이 아니라 무언가를 설명하기 시작한 것이고,
+#: 설명은 이 경로가 근거를 갖지 못하는 유일한 종류의 말입니다.
+CONVERSE_LIMIT = 120
+
+CONVERSE_SCHEMA = {
+    "name": "converse",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "social": {
+                "type": "boolean",
+                "description": (
+                    "인사·감사·맞장구·혼잣말처럼 거래나 금융 질문이 아닌 말이면 true. "
+                    "거래를 설명하거나 금융에 대해 물었으면 false."
+                ),
+            },
+            "sentence": {
+                "type": "string",
+                "description": "social이 true일 때 사용자에게 보여줄 한 문장. 아니면 빈 문자열.",
+            },
+        },
+        "required": ["social", "sentence"],
+        "additionalProperties": False,
+    },
+}
+
+CONVERSE_INSTRUCTION = """\
+당신은 수출입 거래의 환위험·지원제도·신고의무를 다루는 상담 화면의 말투를 씁니다.
+
+방금 사용자가 한 말에서 규칙이 거래 정보를 하나도 읽지 못했습니다.
+그 말이 인사·감사·맞장구·혼잣말처럼 거래나 금융 질문이 아니라면 social=true로 두고,
+짧게 한 문장으로 답하세요.
+
+지켜야 할 것:
+- 한 문장, 한국어, 존댓말.
+- 수치를 쓰지 마세요. 사용자가 말한 숫자도 되풀이하지 마세요.
+- 자격·안전·권유를 말하지 마세요. 판정은 규칙이 합니다.
+- 제도·상품 이름을 쓰지 마세요. 무엇을 받을 수 있는지는 규칙이 판정해서 따로 말합니다.
+
+거래를 설명했거나 금융에 대해 물은 말이면 social=false로 두고 sentence는 비우세요.
+"""
+
+#: 모델이 「거래 이야기였다」고 판단한 경우의 사유. 이름을 붙여 두는 것은
+#: 호출자가 그 경우와 「사교적이라고 봤는데 표현이 거절된」 경우를 갈라야 하기
+#: 때문입니다. 앞은 계산 경로로 넘겨야 하고, 뒤는 우리 문장으로 답해야 합니다.
+NOT_SOCIAL = "거래에 대한 문장으로 읽었습니다"
+
+#: 「사교적이라고 읽었는데 쓴 문장이 검사를 통과하지 못했다」의 표시.
+#:
+#: 거절된 것이 읽기가 아니라 표현일 때 호출자가 할 일이 다릅니다 — 계산
+#: 경로로 되돌리는 것이 아니라 자기 문장으로 답해야 합니다. 사유 문자열을
+#: 눈으로 비교하는 대신 접두사로 표시해 두어, 새 검사를 추가해도 호출자가
+#: 따라 바뀌지 않아도 됩니다.
+REFUSED_WORDING = "사교적 답변의 표현 — "
+
+#: 화면에 무엇이 있는지에 따라 달라지는 한 줄.
+#:
+#: 「거래가 있으면 …하지 마세요」를 규칙으로 적어 두고 상태를 따로 알려 주면
+#: 모델이 그 둘을 잇지 않습니다 — 거래를 분석 중인데도 「거래 정보를
+#: 알려주시면」이 그대로 나왔습니다. 해당하는 지시만 주면 이을 것이 없습니다.
+def _refuse_wording(sentence: str) -> str:
+    """Why a social reply may not be shown, or nothing.
+
+    Gathered in one function because every one of these refusals means the same
+    thing to the caller — the reading stood, the words did not — and a caller
+    that had to enumerate them would fall out of step the next time one is
+    added.
+    """
+    if not sentence:
+        return "빈 문장"
+    if REDACTION in sentence:
+        return "편집 표시가 문장에 남았습니다"
+    claimed = verdicts(sentence)
+    if claimed:
+        return "규칙이 내려야 할 판단: " + ", ".join(claimed)
+    # No figure at all, rather than a figure checked against a list. This path
+    # is handed no figures, so any number in the reply came from the model —
+    # including one copied out of the user's own sentence, which would read as
+    # confirmed by the tools when nothing confirmed it.
+    if _SPOKEN_AMOUNT.search(sentence):
+        return "수치가 들어 있습니다"
+    if len(sentence) > CONVERSE_LIMIT:
+        return f"{CONVERSE_LIMIT}자를 넘었습니다"
+    return ""
+
+
+CONVERSE_HOLDING = {
+    True: (
+        "지금 사용자의 거래를 분석하고 있습니다. "
+        "거래를 알려 달라고 하지 마세요 — 이미 받았습니다. "
+        "이어서 궁금한 점을 물어보시라고 안내하세요."
+    ),
+    False: (
+        "아직 들은 거래가 없습니다. "
+        "거래를 편하게 말씀해 달라고 가볍게 덧붙여도 됩니다."
+    ),
+}
+
+
 def _seed(material: str | None) -> int:
     """A stable integer for one analysis-and-question.
 
@@ -899,6 +1000,77 @@ class Synthesizer:
         reversed_flow = check_direction(sentence, direction)
         if reversed_flow:
             return Synthesis(sentence, False, reversed_flow)
+        return Synthesis(sentence, True)
+
+    def converse(
+        self,
+        utterance: str,
+        *,
+        holds_trade: bool,
+        seed: str | None = None,
+    ) -> Synthesis:
+        """A reply to a sentence that is not about a trade.
+
+        「고마워요」, 「네 알겠습니다」, 「좀 어렵네요」 all reached the intake
+        funnel and came back as 「그 문장에서는 거래 정보를 읽지 못해 계산이
+        달라지지 않았습니다. 금액 · 결제일 · 수출입 여부는 문장으로 알려주실
+        수 있습니다」. Correct, and no answer to what was said.
+
+        Keyword lists cannot close this. `utterance_kind` says as much about
+        its own — a longer list starts catching sentences that stand on their
+        own — and courtesy has no finite vocabulary. Deciding whether a
+        sentence is small talk is what a model is genuinely better at.
+
+        The decision is safe to delegate because of where it sits: this runs
+        only after the rules have read the sentence and found no trade in it.
+        Call a real trade sentence social and nothing is lost — nothing was
+        read from it either way. Call small talk not-social and the turn
+        behaves as it does today. **The worst outcome is today's behaviour**,
+        which is what makes the model's judgement admissible here and not in
+        the places it is refused.
+
+        What it may write is still bounded: no verdict, no figure, and short.
+        A social turn that quotes a number is either inventing one or
+        repeating one it was not given, and both are the failure this module
+        exists to prevent.
+        """
+        if not self.available or not utterance.strip():
+            return Synthesis("", False, "합성할 수 없습니다")
+        # What is on screen, so the reply does not ask for a trade that is
+        # already there. 「안녕하세요, 거래를 말씀해 주세요」 to somebody whose
+        # trade is on the screen above reads as not having looked.
+        holding = CONVERSE_HOLDING[bool(holds_trade)]
+        try:
+            completion = self._open().chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"{CONVERSE_INSTRUCTION}\n\n{holding}"
+                            f"\n\n사용자가 한 말: {redact(utterance)}"
+                        ),
+                    }
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": CONVERSE_SCHEMA,
+                },
+                temperature=TEMPERATURE,
+                seed=_seed(seed),
+                max_tokens=200,
+                timeout=TIMEOUT_S,
+            )
+            written = json.loads(completion.choices[0].message.content or "{}")
+        except Exception as failure:  # noqa: BLE001 — any failure is the same failure
+            return Synthesis("", False, f"대화 합성 실패: {type(failure).__name__}")
+
+        if not written.get("social"):
+            return Synthesis("", False, NOT_SOCIAL)
+        sentence = str(written.get("sentence", "")).strip()
+        refused = _refuse_wording(sentence)
+        if refused:
+            return Synthesis(sentence, False, REFUSED_WORDING + refused)
         return Synthesis(sentence, True)
 
     def retell(

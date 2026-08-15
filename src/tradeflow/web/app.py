@@ -47,7 +47,13 @@ from tradeflow.domain.models import CompanyProfile
 from tradeflow.runtime import asking, introduction, narration, observing, planner
 from tradeflow.runtime.coverage import for_financing as coverage_for_financing
 from tradeflow.runtime.coverage import statement as coverage_statement
-from tradeflow.runtime.synthesis import Synthesis, Synthesizer, figures, pointer
+from tradeflow.runtime.synthesis import (
+    REFUSED_WORDING,
+    Synthesis,
+    Synthesizer,
+    figures,
+    pointer,
+)
 from tradeflow.tools.intent import read_intent
 from tradeflow.agent.orchestrator import analyze, market_now
 from tradeflow.agent.response import build_response
@@ -524,10 +530,55 @@ def analyze_endpoint(
         heard=heard,
         topics=read_intent(request.utterance or ""),
     )
-    if kind != TRADE and not supplied_trade(supplied):
+    # 인사와 제품 질문은 화면에 거래가 있든 없든 인사와 제품 질문입니다.
+    #
+    # `supplied_trade`는 「거래를 버리면 안 된다」를 지키려고 있었는데, 인사에
+    # 답하는 일과 거래를 버리는 일은 서로 다른 일입니다. 둘이 붙어 있어서
+    # 대화 중간의 「안녕」이 계산 경로로 흘러 들어갔고, 아무것도 못 읽은 턴이
+    # 되어 「그 문장에서는 거래 정보를 읽지 못해 계산이 달라지지 않았습니다」로
+    # 돌아왔습니다. 인사에 대한 답으로는 이상합니다.
+    #
+    # 거래는 어차피 사라지지 않습니다 — 이 응답은 워커를 돌리지 않고 무엇도
+    # 판정하지 않으며, 거래 목록은 화면이 들고 있습니다.
+    #
+    # TOPIC과 FOLLOW_UP은 그대로 둡니다. 거래를 앞에 두고 「환율은?」이나
+    # 「왜?」를 물었다면 그건 그 거래에 대한 질문이고, 계산이 답입니다.
+    holds_trade = supplied_trade(supplied)
+    social = kind in (GREETING, ABOUT)
+    if social or (kind != TRADE and not holds_trade):
         return _answer_without_a_trade(
-            kind, request.utterance, as_of, _subjects(request)
+            kind, request.utterance, as_of, _subjects(request), holds_trade=holds_trade
         )
+
+    # 규칙이 읽어 낸 거래 정보가 하나도 없는 문장. 「고마워요」·「네 알겠습니다」·
+    # 「좀 어렵네요」가 모두 여기로 떨어졌고, 인테이크 깔때기를 지나 「그 문장에서는
+    # 거래 정보를 읽지 못해 계산이 달라지지 않았습니다」로 돌아왔습니다. 맞는
+    # 말이지만, 방금 한 말에 대한 답은 아닙니다.
+    #
+    # 낱말 목록으로는 못 닫습니다 — 예의에는 유한한 어휘가 없습니다. 이 판단만
+    # 모델에게 넘기는 것이 안전한 이유는 위치입니다. 규칙이 먼저 읽고 아무것도
+    # 찾지 못한 뒤에만 옵니다. 진짜 거래 문장을 사교적이라 잘못 봐도 잃을 것이
+    # 없고(어차피 읽힌 것이 없습니다), 사교적 문장을 아니라고 봐도 오늘과 같이
+    # 동작합니다. 최악이 오늘이라서 여기서는 모델의 판단을 받습니다.
+    if request.utterance and not heard:
+        chat = synthesizer.converse(
+            request.utterance,
+            holds_trade=holds_trade,
+            seed=f"converse|{request.utterance}",
+        )
+        if chat.accepted:
+            return {"status": "said", "understood": {}, "spoken": chat.sentence}
+        if chat.reason:
+            logger.info("대화 미채택: %s | %s", chat.reason, chat.sentence[:120])
+        # 사교적이라고 읽긴 했는데 표현이 검사를 통과하지 못한 경우. 거절된
+        # 것은 문장이지 읽기가 아니므로, 깔때기까지 되돌아가 「고마워요」에
+        # 금액을 물으면 이 경로가 막으려던 바로 그 일이 됩니다.
+        if chat.reason.startswith(REFUSED_WORDING):
+            return {
+                "status": "said",
+                "understood": {},
+                "spoken": introduction.acknowledgement(holds_trade=holds_trade),
+            }
 
     reading = intake(
         supplied,
@@ -1020,6 +1071,8 @@ def _answer_without_a_trade(
     utterance: str | None,
     as_of: date,
     subjects: tuple[str, ...] = (),
+    *,
+    holds_trade: bool = False,
 ) -> dict[str, Any]:
     """The three turns that are not a trade description.
 
@@ -1028,7 +1081,11 @@ def _answer_without_a_trade(
     snapshot — no worker runs, no packet is produced, and nothing is judged.
     """
     if kind == GREETING:
-        return {"status": "said", "understood": {}, "spoken": introduction.opening()}
+        return {
+            "status": "said",
+            "understood": {},
+            "spoken": introduction.opening(holds_trade=holds_trade),
+        }
     if kind == ABOUT:
         return {"status": "said", "understood": {}, "spoken": introduction.paragraph()}
 
