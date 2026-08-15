@@ -127,5 +127,37 @@ class FunnelEntryTests(unittest.TestCase):
         )
 
 
+class ModelJudgementTests(unittest.TestCase):
+    """모델이 판단하는 것은 하나뿐이다 — 일반 대화인가, 기능을 쓰려는 말인가.
+
+    갈래를 셋으로 늘려 「무엇을 할 수 있는지 묻는 말」까지 구분시켜 봤다가
+    되돌렸다. 판단을 하나 더 얹는 것이고, 그 답은 어차피 모델이 쓰지 않는다 —
+    제품 소개는 규칙팩을 세어서 조립되고, 모델은 그것을 쓰지 못하게 막혀 있다.
+    """
+
+    def test_the_model_is_asked_one_thing(self) -> None:
+        from tradeflow.runtime.synthesis import CONVERSE_SCHEMA
+
+        properties = CONVERSE_SCHEMA["schema"]["properties"]
+        self.assertEqual({"general", "sentence"}, set(properties))
+        self.assertEqual("boolean", properties["general"]["type"])
+
+    def test_the_model_is_told_not_to_describe_the_product(self) -> None:
+        """소개 문장은 규칙에서 조립된다. 모델이 자유롭게 쓰면 자기가 설명하는
+        규칙보다 오래 살아남는 마케팅 문장이 된다."""
+        from tradeflow.runtime.synthesis import CONVERSE_INSTRUCTION
+
+        self.assertIn("무엇을 할 수 있는지 설명하지 마세요", CONVERSE_INSTRUCTION)
+
+    def test_the_product_describes_itself_from_its_rulepacks(self) -> None:
+        """`_ABOUT`이 소개가 나오는 유일한 길이고, 그 내용은 조립된다."""
+        from tradeflow.runtime import coverage
+
+        said = answer("뭐 할 수 있어?")
+
+        self.assertEqual("said", said["status"])
+        self.assertIn(coverage.statement("support"), said["spoken"])
+
+
 if __name__ == "__main__":
     unittest.main()

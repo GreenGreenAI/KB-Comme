@@ -136,19 +136,19 @@ CONVERSE_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "social": {
+            "general": {
                 "type": "boolean",
                 "description": (
-                    "인사·감사·맞장구·혼잣말처럼 거래나 금융 질문이 아닌 말이면 true. "
-                    "거래를 설명하거나 금융에 대해 물었으면 false."
+                    "거래·계산·제도·신고처럼 이 서비스의 기능을 쓰려는 말이 아니면 true. "
+                    "기능을 쓰려는 말이면 false."
                 ),
             },
             "sentence": {
                 "type": "string",
-                "description": "social이 true일 때 사용자에게 보여줄 한 문장. 아니면 빈 문자열.",
+                "description": "general이 true일 때만 보여줄 한 문장. 아니면 빈 문자열.",
             },
         },
-        "required": ["social", "sentence"],
+        "required": ["general", "sentence"],
         "additionalProperties": False,
     },
 }
@@ -157,22 +157,26 @@ CONVERSE_INSTRUCTION = """\
 당신은 수출입 거래의 환위험·지원제도·신고의무를 다루는 상담 화면의 말투를 씁니다.
 
 방금 사용자가 한 말에서 규칙이 거래 정보를 하나도 읽지 못했습니다.
-그 말이 인사·감사·맞장구·혼잣말처럼 거래나 금융 질문이 아니라면 social=true로 두고,
-짧게 한 문장으로 답하세요.
+판단할 것은 하나입니다 — 이 말이 이 서비스의 기능을 쓰려는 말입니까?
 
-지켜야 할 것:
+기능을 쓰려는 말이면 general=false, sentence는 비우세요. 거기서부터는 규칙이 맡습니다.
+  예) 거래를 설명함 · 환율을 물음 · 지원제도나 신고의무를 물음 · 계산을 요청함
+
+그 밖의 말이면 general=true로 두고 짧게 한 문장으로 답하세요.
+  예) 인사 · 감사 · 맞장구 · 혼잣말 · 잡담
+
+general일 때 지켜야 할 것:
 - 한 문장, 한국어, 존댓말.
 - 수치를 쓰지 마세요. 사용자가 말한 숫자도 되풀이하지 마세요.
 - 자격·안전·권유를 말하지 마세요. 판정은 규칙이 합니다.
 - 제도·상품 이름을 쓰지 마세요. 무엇을 받을 수 있는지는 규칙이 판정해서 따로 말합니다.
-
-거래를 설명했거나 금융에 대해 물은 말이면 social=false로 두고 sentence는 비우세요.
+- 이 서비스가 무엇을 할 수 있는지 설명하지 마세요. 그 답은 규칙에서 조립되어 따로 나갑니다.
 """
 
 #: 모델이 「거래 이야기였다」고 판단한 경우의 사유. 이름을 붙여 두는 것은
 #: 호출자가 그 경우와 「사교적이라고 봤는데 표현이 거절된」 경우를 갈라야 하기
 #: 때문입니다. 앞은 계산 경로로 넘겨야 하고, 뒤는 우리 문장으로 답해야 합니다.
-NOT_SOCIAL = "거래에 대한 문장으로 읽었습니다"
+NOT_SOCIAL = "이 서비스의 기능을 쓰려는 말로 읽었습니다"
 
 #: 「사교적이라고 읽었는데 쓴 문장이 검사를 통과하지 못했다」의 표시.
 #:
@@ -1007,6 +1011,7 @@ class Synthesizer:
         utterance: str,
         *,
         holds_trade: bool,
+        after: str | None = None,
         seed: str | None = None,
     ) -> Synthesis:
         """A reply to a sentence that is not about a trade.
@@ -1040,6 +1045,9 @@ class Synthesizer:
         # already there. 「안녕하세요, 거래를 말씀해 주세요」 to somebody whose
         # trade is on the screen above reads as not having looked.
         holding = CONVERSE_HOLDING[bool(holds_trade)]
+        # 직전에 무슨 말이 오갔는지. 없이 부르면 매 턴이 첫 턴이라, 방금 인사를
+        # 받은 뒤에도 「안녕하세요!」로 다시 시작합니다 — 듣고 있지 않다는
+        # 인상을 주는 가장 빠른 방법입니다.
         try:
             completion = self._open().chat.completions.create(
                 model=self.model,
@@ -1048,7 +1056,8 @@ class Synthesizer:
                         "role": "user",
                         "content": (
                             f"{CONVERSE_INSTRUCTION}\n\n{holding}"
-                            f"\n\n사용자가 한 말: {redact(utterance)}"
+                            + (f"\n\n직전에 사용자가 한 말: {redact(after)}" if after else "")
+                            + f"\n\n사용자가 한 말: {redact(utterance)}"
                         ),
                     }
                 ],
@@ -1065,7 +1074,7 @@ class Synthesizer:
         except Exception as failure:  # noqa: BLE001 — any failure is the same failure
             return Synthesis("", False, f"대화 합성 실패: {type(failure).__name__}")
 
-        if not written.get("social"):
+        if not written.get("general"):
             return Synthesis("", False, NOT_SOCIAL)
         sentence = str(written.get("sentence", "")).strip()
         refused = _refuse_wording(sentence)

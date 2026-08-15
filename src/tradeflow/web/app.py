@@ -565,6 +565,7 @@ def analyze_endpoint(
         chat = synthesizer.converse(
             request.utterance,
             holds_trade=holds_trade,
+            after=request.asked_about,
             seed=f"converse|{request.utterance}",
         )
         if chat.accepted:

@@ -564,20 +564,21 @@ class ConverseTests(unittest.TestCase):
         return synthesizer.converse("고마워요", holds_trade=holds_trade)
 
     def test_small_talk_gets_an_answer(self) -> None:
-        said = self.reply({"social": True, "sentence": "고맙습니다. 편하게 말씀해 주세요."})
+        said = self.reply({"general": True, "sentence": "고맙습니다. 편하게 말씀해 주세요."})
 
         self.assertTrue(said.accepted)
         self.assertEqual("고맙습니다. 편하게 말씀해 주세요.", said.sentence)
 
-    def test_a_trade_sentence_is_handed_back(self) -> None:
-        """거래 이야기로 읽었다면 이 경로가 답할 일이 아니다 — 계산이 답이다."""
-        said = self.reply({"social": False, "sentence": ""})
+    def test_a_feature_request_is_handed_back(self) -> None:
+        """기능을 쓰려는 말로 읽었다면 이 경로가 답할 일이 아니다 — 기존 분기가
+        답한다. 모델이 판단하는 것은 그 하나뿐이다."""
+        said = self.reply({"general": False, "sentence": ""})
 
         self.assertFalse(said.accepted)
         self.assertEqual(NOT_SOCIAL, said.reason)
 
     def test_it_may_not_judge(self) -> None:
-        said = self.reply({"social": True, "sentence": "네, 이 정도면 안전합니다."})
+        said = self.reply({"general": True, "sentence": "네, 이 정도면 안전합니다."})
 
         self.assertFalse(said.accepted)
         self.assertTrue(said.reason.startswith(REFUSED_WORDING))
@@ -587,7 +588,7 @@ class ConverseTests(unittest.TestCase):
         """수치가 주어지지 않은 경로다. 문장에 숫자가 있다면 모델이 만든
         것이거나 사용자 문장에서 옮겨 온 것이고, 둘 다 도구가 확인해 준 값처럼
         읽힌다."""
-        said = self.reply({"social": True, "sentence": "말씀하신 100,000 USD 잘 받았습니다."})
+        said = self.reply({"general": True, "sentence": "말씀하신 100,000 USD 잘 받았습니다."})
 
         self.assertFalse(said.accepted)
         self.assertIn("수치", said.reason)
@@ -595,16 +596,16 @@ class ConverseTests(unittest.TestCase):
     def test_a_paragraph_is_not_a_social_reply(self) -> None:
         """인사에 세 문장으로 답했다면 인사에 답한 것이 아니라 무언가를
         설명하기 시작한 것이고, 설명이야말로 이 경로에 근거가 없는 말이다."""
-        said = self.reply({"social": True, "sentence": "네. " * CONVERSE_LIMIT})
+        said = self.reply({"general": True, "sentence": "네. " * CONVERSE_LIMIT})
 
         self.assertFalse(said.accepted)
         self.assertTrue(said.reason.startswith(REFUSED_WORDING))
 
-    def test_the_refusal_is_told_apart_from_a_trade_sentence(self) -> None:
+    def test_the_refusal_is_told_apart_from_a_feature_request(self) -> None:
         """호출자가 두 경우에 다르게 행동해야 한다 — 하나는 계산 경로로
         넘기고, 하나는 자기 문장으로 답한다."""
-        judged = self.reply({"social": True, "sentence": "이 정도면 안전합니다."})
-        traded = self.reply({"social": False, "sentence": ""})
+        judged = self.reply({"general": True, "sentence": "이 정도면 안전합니다."})
+        traded = self.reply({"general": False, "sentence": ""})
 
         self.assertTrue(judged.reason.startswith(REFUSED_WORDING))
         self.assertFalse(traded.reason.startswith(REFUSED_WORDING))
@@ -612,7 +613,7 @@ class ConverseTests(unittest.TestCase):
     def test_what_is_on_screen_reaches_the_prompt(self) -> None:
         """화면에 거래가 있는데 거래를 알려 달라고 하면 보지 않은 것이다."""
         synthesizer, completions = synthesizer_returning(
-            {"social": True, "sentence": "네, 말씀해 주세요."}
+            {"general": True, "sentence": "네, 말씀해 주세요."}
         )
         synthesizer.converse("고마워요", holds_trade=True)
 
