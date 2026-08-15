@@ -3,6 +3,9 @@ import unittest
 from types import SimpleNamespace
 
 from tradeflow.runtime.synthesis import (
+    CONVERSE_LIMIT,
+    NOT_SOCIAL,
+    REFUSED_WORDING,
     check_retold,
     Synthesizer,
     check,
@@ -547,6 +550,78 @@ class NaturalProseTests(unittest.TestCase):
                 "지금 환율은 1466.3이고, 불리한 쪽 환율은 1361.05입니다.", figures
             ),
         )
+
+
+class ConverseTests(unittest.TestCase):
+    """사교적 턴에 모델이 답하되, 판정과 수치는 여전히 못 만든다.
+
+    이 경로가 안전한 이유는 위치다. 규칙이 먼저 읽고 거래 정보를 하나도 찾지
+    못한 뒤에만 온다 — 그래서 모델이 어느 쪽으로 틀려도 최악이 오늘의 동작이다.
+    """
+
+    def reply(self, payload, *, holds_trade=False):
+        synthesizer, _ = synthesizer_returning(payload)
+        return synthesizer.converse("고마워요", holds_trade=holds_trade)
+
+    def test_small_talk_gets_an_answer(self) -> None:
+        said = self.reply({"general": True, "sentence": "고맙습니다. 편하게 말씀해 주세요."})
+
+        self.assertTrue(said.accepted)
+        self.assertEqual("고맙습니다. 편하게 말씀해 주세요.", said.sentence)
+
+    def test_a_feature_request_is_handed_back(self) -> None:
+        """기능을 쓰려는 말로 읽었다면 이 경로가 답할 일이 아니다 — 기존 분기가
+        답한다. 모델이 판단하는 것은 그 하나뿐이다."""
+        said = self.reply({"general": False, "sentence": ""})
+
+        self.assertFalse(said.accepted)
+        self.assertEqual(NOT_SOCIAL, said.reason)
+
+    def test_it_may_not_judge(self) -> None:
+        said = self.reply({"general": True, "sentence": "네, 이 정도면 안전합니다."})
+
+        self.assertFalse(said.accepted)
+        self.assertTrue(said.reason.startswith(REFUSED_WORDING))
+        self.assertIn("안전합니다", said.reason)
+
+    def test_it_may_not_carry_a_figure(self) -> None:
+        """수치가 주어지지 않은 경로다. 문장에 숫자가 있다면 모델이 만든
+        것이거나 사용자 문장에서 옮겨 온 것이고, 둘 다 도구가 확인해 준 값처럼
+        읽힌다."""
+        said = self.reply({"general": True, "sentence": "말씀하신 100,000 USD 잘 받았습니다."})
+
+        self.assertFalse(said.accepted)
+        self.assertIn("수치", said.reason)
+
+    def test_a_paragraph_is_not_a_social_reply(self) -> None:
+        """인사에 세 문장으로 답했다면 인사에 답한 것이 아니라 무언가를
+        설명하기 시작한 것이고, 설명이야말로 이 경로에 근거가 없는 말이다."""
+        said = self.reply({"general": True, "sentence": "네. " * CONVERSE_LIMIT})
+
+        self.assertFalse(said.accepted)
+        self.assertTrue(said.reason.startswith(REFUSED_WORDING))
+
+    def test_the_refusal_is_told_apart_from_a_feature_request(self) -> None:
+        """호출자가 두 경우에 다르게 행동해야 한다 — 하나는 계산 경로로
+        넘기고, 하나는 자기 문장으로 답한다."""
+        judged = self.reply({"general": True, "sentence": "이 정도면 안전합니다."})
+        traded = self.reply({"general": False, "sentence": ""})
+
+        self.assertTrue(judged.reason.startswith(REFUSED_WORDING))
+        self.assertFalse(traded.reason.startswith(REFUSED_WORDING))
+
+    def test_what_is_on_screen_reaches_the_prompt(self) -> None:
+        """화면에 거래가 있는데 거래를 알려 달라고 하면 보지 않은 것이다."""
+        synthesizer, completions = synthesizer_returning(
+            {"general": True, "sentence": "네, 말씀해 주세요."}
+        )
+        synthesizer.converse("고마워요", holds_trade=True)
+
+        sent = completions.request["messages"][0]["content"]
+        self.assertIn("거래를 알려 달라고 하지 마세요", sent)
+
+    def test_no_key_declines_rather_than_raises(self) -> None:
+        self.assertFalse(Synthesizer(api_key=None).converse("고마워요", holds_trade=False).accepted)
 
 
 if __name__ == "__main__":

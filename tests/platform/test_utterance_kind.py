@@ -1,7 +1,14 @@
 import unittest
 
 from tradeflow.tools.intent import read_intent
-from tradeflow.tools.utterance_kind import ABOUT, GREETING, TOPIC, TRADE, read_kind
+from tradeflow.tools.utterance_kind import (
+    ABOUT,
+    GREETING,
+    TOPIC,
+    TRADE,
+    UNCLEAR,
+    read_kind,
+)
 
 
 def kind(text: str, *, heard: dict[str, str] | None = None) -> str:
@@ -52,11 +59,21 @@ class KindTests(unittest.TestCase):
             GREETING, kind("안녕하세요, 수출 관련해서 여쭤볼 게 있는데요")
         )
 
-    def test_an_unrecognised_sentence_still_asks_about_the_trade(self) -> None:
+    def test_an_unrecognised_sentence_says_so(self) -> None:
         """Neither a greeting, nor about the product, nor a subject we read.
-        Asking what the trade is stays honest; the alternative is a guess
-        about what they meant."""
-        self.assertEqual(TRADE, kind("음"))
+
+        This used to answer TRADE — not as a reading, but as somewhere to put
+        the leftovers, on the grounds that asking for a trade beats guessing.
+        That made the intake funnel the default for every sentence nobody had
+        written a rule for, and 「고마워」 was answered with three questions
+        about an amount. Saying 「알아보지 못했다」 is the whole of what this
+        module knows; who answers it is the caller's to decide."""
+        self.assertEqual(UNCLEAR, kind("음"))
+
+    def test_a_trade_is_read_rather_than_assumed(self) -> None:
+        """TRADE now means slots were actually read, which is what makes the
+        funnel's entry condition a positive one."""
+        self.assertEqual(TRADE, kind("10만 달러", heard={"amount": "100000"}))
 
 
 if __name__ == "__main__":

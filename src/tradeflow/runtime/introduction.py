@@ -70,15 +70,25 @@ def paragraph() -> str:
     return "\n\n".join(lines)
 
 
-def opening() -> str:
-    """The reply to a greeting.
+def unread() -> str:
+    """Said before the questions, when nothing in the sentence was recognised.
 
-    Short on purpose. Someone who said hello has not asked for the paragraph
-    above, and answering a greeting with a capability list is the same mistake
-    as answering it with three questions — it just takes longer to read.
+    Three questions arriving straight after a sentence nobody understood read
+    as a demand. Saying so first turns the same three into a request — and it
+    is what happened: neither the rules nor the model could place the sentence,
+    and that is a fact about us, not about the person who wrote it.
     """
-    return (
-        "안녕하세요. 수출입 거래의 환위험과 지원제도·신고의무를 함께 봐 "
-        "드립니다.\n\n거래를 편하게 말씀해 주세요. "
-        "예: 10월 24일에 수출대금 10만 달러 받기로 했어요"
-    )
+    return "말씀하신 내용을 제가 잘 이해하지 못했습니다. 아래를 알려주시면 계산을 시작하겠습니다."
+
+
+def acknowledgement(*, holds_trade: bool = False) -> str:
+    """A courteous reply when the model's own wording was refused.
+
+    The refusal is about the phrasing, not about the reading: the sentence was
+    judged small talk and only the words failed a check. Falling all the way
+    back to the intake funnel would answer 「고마워요」 with a request for an
+    amount, which is the thing this path exists to stop.
+    """
+    if holds_trade:
+        return "네, 말씀 주시면 이어서 봐 드리겠습니다."
+    return "네. 거래를 편하게 말씀해 주시면 계산을 시작하겠습니다."

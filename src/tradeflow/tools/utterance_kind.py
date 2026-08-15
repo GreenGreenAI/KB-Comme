@@ -40,6 +40,22 @@ TOPIC = "topic"
 #: The sentence describes a trade, complete or not. §4.2[1] as it stands.
 TRADE = "trade"
 
+#: Nothing above recognised it.
+#:
+#: This used to be TRADE — not as a reading, but as somewhere to put whatever
+#: was left over, on the grounds that asking for a trade beats guessing at a
+#: meaning. That was the honest move while a greeting was the only other thing
+#: this module could see. It stopped being one once the sentence could be
+#: answered instead: 「고마워」 is not a trade description, and calling it one
+#: made the intake funnel the default for every sentence nobody had written a
+#: rule for.
+#:
+#: Kept apart from TRADE because the difference decides who answers. TRADE
+#: means slots were read and §4.2[1] has something to work with. This means
+#: nothing was read and something still has to decide what the sentence was
+#: doing — which is a judgement, and one this module is not equipped to make.
+UNCLEAR = "unclear"
+
 #: The sentence continues the last one. 「왜?」 「그럼?」 「더 자세히」 name no
 #: subject and describe no trade, so every reading above returns nothing and the
 #: sentence fell through to TRADE — a two-letter question was answered by asking
@@ -84,6 +100,21 @@ _GREETINGS = (
     "처음",
 )
 
+#: 제품 소개가 나오는 유일한 길.
+#:
+#: 모델은 「일반 대화인가, 기능을 쓰려는 말인가」만 판단하고, 일반 쪽 답변에는
+#: 이 서비스가 무엇을 하는지 쓰지 못하게 되어 있습니다. 그 문장은 규칙팩을
+#: 세어서 조립되기 때문입니다 — 수출입은행 규칙이 들어오면 아무도 고치지
+#: 않아도 답이 따라오고, 모델이 자유롭게 쓰면 자기가 설명하는 규칙보다 오래
+#: 살아남는 마케팅 문장이 됩니다.
+#:
+#: 그래서 이 목록에 없는 표현으로 물으면 소개가 아니라 가벼운 답을 받습니다.
+#: 그건 감수합니다. 「넌 뭐해?」를 넣어 봤다가 뺐는데, 모델의 읽기가 흔들려서
+#: 넣은 것이 아니라 제 취향이어서였습니다 — 다섯 번 모두 같은 답이었습니다.
+#:
+#: 낱말을 더해도 되는 경우는 둘입니다. 모델의 읽기가 같은 문장에서 흔들릴 때,
+#: 그리고 잘못 읽으면 비싼 갈래일 때. 소개가 한 번 늦게 나오는 것은 어느
+#: 쪽도 아닙니다.
 _ABOUT = (
     "뭐 할 수 있",
     "뭘 할 수 있",
@@ -164,10 +195,10 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
     # says what it is about does not need the last one to say it.
     if continues(lowered):
         return FOLLOW_UP
-    # Something was said that is neither a greeting, a question about the
-    # product, nor a subject we recognise. Asking what the trade is remains the
-    # honest move — the alternative is a guess about what they meant.
-    return TRADE
+    # Something was said and none of the readings above recognised it. Saying
+    # so is the whole of what this module knows; deciding what to do about it
+    # belongs to the caller, which can ask.
+    return UNCLEAR
 
 
 #: What makes a sentence a description of a trade rather than a mention of one.
