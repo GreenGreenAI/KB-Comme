@@ -33,12 +33,12 @@ def answer(utterance: str, *, cases: list[dict] | None = None) -> dict:
 
 class GreetingTests(unittest.TestCase):
     def test_a_greeting_is_answered_before_any_trade_is_described(self) -> None:
-        """키 없이 도는 검사다 — 모델이 없으면 고정 문장이 나간다. 그것이
-        고정 문장에 남은 유일한 역할이고, 평소의 인사는 모델이 쓴다."""
+        """키 없이 도는 검사다. 인사는 모델이 쓰고, 쓸 사람이 없으면 인사 대신
+        이게 무엇인지 말한다 — 깔때기로 떨어뜨리지는 않는다."""
         said = answer("안녕")
 
         self.assertEqual("said", said["status"])
-        self.assertTrue(said["spoken"].startswith("안녕하세요"))
+        self.assertIn("계산하고 판정합니다", said["spoken"])
 
     def test_a_greeting_is_still_a_greeting_with_a_trade_on_screen(self) -> None:
         said = answer("안녕", cases=[CASE])
@@ -47,15 +47,13 @@ class GreetingTests(unittest.TestCase):
         # 계산 경로로 갔다면 이 문장이 나온다.
         self.assertNotIn("거래 정보를 읽지 못해", said.get("spoken", ""))
 
-    def test_it_does_not_ask_for_a_trade_it_already_has(self) -> None:
+    def test_the_model_is_told_what_is_on_screen(self) -> None:
         """화면 위에 거래가 있는데 「거래를 말씀해 주세요」라고 하면 보지 않은
-        것이다. 같은 인사라도 첫 대면과 대화 중간은 다른 자리이고, 그 구분은
-        모델이 쓸 때도 폴백이 나갈 때도 지켜져야 한다."""
-        first = answer("안녕")["spoken"]
-        later = answer("안녕", cases=[CASE])["spoken"]
+        것이다. 인사를 모델이 쓰게 되면서 이 구분은 지시로 넘어갔다."""
+        from tradeflow.runtime.synthesis import CONVERSE_HOLDING
 
-        self.assertIn("거래를 편하게 말씀해 주세요", first)
-        self.assertNotIn("거래를 편하게 말씀해 주세요", later)
+        self.assertIn("거래를 알려 달라고 하지 마세요", CONVERSE_HOLDING[True])
+        self.assertIn("아직 들은 거래가 없습니다", CONVERSE_HOLDING[False])
 
     def test_asking_what_it_does_never_needs_a_trade(self) -> None:
         said = answer("뭐 할 수 있어?", cases=[CASE])

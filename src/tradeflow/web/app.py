@@ -1125,11 +1125,14 @@ def _answer_without_a_trade(
             return {"status": "said", "understood": {}, "spoken": chat.sentence}
         if chat.reason:
             logger.info("인사 미채택: %s | %s", chat.reason, chat.sentence[:120])
-        return {
-            "status": "said",
-            "understood": {},
-            "spoken": introduction.opening(holds_trade=holds_trade),
-        }
+        # 쓸 사람이 없으면 인사에 인사로 답하지 못합니다. 인사는 내용이 없는
+        # 말이라 규칙에서 조립할 것이 없고, 그 자리에 고정 문장을 두면 같은
+        # 인사에 같은 문장을 낭독하는 일이 다시 시작됩니다.
+        #
+        # 그래서 할 수 있는 것을 합니다 — 이게 무엇인지 말합니다. 그 문단은
+        # 규칙팩을 세어서 조립되므로 낭독이 아니고, 인사보다 긴 대신 인사보다
+        # 쓸모 있습니다. 정보가 줄어드는 쪽이 아니라 느는 쪽으로 무너집니다.
+        return {"status": "said", "understood": {}, "spoken": introduction.paragraph()}
     if kind == ABOUT:
         return {"status": "said", "understood": {}, "spoken": introduction.paragraph()}
 

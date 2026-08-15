@@ -22,13 +22,15 @@ class ParagraphTests(unittest.TestCase):
     def test_it_does_not_promise_what_it_cannot_predict(self) -> None:
         self.assertIn("환율을 예측하지는 않습니다", introduction.paragraph())
 
-    def test_a_greeting_gets_a_greeting_not_a_capability_list(self) -> None:
-        """Answering a greeting with the paragraph is the same mistake as
-        answering it with three questions; it just takes longer to read."""
-        opening = introduction.opening()
-        self.assertTrue(opening.startswith("안녕하세요"))
-        self.assertNotIn("· ", opening)
-        self.assertLess(len(opening), len(introduction.paragraph()))
+    def test_nothing_here_greets(self) -> None:
+        """인사는 모델이 씁니다.
+
+        이 자리에 「안녕하세요 …」 한 문장이 있었고, 그것이 모든 인사에 대한
+        답이었습니다. 인사는 내용이 없는 말이라 규칙에서 조립할 것이 없고,
+        조립할 수 없는 문장을 여기 두면 같은 인사에 같은 문장을 낭독하는 일이
+        됩니다. 모델이 없을 때는 인사 대신 이게 무엇인지 말합니다 — 정보가
+        줄어드는 쪽이 아니라 느는 쪽으로 무너집니다."""
+        self.assertFalse(hasattr(introduction, "opening"))
 
 
 def said_once(text: str) -> str:

@@ -92,36 +92,3 @@ def acknowledgement(*, holds_trade: bool = False) -> str:
     if holds_trade:
         return "네, 말씀 주시면 이어서 봐 드리겠습니다."
     return "네. 거래를 편하게 말씀해 주시면 계산을 시작하겠습니다."
-
-
-def opening(*, holds_trade: bool = False) -> str:
-    """The reply to a greeting when there is nobody to write one.
-
-    This was the answer. Every greeting got the same sentence, which is the
-    most machine-like thing a conversation can do — the one turn where a person
-    is not asking for anything and the product still recited. The model writes
-    it now, and this is what goes out when there is no key or when what came
-    back failed a check.
-
-    Kept rather than deleted because the product runs without a key and says so
-    — every test in this repository is keyless, and a greeting that answered
-    nothing without one would make that claim false.
-
-    Short on purpose. Someone who said hello has not asked for the paragraph
-    above, and answering a greeting with a capability list is the same mistake
-    as answering it with three questions — it just takes longer to read.
-
-    Two of them, because a greeting mid-conversation is not a first meeting.
-    Asking for a trade from somebody whose trade is on the screen above the
-    greeting reads as not having looked at it.
-    """
-    if holds_trade:
-        return (
-            "안녕하세요. 말씀해 주신 거래는 그대로 두었습니다. "
-            "더 여쭤보실 것이 있으면 말씀해 주세요."
-        )
-    return (
-        "안녕하세요. 수출입 거래의 환위험과 지원제도·신고의무를 함께 봐 "
-        "드립니다.\n\n거래를 편하게 말씀해 주세요. "
-        "예: 10월 24일에 수출대금 10만 달러 받기로 했어요"
-    )
