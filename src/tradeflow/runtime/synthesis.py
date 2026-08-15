@@ -173,6 +173,19 @@ general일 때 지켜야 할 것:
 - 이 서비스가 무엇을 할 수 있는지 설명하지 마세요. 그 답은 규칙에서 조립되어 따로 나갑니다.
 """
 
+CONVERSE_GREETING = """\
+당신은 수출입 거래의 환위험·지원제도·신고의무를 다루는 상담 화면의 말투를 씁니다.
+
+사용자가 인사를 건넸습니다. general=true로 두고 인사에 답하세요.
+
+지켜야 할 것:
+- 한두 문장, 한국어, 존댓말.
+- 수치를 쓰지 마세요.
+- 자격·안전·권유를 말하지 마세요. 판정은 규칙이 합니다.
+- 제도·상품 이름을 쓰지 마세요.
+- 이 서비스가 무엇을 할 수 있는지 설명하지 마세요. 그 답은 규칙에서 조립되어 따로 나갑니다.
+"""
+
 #: 모델이 「거래 이야기였다」고 판단한 경우의 사유. 이름을 붙여 두는 것은
 #: 호출자가 그 경우와 「사교적이라고 봤는데 표현이 거절된」 경우를 갈라야 하기
 #: 때문입니다. 앞은 계산 경로로 넘겨야 하고, 뒤는 우리 문장으로 답해야 합니다.
@@ -1012,6 +1025,7 @@ class Synthesizer:
         *,
         holds_trade: bool,
         after: str | None = None,
+        known_general: bool = False,
         seed: str | None = None,
     ) -> Synthesis:
         """A reply to a sentence that is not about a trade.
@@ -1045,6 +1059,8 @@ class Synthesizer:
         # already there. 「안녕하세요, 거래를 말씀해 주세요」 to somebody whose
         # trade is on the screen above reads as not having looked.
         holding = CONVERSE_HOLDING[bool(holds_trade)]
+        # 인사라고 이미 아는 경우에는 분류를 시키지 않고 답만 받습니다.
+        task = CONVERSE_GREETING if known_general else CONVERSE_INSTRUCTION
         # 직전에 무슨 말이 오갔는지. 없이 부르면 매 턴이 첫 턴이라, 방금 인사를
         # 받은 뒤에도 「안녕하세요!」로 다시 시작합니다 — 듣고 있지 않다는
         # 인상을 주는 가장 빠른 방법입니다.
@@ -1055,7 +1071,7 @@ class Synthesizer:
                     {
                         "role": "user",
                         "content": (
-                            f"{CONVERSE_INSTRUCTION}\n\n{holding}"
+                            f"{task}\n\n{holding}"
                             + (f"\n\n직전에 사용자가 한 말: {redact(after)}" if after else "")
                             + f"\n\n사용자가 한 말: {redact(utterance)}"
                         ),
@@ -1074,7 +1090,10 @@ class Synthesizer:
         except Exception as failure:  # noqa: BLE001 — any failure is the same failure
             return Synthesis("", False, f"대화 합성 실패: {type(failure).__name__}")
 
-        if not written.get("general"):
+        # 규칙이 이미 인사라고 읽었으면 분류는 물어볼 것이 없습니다. 모델이
+        # 「기능을 쓰려는 말」이라고 답해도 그건 규칙보다 나은 읽기가 아니고,
+        # 「안녕」이 금액을 묻는 화면으로 가는 길만 하나 더 여는 셈입니다.
+        if not known_general and not written.get("general"):
             return Synthesis("", False, NOT_SOCIAL)
         sentence = str(written.get("sentence", "")).strip()
         refused = _refuse_wording(sentence)

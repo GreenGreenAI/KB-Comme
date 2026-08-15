@@ -547,7 +547,12 @@ def analyze_endpoint(
     holds_trade = supplied_trade(supplied)
     if kind in (GREETING, ABOUT):
         return _answer_without_a_trade(
-            kind, request.utterance, as_of, _subjects(request), holds_trade=holds_trade
+            kind,
+            request.utterance,
+            as_of,
+            _subjects(request),
+            holds_trade=holds_trade,
+            after=request.asked_about,
         )
 
     # 규칙이 읽어 낸 거래 정보가 하나도 없는 문장. 「고마워요」·「네 알겠습니다」·
@@ -587,7 +592,12 @@ def analyze_endpoint(
     # 없었다는 뜻이고, 둘 다 깔때기가 맞는 답입니다.
     if kind not in (TRADE, UNCLEAR) and not holds_trade:
         return _answer_without_a_trade(
-            kind, request.utterance, as_of, _subjects(request), holds_trade=holds_trade
+            kind,
+            request.utterance,
+            as_of,
+            _subjects(request),
+            holds_trade=holds_trade,
+            after=request.asked_about,
         )
 
     reading = intake(
@@ -1088,6 +1098,7 @@ def _answer_without_a_trade(
     subjects: tuple[str, ...] = (),
     *,
     holds_trade: bool = False,
+    after: str | None = None,
 ) -> dict[str, Any]:
     """The three turns that are not a trade description.
 
@@ -1096,6 +1107,24 @@ def _answer_without_a_trade(
     snapshot — no worker runs, no packet is produced, and nothing is judged.
     """
     if kind == GREETING:
+        # 인사는 모델이 씁니다. 고정 문장은 모델이 없거나 검사를 통과하지
+        # 못했을 때만 나가는 자리로 물러났습니다 — 같은 인사에 늘 같은 한
+        # 문장으로 답하던 것이 이 화면에서 가장 기계 같던 부분입니다.
+        #
+        # 무엇을 쓸 수 있는지는 그대로입니다. 판단도 수치도 제도 이름도 안
+        # 되고, 이 서비스가 무엇을 하는지도 못 씁니다 — 그 문장은 규칙팩에서
+        # 조립되어 따로 나갑니다.
+        chat = synthesizer.converse(
+            utterance or "",
+            holds_trade=holds_trade,
+            after=after,
+            known_general=True,
+            seed=f"greeting|{utterance}",
+        )
+        if chat.accepted:
+            return {"status": "said", "understood": {}, "spoken": chat.sentence}
+        if chat.reason:
+            logger.info("인사 미채택: %s | %s", chat.reason, chat.sentence[:120])
         return {
             "status": "said",
             "understood": {},

@@ -33,6 +33,8 @@ def answer(utterance: str, *, cases: list[dict] | None = None) -> dict:
 
 class GreetingTests(unittest.TestCase):
     def test_a_greeting_is_answered_before_any_trade_is_described(self) -> None:
+        """키 없이 도는 검사다 — 모델이 없으면 고정 문장이 나간다. 그것이
+        고정 문장에 남은 유일한 역할이고, 평소의 인사는 모델이 쓴다."""
         said = answer("안녕")
 
         self.assertEqual("said", said["status"])
@@ -47,7 +49,8 @@ class GreetingTests(unittest.TestCase):
 
     def test_it_does_not_ask_for_a_trade_it_already_has(self) -> None:
         """화면 위에 거래가 있는데 「거래를 말씀해 주세요」라고 하면 보지 않은
-        것이다. 같은 인사라도 첫 대면과 대화 중간은 다른 자리다."""
+        것이다. 같은 인사라도 첫 대면과 대화 중간은 다른 자리이고, 그 구분은
+        모델이 쓸 때도 폴백이 나갈 때도 지켜져야 한다."""
         first = answer("안녕")["spoken"]
         later = answer("안녕", cases=[CASE])["spoken"]
 
@@ -157,6 +160,78 @@ class ModelJudgementTests(unittest.TestCase):
 
         self.assertEqual("said", said["status"])
         self.assertIn(coverage.statement("support"), said["spoken"])
+
+
+class GreetingIsWrittenTests(unittest.TestCase):
+    """인사는 모델이 쓴다.
+
+    같은 인사에 늘 같은 한 문장으로 답하던 것이 이 화면에서 가장 기계 같던
+    부분이었다. 고정 문장은 모델이 없거나 검사를 통과하지 못했을 때만 나가는
+    자리로 물러났다.
+    """
+
+    def test_the_model_is_asked_to_write_the_greeting(self) -> None:
+        from types import SimpleNamespace
+        import json as _json
+        from tradeflow.runtime.synthesis import Synthesizer
+
+        sent = {}
+
+        class Completions:
+            def create(self, **request):
+                sent.update(request)
+                return SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=_json.dumps(
+                        {"general": True, "sentence": "안녕하세요. 반갑습니다."},
+                        ensure_ascii=False)))])
+
+        s = Synthesizer(api_key="test")
+        s._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+        said = s.converse("안녕", holds_trade=False, known_general=True)
+
+        self.assertTrue(said.accepted)
+        self.assertEqual("안녕하세요. 반갑습니다.", said.sentence)
+        self.assertIn("인사를 건넸습니다", sent["messages"][0]["content"])
+
+    def test_a_greeting_is_not_left_to_the_classifier(self) -> None:
+        """규칙이 이미 인사라고 읽었다. 모델이 「기능을 쓰려는 말」이라고 답해도
+        그건 규칙보다 나은 읽기가 아니고, 「안녕」이 금액을 묻는 화면으로 가는
+        길만 하나 더 여는 셈이다."""
+        from types import SimpleNamespace
+        import json as _json
+        from tradeflow.runtime.synthesis import Synthesizer
+
+        class Completions:
+            def create(self, **request):
+                return SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=_json.dumps(
+                        {"general": False, "sentence": "안녕하세요."},
+                        ensure_ascii=False)))])
+
+        s = Synthesizer(api_key="test")
+        s._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+
+        self.assertTrue(s.converse("안녕", holds_trade=False, known_general=True).accepted)
+
+    def test_the_guards_still_hold_for_a_greeting(self) -> None:
+        """인사라고 해서 판정을 써도 되는 것은 아니다."""
+        from types import SimpleNamespace
+        import json as _json
+        from tradeflow.runtime.synthesis import REFUSED_WORDING, Synthesizer
+
+        class Completions:
+            def create(self, **request):
+                return SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=_json.dumps(
+                        {"general": True, "sentence": "안녕하세요. 이 거래는 안전합니다."},
+                        ensure_ascii=False)))])
+
+        s = Synthesizer(api_key="test")
+        s._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+        said = s.converse("안녕", holds_trade=False, known_general=True)
+
+        self.assertFalse(said.accepted)
+        self.assertTrue(said.reason.startswith(REFUSED_WORDING))
 
 
 if __name__ == "__main__":

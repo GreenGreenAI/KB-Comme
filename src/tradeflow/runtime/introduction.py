@@ -95,7 +95,17 @@ def acknowledgement(*, holds_trade: bool = False) -> str:
 
 
 def opening(*, holds_trade: bool = False) -> str:
-    """The reply to a greeting.
+    """The reply to a greeting when there is nobody to write one.
+
+    This was the answer. Every greeting got the same sentence, which is the
+    most machine-like thing a conversation can do — the one turn where a person
+    is not asking for anything and the product still recited. The model writes
+    it now, and this is what goes out when there is no key or when what came
+    back failed a check.
+
+    Kept rather than deleted because the product runs without a key and says so
+    — every test in this repository is keyless, and a greeting that answered
+    nothing without one would make that claim false.
 
     Short on purpose. Someone who said hello has not asked for the paragraph
     above, and answering a greeting with a capability list is the same mistake
