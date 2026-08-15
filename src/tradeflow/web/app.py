@@ -62,6 +62,7 @@ from tradeflow.tools.utterance_kind import (
     FOLLOW_UP,
     GREETING,
     TRADE,
+    UNCLEAR,
     TRADE_SLOTS,
     asks_why,
     continues,
@@ -544,8 +545,7 @@ def analyze_endpoint(
     # TOPIC과 FOLLOW_UP은 그대로 둡니다. 거래를 앞에 두고 「환율은?」이나
     # 「왜?」를 물었다면 그건 그 거래에 대한 질문이고, 계산이 답입니다.
     holds_trade = supplied_trade(supplied)
-    social = kind in (GREETING, ABOUT)
-    if social or (kind != TRADE and not holds_trade):
+    if kind in (GREETING, ABOUT):
         return _answer_without_a_trade(
             kind, request.utterance, as_of, _subjects(request), holds_trade=holds_trade
         )
@@ -560,7 +560,8 @@ def analyze_endpoint(
     # 찾지 못한 뒤에만 옵니다. 진짜 거래 문장을 사교적이라 잘못 봐도 잃을 것이
     # 없고(어차피 읽힌 것이 없습니다), 사교적 문장을 아니라고 봐도 오늘과 같이
     # 동작합니다. 최악이 오늘이라서 여기서는 모델의 판단을 받습니다.
-    if request.utterance and not heard:
+    unread = kind == UNCLEAR
+    if unread and request.utterance:
         chat = synthesizer.converse(
             request.utterance,
             holds_trade=holds_trade,
@@ -579,6 +580,14 @@ def analyze_endpoint(
                 "understood": {},
                 "spoken": introduction.acknowledgement(holds_trade=holds_trade),
             }
+
+    # 주제도 후속질문도 아니고 화면에 거래도 없으면, 답할 거리가 없으니 묻습니다.
+    # UNCLEAR는 여기서 빠집니다 — 방금 모델이 「거래 이야기였다」고 했거나 모델이
+    # 없었다는 뜻이고, 둘 다 깔때기가 맞는 답입니다.
+    if kind not in (TRADE, UNCLEAR) and not holds_trade:
+        return _answer_without_a_trade(
+            kind, request.utterance, as_of, _subjects(request), holds_trade=holds_trade
+        )
 
     reading = intake(
         supplied,
@@ -599,6 +608,11 @@ def analyze_endpoint(
             # amount and a date to find out we do not look at 수출입은행 자금.
             "holds": _holds(request.utterance),
             "coverage": _coverage(request.utterance),
+            # 읽지 못한 문장 뒤에 질문 세 개가 곧바로 오면 요구로 읽힙니다.
+            # 못 알아들었다는 말이 먼저 있어야 그다음 질문이 요청이 됩니다 —
+            # 이 자리에 오는 문장은 규칙도 모델도 무엇인지 정하지 못한 것이고,
+            # 그렇게 말하는 것이 사실입니다.
+            "unread": introduction.unread() if unread else "",
             # §4.2[1] in words. `questions` stays — the request panel pairs a
             # field with its own wording, and this one sentence covers all
             # three at once. What is asked for is still decided by the slot

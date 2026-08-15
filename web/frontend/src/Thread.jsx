@@ -222,6 +222,11 @@ function AgentTurn({ turn, live, first, previous, onArrived }) {
             told what we want from them. */}
         {turn.ask.holds && <p className="pointer lead">{turn.ask.holds}</p>}
 
+        {/* 무엇인지 알아보지 못한 문장 뒤에 질문 세 개가 곧바로 오면 요구로
+            읽힙니다. 못 알아들었다는 말이 먼저 있어야 그다음 질문이 요청이
+            됩니다. */}
+        {turn.ask.unread && <p>{turn.ask.unread}</p>}
+
         {/* §4.2[1] wrote this, over the slots the reader found missing. The
             list is what the screen falls back to — three questions stacked at
             someone who said hello, which is what this replaced. */}

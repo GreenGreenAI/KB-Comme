@@ -11,7 +11,14 @@ import unittest
 from pydantic import ValidationError
 
 from tradeflow.tools.utterance import payment_structure, withdrawn_structure
-from tradeflow.tools.utterance_kind import FOLLOW_UP, TRADE, asks_why, continues, read_kind
+from tradeflow.tools.utterance_kind import (
+    FOLLOW_UP,
+    TRADE,
+    UNCLEAR,
+    asks_why,
+    continues,
+    read_kind,
+)
 from tradeflow.web.app import AnalyzeRequest, analyze_endpoint
 
 CASE = {
@@ -43,10 +50,11 @@ class FollowUpReadingTests(unittest.TestCase):
             FOLLOW_UP, read_kind("그럼 신고는?", heard={}, topics=("compliance",))
         )
 
-    def test_an_unrecognised_sentence_still_asks_for_the_trade(self) -> None:
+    def test_an_unrecognised_sentence_is_not_mistaken_for_a_follow_up(self) -> None:
         """The follow-up list is short on purpose. A sentence wrongly read as
-        one inherits an order it never asked for."""
-        self.assertEqual(TRADE, read_kind("음", heard={}, topics=()))
+        one inherits an order it never asked for — and one that is simply
+        unrecognised says that instead of claiming to be a trade."""
+        self.assertEqual(UNCLEAR, read_kind("음", heard={}, topics=()))
 
     def test_only_some_follow_ups_have_reasons_waiting(self) -> None:
         self.assertTrue(asks_why("왜?"))

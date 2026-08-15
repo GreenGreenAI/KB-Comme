@@ -91,5 +91,41 @@ class KeylessTests(unittest.TestCase):
         self.assertIn(said["status"], {"said", "ready", "needs_input"})
 
 
+class FunnelEntryTests(unittest.TestCase):
+    """깔때기는 거래를 읽었을 때만 열린다.
+
+    `read_kind`의 기본값이 TRADE였을 때 깔때기는 아무도 규칙을 써 두지 않은
+    모든 문장의 기본 목적지였다. 「고마워」에 금액과 결제일과 수출입 여부를
+    물었던 것이 그 결과다.
+    """
+
+    def test_an_unrecognised_sentence_is_not_called_a_trade(self) -> None:
+        from tradeflow.tools.utterance_kind import UNCLEAR, read_kind
+
+        self.assertEqual(UNCLEAR, read_kind("고마워", heard={}, topics=()))
+
+    def test_the_funnel_says_it_did_not_understand_first(self) -> None:
+        """읽지 못한 문장 뒤에 질문 세 개가 곧바로 오면 요구로 읽힌다.
+        못 알아들었다는 말이 먼저 있어야 그다음 질문이 요청이 된다."""
+        said = answer("asdfgh")
+
+        self.assertEqual("needs_input", said["status"])
+        self.assertIn("이해하지 못했습니다", said["unread"])
+
+    def test_a_read_trade_gets_no_apology(self) -> None:
+        """읽은 문장에는 못 알아들었다고 하지 않는다."""
+        said = answer("10월 24일 수출 10만 달러")
+
+        self.assertEqual("", said.get("unread", ""))
+
+    def test_slots_alone_open_the_funnel(self) -> None:
+        """방향만으로는 거래가 아니다 — 제도 이름에도 수출·수입이 들어 있다."""
+        from tradeflow.tools.utterance_kind import TRADE, read_kind
+
+        self.assertEqual(
+            TRADE, read_kind("10만 달러", heard={"amount": "100000"}, topics=())
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

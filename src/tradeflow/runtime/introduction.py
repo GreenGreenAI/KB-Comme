@@ -70,6 +70,17 @@ def paragraph() -> str:
     return "\n\n".join(lines)
 
 
+def unread() -> str:
+    """Said before the questions, when nothing in the sentence was recognised.
+
+    Three questions arriving straight after a sentence nobody understood read
+    as a demand. Saying so first turns the same three into a request — and it
+    is what happened: neither the rules nor the model could place the sentence,
+    and that is a fact about us, not about the person who wrote it.
+    """
+    return "말씀하신 내용을 제가 잘 이해하지 못했습니다. 아래를 알려주시면 계산을 시작하겠습니다."
+
+
 def acknowledgement(*, holds_trade: bool = False) -> str:
     """A courteous reply when the model's own wording was refused.
 

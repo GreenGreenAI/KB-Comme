@@ -40,6 +40,22 @@ TOPIC = "topic"
 #: The sentence describes a trade, complete or not. §4.2[1] as it stands.
 TRADE = "trade"
 
+#: Nothing above recognised it.
+#:
+#: This used to be TRADE — not as a reading, but as somewhere to put whatever
+#: was left over, on the grounds that asking for a trade beats guessing at a
+#: meaning. That was the honest move while a greeting was the only other thing
+#: this module could see. It stopped being one once the sentence could be
+#: answered instead: 「고마워」 is not a trade description, and calling it one
+#: made the intake funnel the default for every sentence nobody had written a
+#: rule for.
+#:
+#: Kept apart from TRADE because the difference decides who answers. TRADE
+#: means slots were read and §4.2[1] has something to work with. This means
+#: nothing was read and something still has to decide what the sentence was
+#: doing — which is a judgement, and one this module is not equipped to make.
+UNCLEAR = "unclear"
+
 #: The sentence continues the last one. 「왜?」 「그럼?」 「더 자세히」 name no
 #: subject and describe no trade, so every reading above returns nothing and the
 #: sentence fell through to TRADE — a two-letter question was answered by asking
@@ -164,10 +180,10 @@ def read_kind(text: str | None, *, heard: dict[str, str] | None, topics: tuple[s
     # says what it is about does not need the last one to say it.
     if continues(lowered):
         return FOLLOW_UP
-    # Something was said that is neither a greeting, a question about the
-    # product, nor a subject we recognise. Asking what the trade is remains the
-    # honest move — the alternative is a guess about what they meant.
-    return TRADE
+    # Something was said and none of the readings above recognised it. Saying
+    # so is the whole of what this module knows; deciding what to do about it
+    # belongs to the caller, which can ask.
+    return UNCLEAR
 
 
 #: What makes a sentence a description of a trade rather than a mention of one.
